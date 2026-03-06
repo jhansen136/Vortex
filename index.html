@@ -1424,18 +1424,20 @@ async function fetchNWS() {
 const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
 
 function isLocalAlert(areaDesc, geocode) {
-  // Check FIPS codes first (most reliable)
+  // Check FIPS codes first (most reliable, no false positives)
   if (geocode) {
     const fips = geocode.SAME || geocode.UGC || [];
     const fipsArr = Array.isArray(fips) ? fips : Object.values(fips).flat();
     if (fipsArr.some(f => HOME_FIPS.has(String(f).replace(/\D/g,'').slice(-5)))) return true;
   }
-  // Fallback: text match
+  // Fallback: text match — require ", AR" or "Arkansas" to avoid matching
+  // county names that exist in other states (Washington, Benton, Madison, Carroll
+  // all exist nationwide) and avoid partial matches like "park" containing "ark"
   if (!areaDesc) return false;
   const text = areaDesc.toUpperCase();
-  return HOME.counties.some(c => text.includes(c.toUpperCase())) ||
-         text.includes('BENTON') || text.includes('WASHINGTON') ||
-         text.includes(HOME.stateKeyword.toUpperCase().slice(0,3));
+  const hasAR = text.includes(', AR') || text.includes('ARKANSAS');
+  if (!hasAR) return false;
+  return HOME.counties.some(c => text.includes(c.toUpperCase()));
 }
 
 function renderNWS() {
@@ -1722,12 +1724,29 @@ function toggleNotif(type, cb) {
   const pairs = {togglePush:'togglePushM',togglePushM:'togglePush',toggleHue:'toggleHueM',toggleHueM:'toggleHue'};
   const peer = document.getElementById(pairs[cb.id]);
   if(peer && peer.checked !== cb.checked) peer.checked = cb.checked;
+  // Persist state
+  store.set('vx_tog_push',  document.getElementById('togglePush').checked  ? '1' : '0');
+  store.set('vx_tog_hue',   document.getElementById('toggleHue').checked   ? '1' : '0');
+  store.set('vx_tog_audio', document.getElementById('toggleAudio').checked ? '1' : '0');
+}
+
+function restoreToggles() {
+  const push  = store.get('vx_tog_push')  === '1';
+  const hue   = store.get('vx_tog_hue')   === '1';
+  const audio = store.get('vx_tog_audio') === '1';
+  // Only restore on if the integration is actually configured
+  const pushOn  = push  && !!cfg.push;
+  const hueOn   = hue   && !!cfg.hueIP;
+  ['togglePush','togglePushM'].forEach(id => { const el=document.getElementById(id); if(el) el.checked=pushOn; });
+  ['toggleHue','toggleHueM'].forEach(id   => { const el=document.getElementById(id); if(el) el.checked=hueOn; });
+  ['toggleAudio','toggleAudioM'].forEach(id => { const el=document.getElementById(id); if(el) el.checked=audio; });
 }
 
 // ══════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════
 updateCfgUI();
+restoreToggles();
 loadStations();
 fetchNWS();
 setInterval(loadStations, 10*60*1000);
