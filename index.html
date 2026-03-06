@@ -1503,7 +1503,7 @@ function renderNWS() {
 
     if (!seenIds.has(id)) {
       seenIds.add(id);
-      if (cls==='tornado'||cls==='watch') fireAlert(lbl, area, col, local);
+      if (local && (cls==='tornado'||cls==='watch')) fireAlert(lbl, area, col, local);
     }
   });
 
