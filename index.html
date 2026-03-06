@@ -1,0 +1,1856 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="VORTEX">
+<meta name="theme-color" content="#0a0b0d">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0b0d'/><circle cx='50' cy='50' r='38' fill='none' stroke='%23f5a623' stroke-width='6'/><circle cx='50' cy='50' r='18' fill='none' stroke='%23f5a623' stroke-width='4' opacity='.6'/><circle cx='50' cy='50' r='5' fill='%23f5a623'/></svg>">
+<title>VORTEX — Storm Intelligence Platform</title>
+<script>
+// Service worker only works on http/https — skip entirely on file:// to avoid errors
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  const swBlob = new Blob([`
+const CACHE = 'vortex-v1';
+const PRECACHE = [
+  'https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js',
+  'https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap'
+];
+self.addEventListener('install', e => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(PRECACHE).catch(()=>{})));
+  self.skipWaiting();
+});
+self.addEventListener('activate', e => { e.waitUntil(self.clients.claim()); });
+self.addEventListener('fetch', e => {
+  const url = e.request.url;
+  if (url.includes('cdnjs.cloudflare.com') || url.includes('fonts.googleapis') || url.includes('fonts.gstatic')) {
+    e.respondWith(caches.match(e.request).then(r => r || fetch(e.request).then(res => {
+      const clone = res.clone();
+      caches.open(CACHE).then(c => c.put(e.request, clone));
+      return res;
+    })));
+  }
+});
+  `], {type: 'application/javascript'});
+  try {
+    const swUrl = URL.createObjectURL(swBlob);
+    navigator.serviceWorker.register(swUrl).catch(()=>{});
+  } catch(e) {}
+}
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+:root {
+  --bg:#0a0b0d; --panel:#0f1114; --border:#1e2229; --border-bright:#2e3540;
+  --text:#c8d0dc; --text-dim:#5a6475; --text-bright:#e8edf5;
+  --amber:#f5a623; --red:#e63946; --green:#39d353; --cyan:#00d4ff;
+  --orange:#ff7b00;
+  --font-mono:'Share Tech Mono',monospace;
+  --font-cond:'Barlow Condensed',sans-serif;
+  --font-body:'Barlow',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── HEADER ── */
+header{display:flex;align-items:center;justify-content:space-between;padding:0 16px;height:48px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;z-index:10;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:28px;height:28px;border:2px solid var(--amber);border-radius:50%;display:flex;align-items:center;justify-content:center;animation:spin 8s linear infinite;}
+.logo-icon::before{content:'';width:10px;height:10px;border:2px solid var(--amber);border-radius:50%;opacity:.6;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.logo-text{font-family:var(--font-cond);font-weight:900;font-size:22px;letter-spacing:4px;color:var(--amber);}
+.logo-sub{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-top:-2px;}
+.header-status{display:flex;align-items:center;gap:20px;}
+.status-item{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite;}
+.status-dot.warn{background:var(--amber);} .status-dot.alert{background:var(--red);}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+#clock{font-family:var(--font-mono);font-size:13px;color:var(--cyan);letter-spacing:1px;}
+
+/* ── LAYOUT ── */
+.main{display:flex;flex:1;overflow:hidden;}
+.sidebar-left{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;}
+.sidebar-right{width:280px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;}
+.map-wrap{flex:1;position:relative;overflow:hidden;background:#05070a;}
+
+/* ── MAP ── */
+#mapSvg{width:100%;height:100%;display:block;cursor:grab;}
+#mapSvg:active{cursor:grabbing;}
+.state-fill{fill:#0c1018;stroke:#1c2535;stroke-width:.6;transition:fill .2s;}
+.state-fill:hover{fill:#131b26;stroke:#2a3c54;}
+.state-border{fill:none;stroke:#243040;stroke-width:.4;pointer-events:none;}
+.county-border{fill:none;stroke:#141e28;stroke-width:.25;pointer-events:none;}
+#windCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
+#heatCanvas{display:none;}
+
+/* ── TOOLTIP ── */
+#mapTooltip{position:absolute;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;display:none;z-index:60;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);}
+.tt-city{font-family:var(--font-cond);font-weight:700;font-size:16px;color:var(--amber);margin-bottom:7px;letter-spacing:.5px;}
+.tt-row{display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;}
+.tt-key{color:var(--text-dim);} .tt-val{color:var(--text-bright);}
+.tt-risk{margin-top:7px;padding:3px 8px;text-align:center;font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:2px;border-radius:2px;}
+
+/* ── ZOOM ── */
+.zoom-controls{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:20;}
+.zoom-btn{width:30px;height:30px;background:rgba(15,17,20,.9);border:1px solid var(--border-bright);color:var(--text);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;border-radius:3px;transition:all .15s;font-family:var(--font-mono);}
+.zoom-btn:hover{border-color:var(--amber);color:var(--amber);}
+
+/* ── PANELS ── */
+.panel-section{border-bottom:1px solid var(--border);padding:12px;}
+.panel-label{font-family:var(--font-cond);font-weight:700;font-size:11px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;margin-bottom:10px;}
+.layer-btn{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;margin-bottom:4px;background:transparent;border:1px solid var(--border);border-radius:3px;cursor:pointer;width:100%;transition:all .15s;color:var(--text-dim);font-family:var(--font-cond);font-size:14px;font-weight:600;letter-spacing:1px;}
+.layer-btn:hover{border-color:var(--border-bright);color:var(--text);}
+.layer-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(245,166,35,.06);}
+.layer-indicator{width:8px;height:8px;border-radius:50%;background:var(--border-bright);}
+.layer-btn.active .layer-indicator{background:var(--amber);}
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.metric-card{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:8px;}
+.metric-label{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-bottom:4px;}
+.metric-value{font-family:var(--font-mono);font-size:18px;color:var(--text-bright);line-height:1;}
+.metric-unit{font-size:10px;color:var(--text-dim);}
+.risk-gauge{margin:8px 0;}
+.risk-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.risk-score{font-family:var(--font-mono);font-size:28px;color:var(--text-bright);}
+.risk-level{font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:2px;padding:2px 8px;border-radius:2px;}
+.risk-level.low{background:rgba(57,211,83,.15);color:var(--green);border:1px solid var(--green);}
+.risk-level.mod{background:rgba(245,166,35,.15);color:var(--amber);border:1px solid var(--amber);}
+.risk-level.high{background:rgba(255,123,0,.15);color:var(--orange);border:1px solid var(--orange);}
+.risk-level.ext{background:rgba(230,57,70,.15);color:var(--red);border:1px solid var(--red);animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.5;}}
+.gauge-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px;}
+.gauge-fill{height:100%;border-radius:3px;transition:width 1s ease,background 1s ease;}
+.indicator-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);}
+.indicator-row:last-child{border-bottom:none;}
+.ind-name{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+.ind-val{font-family:var(--font-mono);font-size:12px;color:var(--text-bright);}
+.ind-bar{width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:0 8px;}
+.ind-fill{height:100%;border-radius:2px;transition:width 1s ease;}
+.alert-badge{background:var(--red);color:white;font-family:var(--font-mono);font-size:9px;padding:1px 5px;border-radius:10px;margin-left:6px;animation:pulse 1.5s infinite;}
+.alert-item{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:3px;padding:8px 10px;margin-bottom:6px;}
+.alert-item.tornado{border-left-color:var(--red);}
+.alert-item.watch{border-left-color:var(--amber);}
+.alert-item.advisory{border-left-color:var(--cyan);}
+.alert-type{font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
+.alert-item.tornado .alert-type{color:var(--red);}
+.alert-item.watch .alert-type{color:var(--amber);}
+.alert-item.advisory .alert-type{color:var(--cyan);}
+.alert-location{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:2px;}
+.alert-time{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:3px;}
+.notif-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+.notif-row:last-child{border-bottom:none;}
+.notif-label{font-family:var(--font-cond);font-size:14px;color:var(--text);}
+.notif-sub{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:1px;}
+.toggle{position:relative;width:36px;height:20px;cursor:pointer;}
+.toggle input{display:none;}
+.toggle-track{position:absolute;inset:0;background:var(--border);border-radius:10px;transition:background .2s;}
+.toggle input:checked+.toggle-track{background:var(--amber);}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;background:var(--bg);border-radius:50%;transition:left .2s;}
+.toggle input:checked~.toggle-thumb{left:19px;}
+.threshold-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);}
+.threshold-row:last-child{border-bottom:none;}
+.threshold-name{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);width:50px;flex-shrink:0;}
+.threshold-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;}
+.threshold-input:focus{border-color:var(--amber);}
+.threshold-unit{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);width:30px;flex-shrink:0;}
+.test-btn{background:rgba(0,212,255,.08);border:1px solid var(--cyan);color:var(--cyan);font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;}
+.test-btn:hover{opacity:.7;}
+.hue-status{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:6px;}
+.bottom-bar{height:28px;background:var(--panel);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:24px;flex-shrink:0;}
+.bottom-stat{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:6px;}
+.bottom-stat span{color:var(--text);}
+.toast-container{position:fixed;top:60px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:8px;pointer-events:none;}
+.toast{background:var(--panel);border:1px solid var(--red);border-left:4px solid var(--red);border-radius:4px;padding:10px 14px;min-width:280px;animation:slideIn .3s ease,fadeOut .5s ease 4.5s forwards;}
+.toast.watch{border-color:var(--amber);border-left-color:var(--amber);}
+.toast-title{font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;color:var(--red);text-transform:uppercase;}
+.toast.watch .toast-title{color:var(--amber);}
+.toast-body{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:3px;}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0;}to{transform:translateX(0);opacity:1;}}
+@keyframes fadeOut{to{opacity:0;transform:translateX(10px);}}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9000;display:flex;align-items:center;justify-content:center;}
+.modal{background:var(--panel);border:1px solid var(--border-bright);border-radius:6px;padding:28px;width:440px;max-width:90vw;}
+.modal-title{font-family:var(--font-cond);font-weight:900;font-size:20px;letter-spacing:3px;color:var(--amber);text-transform:uppercase;margin-bottom:6px;}
+.modal-sub{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-bottom:20px;line-height:1.6;}
+.modal-field{margin-bottom:14px;}
+.modal-field label{display:block;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:5px;}
+.modal-field input{width:100%;background:var(--bg);border:1px solid var(--border-bright);border-radius:3px;padding:8px 12px;font-family:var(--font-mono);font-size:13px;color:var(--text-bright);outline:none;}
+.modal-field input:focus{border-color:var(--amber);}
+.modal-field .hint{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:4px;}
+.btn-primary{background:var(--amber);color:var(--bg);font-family:var(--font-cond);font-weight:700;font-size:14px;letter-spacing:2px;text-transform:uppercase;border:none;border-radius:3px;padding:10px 24px;cursor:pointer;width:100%;margin-top:8px;}
+.btn-skip{background:transparent;color:var(--text-dim);font-family:var(--font-mono);font-size:11px;border:none;cursor:pointer;width:100%;text-align:center;margin-top:10px;padding:4px;}
+::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--bg);} ::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:2px;}
+
+/* ══════════════════════════════════════════════
+   MOBILE LAYOUT  (≤768px)
+══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  /* iOS safe area */
+  body { height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+
+  /* Header — compact */
+  header { height: 44px; padding: 0 12px; }
+  .logo-text { font-size: 18px; letter-spacing: 2px; }
+  .logo-sub { display: none; }
+  .logo-icon { width: 24px; height: 24px; }
+  .header-status { gap: 10px; }
+  .status-item { font-size: 9px; gap: 4px; }
+  .status-item:nth-child(3) { display: none; } /* hide NWS label */
+  #clock { font-size: 11px; }
+
+  /* Full-screen map */
+  .main { position: relative; }
+  .sidebar-left, .sidebar-right { display: none; }
+  .map-wrap { position: absolute; inset: 0; }
+
+  /* Bottom nav bar */
+  .bottom-bar { display: none; }
+  .mobile-nav {
+    display: flex !important;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: calc(56px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    background: rgba(10,11,13,.97);
+    border-top: 1px solid var(--border-bright);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    z-index: 200;
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 3px; background: none; border: none;
+    color: var(--text-dim); font-family: var(--font-cond);
+    font-size: 10px; font-weight: 700; letter-spacing: 1px;
+    text-transform: uppercase; cursor: pointer;
+    transition: color .15s; -webkit-tap-highlight-color: transparent;
+    padding-top: 8px;
+  }
+  .nav-btn.active { color: var(--amber); }
+  .nav-btn svg { width: 22px; height: 22px; }
+  .nav-alert-dot {
+    position: absolute; top: 6px; right: calc(50% - 18px);
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--red); animation: pulse 1.5s infinite;
+    display: none;
+  }
+  .nav-alert-dot.visible { display: block; }
+
+  /* Bottom sheets */
+  .sheet-overlay {
+    display: none;
+    position: fixed; inset: 0; background: rgba(0,0,0,.6);
+    z-index: 300; backdrop-filter: blur(2px);
+  }
+  .sheet-overlay.open { display: block; }
+  .bottom-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    max-height: 82dvh;
+    background: var(--panel);
+    border-radius: 16px 16px 0 0;
+    border-top: 1px solid var(--border-bright);
+    transform: translateY(100%);
+    transition: transform .35s cubic-bezier(.32,1,.6,1);
+    z-index: 400; display: flex; flex-direction: column;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .bottom-sheet.open { transform: translateY(0); }
+  .sheet-handle {
+    width: 36px; height: 4px; border-radius: 2px;
+    background: var(--border-bright); margin: 10px auto 4px;
+    flex-shrink: 0;
+  }
+  .sheet-title {
+    font-family: var(--font-cond); font-weight: 700;
+    font-size: 13px; letter-spacing: 3px; color: var(--text-dim);
+    text-transform: uppercase; padding: 4px 16px 10px;
+    flex-shrink: 0; border-bottom: 1px solid var(--border);
+  }
+  .sheet-body {
+    overflow-y: auto; flex: 1;
+    -webkit-overflow-scrolling: touch;
+    padding: 0;
+  }
+  .sheet-body .panel-section { border-bottom: 1px solid var(--border); padding: 14px 16px; }
+
+  /* Bigger touch targets on mobile */
+  .layer-btn { padding: 11px 12px; font-size: 15px; margin-bottom: 6px; }
+  .metric-value { font-size: 22px; }
+  .threshold-input { padding: 8px 10px; font-size: 14px; }
+  .toggle { width: 44px; height: 26px; }
+  .toggle-thumb { width: 18px; height: 18px; }
+  .toggle input:checked~.toggle-thumb { left: 22px; }
+  .test-btn { padding: 8px 14px; font-size: 11px; }
+  .alert-item { padding: 10px 12px; margin-bottom: 8px; }
+  .alert-type { font-size: 13px; }
+  .alert-location { font-size: 11px; }
+
+  /* Zoom controls — bigger, left side on mobile */
+  .zoom-controls { top: auto; bottom: 72px; right: 12px; }
+  .zoom-btn { width: 40px; height: 40px; font-size: 22px; }
+
+  /* Home chip on map */
+  .home-chip {
+    display: flex !important;
+    position: absolute; top: 10px; left: 10px;
+    background: rgba(10,11,13,.88);
+    border: 1px solid rgba(245,166,35,.4);
+    border-radius: 20px; padding: 5px 12px;
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--amber); gap: 8px; align-items: center;
+    z-index: 20; backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .home-chip-risk { font-family: var(--font-cond); font-weight: 700; font-size: 13px; }
+
+  /* Toast — full width on mobile */
+  .toast-container { top: 54px; left: 10px; right: 10px; }
+  .toast { min-width: unset; width: 100%; }
+
+  /* Map tooltip — bigger on mobile */
+  #mapTooltip { font-size: 13px; padding: 13px 15px; min-width: 210px; }
+  .tt-city { font-size: 18px; }
+}
+
+/* Desktop — hide mobile-only elements */
+.mobile-nav { display: none; }
+.home-chip { display: none; }
+.sheet-overlay { display: none; }
+.bottom-sheet { display: none; }
+@media (max-width: 768px) {
+  .bottom-sheet { display: flex; }
+  .sheet-overlay { display: block; opacity: 0; pointer-events: none; }
+  .sheet-overlay.open { opacity: 1; pointer-events: all; }
+}
+#mapLoadMsg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);pointer-events:none;}
+.load-spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:spin .8s linear infinite;}
+.home-ring{fill:none;stroke:var(--amber);stroke-width:1.5;opacity:.45;}
+.home-ring-anim{animation:homeRingPulse 3s ease-in-out infinite;}
+@keyframes homeRingPulse{0%,100%{opacity:.3;}50%{opacity:.75;}}
+.home-dot{fill:var(--amber);stroke:#0a0b0d;stroke-width:2;}
+.home-label{fill:var(--amber);font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:1px;pointer-events:none;}
+.local-panel{background:rgba(245,166,35,.04);border:1px solid rgba(245,166,35,.25);border-radius:4px;padding:10px 12px;}
+.local-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.local-title{font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:2px;color:var(--amber);}
+.local-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;}
+.local-card{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:6px 7px;}
+.local-card-label{font-family:var(--font-mono);font-size:8px;color:var(--text-dim);letter-spacing:.5px;margin-bottom:3px;}
+.local-card-val{font-family:var(--font-mono);font-size:14px;color:var(--text-bright);line-height:1;}
+.local-score-row{display:flex;align-items:center;gap:8px;}
+.local-score{font-family:var(--font-mono);font-size:22px;color:var(--text-bright);min-width:36px;}
+.local-score-bar-wrap{flex:1;}
+.home-zoom-btn{font-family:var(--font-cond);font-size:11px;font-weight:600;letter-spacing:1px;color:var(--amber);background:transparent;border:1px solid rgba(245,166,35,.3);border-radius:3px;padding:3px 8px;cursor:pointer;transition:all .15s;}
+.home-zoom-btn:hover{background:rgba(245,166,35,.1);border-color:var(--amber);}
+.local-flag-badge{display:inline-block;font-family:var(--font-mono);font-size:8px;padding:1px 5px;border-radius:2px;background:rgba(245,166,35,.2);color:var(--amber);margin-left:6px;vertical-align:middle;letter-spacing:1px;}
+.alert-item.local-flag{border-left-color:var(--amber);background:rgba(245,166,35,.04);}
+.alert-item.local-flag.tornado{border-left-color:var(--red);background:rgba(230,57,70,.06);}
+/* Tornado warning local badge pulses */
+.alert-item.local-flag.tornado .alert-type { animation: blink 1.4s ease-in-out infinite; }
+/* Tooltip lift index row */
+#mapTooltip .tt-row:last-of-type { border-top: 1px solid var(--border); padding-top: 5px; margin-top: 3px; }
+/* Smoother indicator bar transitions */
+.ind-fill { transition: width 1.2s cubic-bezier(.4,0,.2,1); }
+.gauge-fill { transition: width 1.2s cubic-bezier(.4,0,.2,1), background 1s ease; }
+/* Mobile: prevent text selection on map interactions */
+#mapSvg { user-select: none; -webkit-user-select: none; }
+/* Cleaner sheet scrollbar */
+.sheet-body::-webkit-scrollbar { width: 3px; }
+.sheet-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<div class="modal-overlay" id="setupModal" style="display:none;">
+  <div class="modal">
+    <div class="modal-title">VORTEX Setup</div>
+    <div class="modal-sub">Configure alert integrations. Skip to configure later.</div>
+    <div class="modal-field">
+      <label>ntfy.sh Channel URL</label>
+      <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
+      <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
+    </div>
+    <div class="modal-field">
+      <label>Philips Hue Bridge IP</label>
+      <input type="text" id="hueIP" placeholder="192.168.1.xxx">
+    </div>
+    <div class="modal-field">
+      <label>Hue API Username / Token</label>
+      <input type="text" id="hueToken" placeholder="Your Hue API username">
+      <div class="hint">Get at http://[bridge-ip]/debug/clip.html</div>
+    </div>
+    <button class="btn-primary" onclick="saveSetup()">SAVE & LAUNCH</button>
+    <button class="btn-skip" onclick="closeSetup()">Skip for now</button>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon"></div>
+    <div>
+      <div class="logo-text">VORTEX</div>
+      <div class="logo-sub">STORM INTELLIGENCE PLATFORM</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-item"><div class="status-dot" id="liveDot"></div>DATA LIVE</div>
+    <div class="status-item"><div class="status-dot warn" id="alertDot"></div><span id="alertCount">LOADING…</span></div>
+    <div class="status-item">NWS: <span id="nwsStatus" style="color:var(--text-dim);margin-left:2px;">…</span></div>
+    <div id="clock">--:--:-- UTC</div>
+  </div>
+</header>
+
+<div class="main">
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar-left">
+    <div class="panel-section">
+      <div class="panel-label">Map Layers</div>
+      <button class="layer-btn active" onclick="toggleLayer('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" onclick="toggleLayer('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Selected Conditions</div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-bottom:8px;" id="selectedName">Click a station or map point</div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-label">TEMP</div><div class="metric-value" id="m-temp">--<span class="metric-unit">°F</span></div></div>
+        <div class="metric-card"><div class="metric-label">HUMIDITY</div><div class="metric-value" id="m-hum">--<span class="metric-unit">%</span></div></div>
+        <div class="metric-card"><div class="metric-label">WIND</div><div class="metric-value" id="m-wind">--<span class="metric-unit">mph</span></div></div>
+        <div class="metric-card"><div class="metric-label">DEWPT</div><div class="metric-value" id="m-dew">--<span class="metric-unit">°F</span></div></div>
+        <div class="metric-card"><div class="metric-label">CAPE</div><div class="metric-value" id="m-cape">--<span class="metric-unit">J</span></div></div>
+        <div class="metric-card"><div class="metric-label">SRH (est)</div><div class="metric-value" id="m-srh">--<span class="metric-unit">m²/s²</span></div></div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="local-panel">
+        <div class="local-header">
+          <div class="local-title">📍 NW ARKANSAS</div>
+          <button class="home-zoom-btn" onclick="zoomHome()">ZOOM HOME</button>
+        </div>
+        <div class="local-grid">
+          <div class="local-card"><div class="local-card-label">AVG TEMP</div><div class="local-card-val" id="home-temp">--°</div></div>
+          <div class="local-card"><div class="local-card-label">AVG WIND</div><div class="local-card-val" id="home-wind">-- mph</div></div>
+          <div class="local-card"><div class="local-card-label">AVG CAPE</div><div class="local-card-val" id="home-cape">-- J</div></div>
+        </div>
+        <div class="local-score-row">
+          <div class="local-score" id="home-risk">--</div>
+          <div class="local-score-bar-wrap">
+            <div style="font-family:var(--font-mono);font-size:8px;color:var(--text-dim);margin-bottom:3px;">AREA RISK SCORE</div>
+            <div class="gauge-bar"><div class="gauge-fill" id="home-risk-fill" style="width:0%;background:var(--green);"></div></div>
+            <div style="font-family:var(--font-cond);font-size:11px;font-weight:700;letter-spacing:2px;margin-top:3px;" id="home-risk-label">LOADING…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Tornado Risk Score</div>
+      <div class="risk-gauge">
+        <div class="risk-label-row">
+          <div class="risk-score" id="riskScore">--</div>
+          <div class="risk-level low" id="riskLevel">SELECT POINT</div>
+        </div>
+        <div class="gauge-bar"><div class="gauge-fill" id="riskFill" style="width:0%;background:var(--green);"></div></div>
+      </div>
+      <div class="indicator-row"><div class="ind-name">CAPE</div><div class="ind-bar"><div class="ind-fill" id="bar-cape" style="width:0%;background:var(--amber);"></div></div><div class="ind-val" id="iv-cape">--</div></div>
+      <div class="indicator-row"><div class="ind-name">SRH</div><div class="ind-bar"><div class="ind-fill" id="bar-srh" style="width:0%;background:var(--amber);"></div></div><div class="ind-val" id="iv-srh">--</div></div>
+      <div class="indicator-row"><div class="ind-name">SHEAR</div><div class="ind-bar"><div class="ind-fill" id="bar-shear" style="width:0%;background:var(--cyan);"></div></div><div class="ind-val" id="iv-shear">--</div></div>
+      <div class="indicator-row"><div class="ind-name">LIFT IDX</div><div class="ind-bar"><div class="ind-fill" id="bar-lift" style="width:0%;background:var(--cyan);"></div></div><div class="ind-val" id="iv-lift">--</div></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-wrap" id="mapWrap">
+    <svg id="mapSvg"></svg>
+    <canvas id="heatCanvas"></canvas>
+    <canvas id="windCanvas"></canvas>
+    <div id="mapTooltip"></div>
+    <div id="mapLoadMsg"><div class="load-spinner"></div>Loading map…</div>
+    <div class="zoom-controls">
+      <button class="zoom-btn" onclick="zoomIn()">+</button>
+      <button class="zoom-btn" onclick="zoomOut()">−</button>
+      <button class="zoom-btn" onclick="resetZoom()" style="font-size:12px;">⌂</button>
+    </div>
+  </div>
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="sidebar-right">
+    <div class="panel-section">
+      <div class="panel-label">Active Alerts <span class="alert-badge" id="alertBadge">…</span></div>
+      <div id="alertsList"><div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">Loading NWS alerts…</div></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Notifications</div>
+      <div class="notif-row">
+        <div><div class="notif-label">Phone Push</div><div class="notif-sub" id="pushSub">ntfy.sh</div></div>
+        <label class="toggle"><input type="checkbox" id="togglePush" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="notif-row">
+        <div><div class="notif-label">Smart Lights</div><div class="notif-sub" id="hueSub">Philips Hue</div></div>
+        <label class="toggle"><input type="checkbox" id="toggleHue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="notif-row">
+        <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren</div></div>
+        <label class="toggle"><input type="checkbox" id="toggleAudio"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="notif-row" style="border:none;padding-top:10px;gap:8px;flex-wrap:wrap;">
+        <button class="test-btn" onclick="testPush()">TEST PUSH</button>
+        <button class="test-btn" onclick="testHue()">TEST LIGHTS</button>
+        <button class="test-btn" onclick="openSetup()" style="border-color:var(--text-dim);color:var(--text-dim);">CONFIGURE</button>
+      </div>
+      <div class="hue-status" id="hueStatus" style="display:none;">
+        <div style="width:12px;height:12px;border-radius:50%;background:#ff3300;border:1px solid rgba(255,255,255,.2);"></div>
+        <span id="hueStatusText">Lights: standby</span>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Alert Thresholds</div>
+      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape" value="1500"><div class="threshold-unit">J/kg</div></div>
+      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh" value="250"><div class="threshold-unit">m²/s²</div></div>
+      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind" value="60"><div class="threshold-unit">mph</div></div>
+      <div class="threshold-row" style="border:none;"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk" value="70"><div class="threshold-unit">/ 100</div></div>
+    </div>
+
+    <div class="panel-section">
+      <div class="panel-label">Light Alert Modes</div>
+      <div class="notif-row"><div><div class="notif-label">🔴 Tornado Warning</div><div class="notif-sub">Red flash rapid</div></div><div style="width:16px;height:16px;border-radius:50%;background:#ff2200;border:1px solid rgba(255,255,255,.2);"></div></div>
+      <div class="notif-row"><div><div class="notif-label">🟡 Tornado Watch</div><div class="notif-sub">Amber pulse slow</div></div><div style="width:16px;height:16px;border-radius:50%;background:#f5a623;border:1px solid rgba(255,255,255,.2);"></div></div>
+      <div class="notif-row" style="border:none;"><div><div class="notif-label">🔵 Advisory</div><div class="notif-sub">Blue steady</div></div><div style="width:16px;height:16px;border-radius:50%;background:#00aaff;border:1px solid rgba(255,255,255,.2);"></div></div>
+    </div>
+  </div>
+</div>
+
+<div class="bottom-bar">
+  <div class="bottom-stat">SPC OUTLOOK: <span id="spcOutlook" style="color:var(--text-dim);">LOADING</span></div>
+  <div class="bottom-stat">ACTIVE ALERTS: <span id="activeCounties">–</span></div>
+  <div class="bottom-stat">UPDATED: <span id="lastUpdate">--:--</span></div>
+  <div class="bottom-stat">CURSOR: <span id="cursorCoords">hover map</span></div>
+  <div class="bottom-stat" style="margin-left:auto;"><span id="dataSource" style="color:var(--text-dim);">Open-Meteo + NWS · Live</span></div>
+</div>
+
+<!-- ── HOME CHIP (mobile map overlay) ── -->
+<div class="home-chip" id="homeChip">
+  <span>📍 NW AR</span>
+  <span class="home-chip-risk" id="homeChipRisk" style="color:var(--green);">--</span>
+  <span style="font-family:var(--font-mono);font-size:8px;color:var(--text-dim);" id="homeChipLabel">LOW</span>
+</div>
+
+<!-- ── SHEET OVERLAY ── -->
+<div class="sheet-overlay" id="sheetOverlay" onclick="closeAllSheets()"></div>
+
+<!-- ── LAYERS SHEET ── -->
+<div class="bottom-sheet" id="layersSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Map Layers</div>
+  <div class="sheet-body">
+    <div class="panel-section">
+      <button class="layer-btn active" id="mb-temp" onclick="toggleLayer('temp',this);syncLayerBtn('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-wind" onclick="toggleLayer('wind',this);syncLayerBtn('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-humidity" onclick="toggleLayer('humidity',this);syncLayerBtn('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-cape" onclick="toggleLayer('cape',this);syncLayerBtn('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-dewpoint" onclick="toggleLayer('dewpoint',this);syncLayerBtn('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" id="mb-warnings" onclick="toggleLayer('warnings',this);syncLayerBtn('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
+    </div>
+    <div class="panel-section" style="border:none;">
+      <div class="panel-label">NW Arkansas</div>
+      <div class="local-panel">
+        <div class="local-grid">
+          <div class="local-card"><div class="local-card-label">AVG TEMP</div><div class="local-card-val" id="home-temp-m">--°</div></div>
+          <div class="local-card"><div class="local-card-label">AVG WIND</div><div class="local-card-val" id="home-wind-m">-- mph</div></div>
+          <div class="local-card"><div class="local-card-label">AVG CAPE</div><div class="local-card-val" id="home-cape-m">-- J</div></div>
+        </div>
+        <div class="local-score-row" style="margin-top:8px;">
+          <div class="local-score" id="home-risk-m">--</div>
+          <div class="local-score-bar-wrap">
+            <div style="font-family:var(--font-mono);font-size:8px;color:var(--text-dim);margin-bottom:3px;">AREA RISK SCORE</div>
+            <div class="gauge-bar"><div class="gauge-fill" id="home-risk-fill-m" style="width:0%;background:var(--green);"></div></div>
+            <div style="font-family:var(--font-cond);font-size:11px;font-weight:700;letter-spacing:2px;margin-top:3px;" id="home-risk-label-m">LOADING…</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:10px;">
+        <button class="home-zoom-btn" style="width:100%;padding:10px;" onclick="zoomHome();closeAllSheets()">📍 ZOOM TO NW ARKANSAS</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── CONDITIONS SHEET ── -->
+<div class="bottom-sheet" id="condSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Conditions</div>
+  <div class="sheet-body">
+    <div class="panel-section">
+      <div class="panel-label">Selected Point</div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-bottom:10px;" id="selectedNameM">Tap a station or map point</div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-label">TEMP</div><div class="metric-value" id="m-temp-m">--<span class="metric-unit">°F</span></div></div>
+        <div class="metric-card"><div class="metric-label">HUMIDITY</div><div class="metric-value" id="m-hum-m">--<span class="metric-unit">%</span></div></div>
+        <div class="metric-card"><div class="metric-label">WIND</div><div class="metric-value" id="m-wind-m">--<span class="metric-unit">mph</span></div></div>
+        <div class="metric-card"><div class="metric-label">DEWPT</div><div class="metric-value" id="m-dew-m">--<span class="metric-unit">°F</span></div></div>
+        <div class="metric-card"><div class="metric-label">CAPE</div><div class="metric-value" id="m-cape-m">--<span class="metric-unit">J</span></div></div>
+        <div class="metric-card"><div class="metric-label">SRH (est)</div><div class="metric-value" id="m-srh-m">--<span class="metric-unit">m²/s²</span></div></div>
+      </div>
+    </div>
+    <div class="panel-section" style="border:none;">
+      <div class="panel-label">Tornado Risk Score</div>
+      <div class="risk-gauge">
+        <div class="risk-label-row">
+          <div class="risk-score" id="riskScoreM">--</div>
+          <div class="risk-level low" id="riskLevelM">TAP POINT</div>
+        </div>
+        <div class="gauge-bar"><div class="gauge-fill" id="riskFillM" style="width:0%;background:var(--green);"></div></div>
+      </div>
+      <div class="indicator-row"><div class="ind-name">CAPE</div><div class="ind-bar"><div class="ind-fill" id="bar-cape-m" style="width:0%;background:var(--amber);"></div></div><div class="ind-val" id="iv-cape-m">--</div></div>
+      <div class="indicator-row"><div class="ind-name">SRH</div><div class="ind-bar"><div class="ind-fill" id="bar-srh-m" style="width:0%;background:var(--amber);"></div></div><div class="ind-val" id="iv-srh-m">--</div></div>
+      <div class="indicator-row"><div class="ind-name">SHEAR</div><div class="ind-bar"><div class="ind-fill" id="bar-shear-m" style="width:0%;background:var(--cyan);"></div></div><div class="ind-val" id="iv-shear-m">--</div></div>
+      <div class="indicator-row" style="border:none;"><div class="ind-name">LIFT IDX</div><div class="ind-bar"><div class="ind-fill" id="bar-lift-m" style="width:0%;background:var(--cyan);"></div></div><div class="ind-val" id="iv-lift-m">--</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── ALERTS SHEET ── -->
+<div class="bottom-sheet" id="alertsSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Active Alerts <span class="alert-badge" id="alertBadgeM">…</span></div>
+  <div class="sheet-body">
+    <div class="panel-section" id="alertsListM" style="border:none;">
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">Loading NWS alerts…</div>
+    </div>
+  </div>
+</div>
+
+<!-- ── SETTINGS SHEET ── -->
+<div class="bottom-sheet" id="settingsSheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Settings</div>
+  <div class="sheet-body">
+    <div class="panel-section">
+      <div class="panel-label">Notifications</div>
+      <div class="notif-row">
+        <div><div class="notif-label">Phone Push</div><div class="notif-sub" id="pushSubM">ntfy.sh</div></div>
+        <label class="toggle"><input type="checkbox" id="togglePushM" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="notif-row">
+        <div><div class="notif-label">Smart Lights</div><div class="notif-sub" id="hueSubM">Philips Hue</div></div>
+        <label class="toggle"><input type="checkbox" id="toggleHueM" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+      <div class="notif-row" style="border:none;">
+        <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren</div></div>
+        <label class="toggle"><input type="checkbox" id="toggleAudioM"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Alert Thresholds</div>
+      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape-m" value="1500"><div class="threshold-unit">J/kg</div></div>
+      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh-m" value="250"><div class="threshold-unit">m²/s²</div></div>
+      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind-m" value="60"><div class="threshold-unit">mph</div></div>
+      <div class="threshold-row"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk-m" value="70"><div class="threshold-unit">/ 100</div></div>
+    </div>
+    <div class="panel-section" style="border:none;display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="test-btn" onclick="testPush()" style="flex:1;padding:10px;">TEST PUSH</button>
+      <button class="test-btn" onclick="testHue()" style="flex:1;padding:10px;">TEST LIGHTS</button>
+      <button class="test-btn" onclick="openSetup()" style="flex:1;padding:10px;border-color:var(--text-dim);color:var(--text-dim);">CONFIGURE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MOBILE NAV BAR ── -->
+<nav class="mobile-nav" id="mobileNav">
+  <button class="nav-btn active" id="nav-map" onclick="mobileNav('map')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="3,6 9,3 15,6 21,3 21,18 15,21 9,18 3,21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
+    MAP
+  </button>
+  <button class="nav-btn" id="nav-layers" onclick="mobileNav('layers')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12,2 22,8.5 12,15 2,8.5"/><polyline points="22,15.5 12,22 2,15.5"/><polyline points="22,12 12,18.5 2,12"/></svg>
+    LAYERS
+  </button>
+  <button class="nav-btn" id="nav-cond" onclick="mobileNav('cond')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a10 10 0 1 1 0 20A10 10 0 0 1 12 2z"/><polyline points="12,6 12,12 16,14"/></svg>
+    CONDITIONS
+  </button>
+  <button class="nav-btn" id="nav-alerts" onclick="mobileNav('alerts')" style="position:relative;">
+    <div class="nav-alert-dot" id="navAlertDot"></div>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    ALERTS
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="mobileNav('settings')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    SETTINGS
+  </button>
+</nav>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════
+// Safe localStorage wrapper — iOS Safari throws SecurityError on file:// URLs
+const store = {
+  get: (k) => { try { return localStorage.getItem(k) || ''; } catch(e) { return ''; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch(e) {} },
+};
+
+const cfg = {
+  push:  store.get('vx_push'),
+  hueIP: store.get('vx_hueIP'),
+  hueT:  store.get('vx_hueToken'),
+};
+
+// Defined here so it's available to all functions regardless of declaration order
+const isMobile = () => window.innerWidth <= 768;
+
+// AbortSignal.timeout polyfill for older browsers
+if (!AbortSignal.timeout) {
+  AbortSignal.timeout = (ms) => {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), ms);
+    return ctrl.signal;
+  };
+}
+
+// CLOCK
+setInterval(()=>{
+  const u=new Date().toUTCString().split(' ')[4];
+  document.getElementById('clock').textContent=u+' UTC';
+  document.getElementById('lastUpdate').textContent=u;
+},1000);
+
+// ══════════════════════════════════════════════════════════
+// D3 MAP  — accurate Albers USA projection + TopoJSON
+// ══════════════════════════════════════════════════════════
+const mapWrap = document.getElementById('mapWrap');
+const svgEl   = document.getElementById('mapSvg');
+const svg     = d3.select('#mapSvg');
+
+let projection, pathGen, zoom, gMap, gWarn, gStations;
+let currentTransform = d3.zoomIdentity;
+
+function initMap(us) {
+  const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+
+  // Albers USA — standard professional projection for CONUS
+  projection = d3.geoAlbersUsa()
+    .scale(W * 1.15)
+    .translate([W / 2, H / 2]);
+
+  pathGen = d3.geoPath().projection(projection);
+
+  svg.attr('width', W).attr('height', H);
+
+  // Zoom behavior
+  zoom = d3.zoom()
+    .scaleExtent([0.5, 12])
+    .on('zoom', (event) => {
+      currentTransform = event.transform;
+      gMap.attr('transform', event.transform);
+      gWarn.attr('transform', event.transform);
+      gStations.attr('transform', event.transform);
+      rescaleStations(event.transform.k);
+      redrawOverlays();
+    });
+
+  svg.call(zoom);
+
+  // Background
+  svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
+
+  // Subtle graticule (lat/lon lines)
+  const graticule = d3.geoGraticule().step([5, 5]);
+  svg.append('path')
+    .datum(graticule())
+    .attr('class', 'graticule')
+    .attr('d', pathGen)
+    .attr('fill', 'none')
+    .attr('stroke', '#0d1420')
+    .attr('stroke-width', '0.5');
+
+  // Layer groups
+  gMap      = svg.append('g').attr('id', 'gMap');
+  gWarn     = svg.append('g').attr('id', 'gWarn');
+  gStations = svg.append('g').attr('id', 'gStations');
+
+  // Draw states — filled
+  gMap.selectAll('.state-fill')
+    .data(topojson.feature(us, us.objects.states).features)
+    .enter().append('path')
+    .attr('class', 'state-fill')
+    .attr('d', pathGen)
+    .on('click', handleMapClick)
+    .on('mousemove', handleMapHover);
+
+  // State borders (crisp inner borders)
+  gMap.append('path')
+    .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
+    .attr('class', 'state-border')
+    .attr('d', pathGen);
+
+  // Nation border
+  gMap.append('path')
+    .datum(topojson.mesh(us, us.objects.states, (a, b) => a === b))
+    .attr('fill', 'none')
+    .attr('stroke', '#2a3a52')
+    .attr('stroke-width', '1.2')
+    .attr('d', pathGen);
+
+  document.getElementById('mapLoadMsg').style.display = 'none';
+  resizeCanvases();
+  // Auto-zoom to NW Arkansas on load
+  setTimeout(zoomHome, 600);
+}
+
+// Load TopoJSON — Cache API so it works offline after first load
+const MAP_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json';
+const MAP_CACHE_KEY = 'vortex-us-atlas-v1';
+
+async function loadMapData() {
+  const loadMsg = document.getElementById('mapLoadMsg');
+  const isFile  = location.protocol === 'file:';
+
+  // 1. Try Cache API — only works on http/https, not file://
+  if (!isFile && 'caches' in window) {
+    try {
+      const cache  = await caches.open('vortex-map');
+      const cached = await cache.match(MAP_CACHE_KEY);
+      if (cached) {
+        const data = await cached.json();
+        initMap(data);
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // 2. Fetch from CDN
+  loadMsg.innerHTML = '<div class="load-spinner"></div><span id="loadTxt">Loading map data…</span>' +
+    (isFile ? '<div style="font-family:var(--font-mono);font-size:9px;color:var(--amber);margin-top:4px;">Tip: serve via http for offline caching</div>' :
+              '<div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:4px;">(cached after first load)</div>');
+
+  // Try multiple CDN sources in order
+  const SOURCES = [
+    'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json',
+    'https://unpkg.com/us-atlas@3/states-10m.json',
+  ];
+
+  let lastErr = null;
+  for (const url of SOURCES) {
+    try {
+      const setTxt = t => { const el = document.getElementById('loadTxt'); if (el) el.textContent = t; };
+      setTxt(`Loading map data…`);
+
+      const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+
+      // Stream with progress if content-length is available
+      const contentLength = resp.headers.get('content-length');
+      let data;
+      if (contentLength && resp.body) {
+        const total  = parseInt(contentLength);
+        const reader = resp.body.getReader();
+        let received = 0;
+        const chunks = [];
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          setTxt(`Loading map… ${Math.round(received / total * 100)}%`);
+        }
+        data = JSON.parse(await new Blob(chunks).text());
+      } else {
+        setTxt('Loading map data…');
+        data = await resp.json();
+      }
+
+      // Cache for offline use (http/https only)
+      if (!isFile && 'caches' in window) {
+        try {
+          const cache = await caches.open('vortex-map');
+          await cache.put(MAP_CACHE_KEY, new Response(JSON.stringify(data)));
+        } catch(e) {}
+      }
+
+      initMap(data);
+      return; // success
+
+    } catch(err) {
+      lastErr = err;
+      // Try next source
+    }
+  }
+
+  // All sources failed
+  const isTimeout = lastErr?.name === 'AbortError' || lastErr?.name === 'TimeoutError';
+  const isFileBlock = isFile && (lastErr?.name === 'TypeError' || !navigator.onLine);
+  loadMsg.innerHTML = `
+    <div style="text-align:center;padding:20px;">
+      <div style="font-family:var(--font-mono);font-size:12px;color:var(--red);margin-bottom:8px;">
+        ${isTimeout ? '⏱ Map load timed out' : isFileBlock ? '⚠ Network blocked' : '⚠ Map failed to load'}
+      </div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">
+        ${isFileBlock
+          ? 'Browsers block external fetches from file:// URLs.<br>Serve the file over HTTP instead:<br><code style="color:var(--amber)">python -m http.server 8080</code>'
+          : isTimeout ? 'Connection too slow — try again on WiFi'
+          : 'Check internet connection'}
+      </div>
+      <button onclick="loadMapData()" style="background:var(--amber);color:var(--bg);font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:2px;border:none;border-radius:3px;padding:8px 20px;cursor:pointer;">
+        RETRY
+      </button>
+    </div>`;
+  loadMsg.style.pointerEvents = 'all';
+}
+
+loadMapData();
+
+// Zoom controls
+function zoomIn()   { svg.transition().duration(300).call(zoom.scaleBy, 1.4); }
+function zoomOut()  { svg.transition().duration(300).call(zoom.scaleBy, 0.72); }
+function resetZoom(){ svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity); }
+
+// Cursor coords
+function handleMapHover(event) {
+  const [x, y] = d3.pointer(event, svgEl);
+  const t = currentTransform;
+  const ix = (x - t.x) / t.k, iy = (y - t.y) / t.k;
+  const coords = projection.invert([ix, iy]);
+  if (coords) {
+    const [lon, lat] = coords;
+    document.getElementById('cursorCoords').textContent =
+      `${lat.toFixed(2)}°N ${Math.abs(lon).toFixed(2)}°W`;
+  }
+}
+
+// Map click — fetch live weather for that point
+let clickDeb = null;
+function handleMapClick(event) {
+  const [x, y] = d3.pointer(event, svgEl);
+  const t = currentTransform;
+  const ix = (x - t.x) / t.k, iy = (y - t.y) / t.k;
+  const coords = projection.invert([ix, iy]);
+  if (!coords) return;
+  const [lon, lat] = coords;
+  if (lat < 15 || lat > 55 || lon < -130 || lon > -60) return;
+  clearTimeout(clickDeb);
+  clickDeb = setTimeout(() => fetchPointData(lat, lon), 250);
+}
+
+async function fetchPointData(lat, lon) {
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&${OM_PARAMS}`;
+    const r = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) throw new Error(r.status);
+    const d = await r.json();
+    const s = parseStationResult({n:`${lat.toFixed(2)}°N ${Math.abs(lon).toFixed(2)}°W`, la:lat, lo:lon}, d);
+    if (s) selectStation(s);
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════
+// HOME ZONE — NW Arkansas (Benton + Washington Counties)
+// ══════════════════════════════════════════════════════════
+const HOME = {
+  name: 'NW Arkansas',
+  lat: 36.08, lon: -94.20,   // center point (between Fayetteville & Rogers)
+  zoomScale: 12,             // zoom level when going home
+  counties: ['Benton', 'Washington', 'Madison', 'Carroll'], // AR counties to flag
+  stateKeyword: 'Arkansas',
+  radiusDeg: 0.55,           // ~40 miles radius for area averaging
+};
+
+// ══════════════════════════════════════════════════════════
+// STATIONS + OPEN-METEO
+// ══════════════════════════════════════════════════════════
+const DEFS = [
+  // ── NW Arkansas home stations ──────────────────────────
+  {n:'Fayetteville, AR',    la:36.07, lo:-94.16, home:true},
+  {n:'Springdale, AR',      la:36.19, lo:-94.13, home:true},
+  {n:'Bentonville, AR',     la:36.37, lo:-94.21, home:true},
+  {n:'Rogers, AR',          la:36.33, lo:-94.12, home:true},
+  {n:'Siloam Springs, AR',  la:36.19, lo:-94.54, home:true},
+  {n:'Harrison, AR',        la:36.23, lo:-93.11, home:true},
+  {n:'Fort Smith, AR',      la:35.39, lo:-94.42, home:true},
+  // ── Regional network ───────────────────────────────────
+  {n:'Oklahoma City, OK',la:35.47,lo:-97.52},{n:'Tulsa, OK',la:36.15,lo:-95.99},
+  {n:'Wichita, KS',la:37.69,lo:-97.34},{n:'Amarillo, TX',la:35.22,lo:-101.83},
+  {n:'Dallas, TX',la:32.78,lo:-96.80},{n:'Kansas City, MO',la:39.10,lo:-94.58},
+  {n:'Joplin, MO',la:37.08,lo:-94.51},{n:'Lubbock, TX',la:33.57,lo:-101.85},
+  {n:'Springfield, MO',la:37.21,lo:-93.30},{n:'Little Rock, AR',la:34.75,lo:-92.29},
+  {n:'Memphis, TN',la:35.15,lo:-90.05},{n:'Nashville, TN',la:36.17,lo:-86.78},
+  {n:'Jackson, MS',la:32.30,lo:-90.18},{n:'Shreveport, LA',la:32.52,lo:-93.75},
+  {n:'Topeka, KS',la:39.05,lo:-95.68},{n:'Lincoln, NE',la:40.81,lo:-96.70},
+  {n:'Omaha, NE',la:41.26,lo:-95.94},{n:'Des Moines, IA',la:41.60,lo:-93.61},
+  {n:'St. Louis, MO',la:38.63,lo:-90.20},{n:'Midland, TX',la:31.99,lo:-102.08},
+  {n:'Denver, CO',la:39.74,lo:-104.98},{n:'Minneapolis, MN',la:44.98,lo:-93.27},
+  {n:'Chicago, IL',      la:41.88, lo:-87.63},
+  {n:'Davenport, IA',    la:41.52, lo:-90.58},{n:'Indianapolis, IN',la:39.77,lo:-86.16},
+  {n:'Louisville, KY',la:38.25,lo:-85.76},{n:'Atlanta, GA',la:33.75,lo:-84.39},
+  {n:'Birmingham, AL',la:33.52,lo:-86.80},{n:'Houston, TX',la:29.76,lo:-95.37},
+  {n:'San Antonio, TX',la:29.42,lo:-98.49},{n:'Phoenix, AZ',la:33.45,lo:-112.07},
+  {n:'Albuquerque, NM',la:35.08,lo:-106.65},{n:'Salt Lake City, UT',la:40.76,lo:-111.89},
+  {n:'Billings, MT',la:45.78,lo:-108.50},{n:'Sioux Falls, SD',la:43.55,lo:-96.73},
+  {n:'Columbia, MO',la:38.95,lo:-92.33},
+];
+
+let stations = [];
+
+function dewpoint(tC, h) {
+  const a=17.27,b=237.7,al=(a*tC)/(b+tC)+Math.log(h/100);
+  return (b*al)/(a-al);
+}
+function calcRisk(cape, srh, sh, h, dF, lift) {
+  // CAPE component: scale up to 35pts at 3500 J/kg (supercell territory)
+  const capePts = Math.min(cape / 100, 35);
+  // SRH component: scale up to 30pts at 600 m²/s² (significant tornado threshold)
+  const srhPts  = Math.min(srh / 20, 30);
+  // Wind shear component: up to 15pts
+  const shPts   = Math.min((sh || 0) / 2, 15);
+  // Lifted index: negative = unstable. -6 → 10pts, linear
+  const liftPts = lift !== undefined ? Math.min(Math.max(-lift * 1.6, 0), 10) : 0;
+  // Moisture: dewpoint ≥ 60°F adds up to 6pts
+  const dewPts  = dF >= 65 ? 6 : dF >= 60 ? 4 : dF >= 55 ? 2 : 0;
+  // High humidity adds 4pts
+  const humPts  = h >= 70 ? 4 : h >= 55 ? 2 : 0;
+  const total   = capePts + srhPts + shPts + liftPts + dewPts + humPts;
+  return Math.min(Math.round(total), 100);
+}
+function rColor(r){return r<30?'#39d353':r<55?'#00d4ff':r<70?'#f5a623':r<85?'#ff7b00':'#e63946';}
+function rLabel(r){return r<30?['LOW','low']:r<55?['MARGINAL','low']:r<70?['MODERATE','mod']:r<85?['HIGH','high']:['EXTREME','ext'];}
+function compass(d){return['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];}
+
+// Parse one station's data out of a batched Open-Meteo response element
+function parseStationResult(def, d) {
+  try {
+    const c = d.current;
+    const nowISO = new Date().toISOString().slice(0, 13);
+    const hi   = Math.max(0, d.hourly.time.findIndex(t => t.slice(0, 13) >= nowISO));
+    const tF   = Math.round(c.temperature_2m);
+    const h    = c.relative_humidity_2m;
+    const w    = Math.round(c.wind_speed_10m);
+    const gusts= Math.round(c.wind_gusts_10m || w);
+    const dF   = Math.round(dewpoint((tF-32)*5/9, h)*9/5+32);
+    const cape = Math.round(d.hourly.cape[hi] || 0);
+    const lift = parseFloat((d.hourly.lifted_index[hi] || 0).toFixed(1));
+    const w80  = Math.round(d.hourly.wind_speed_80m?.[hi] || w * 1.25);
+    const sh   = Math.round(Math.max(w80 - w, 0) * 1.5 + w * 0.3);
+    const srh  = Math.round(cape * 0.13 + w * 1.8);
+    return {...def, tF, h, w, gusts, wd: c.wind_direction_10m, dF, cape, srh, sh, lift,
+            risk: calcRisk(cape, srh, sh, h, dF, lift)};
+  } catch { return null; }
+}
+
+// Fetch up to BATCH_SIZE stations in a single HTTP request.
+// Open-Meteo batch API accepts comma-separated lat/lon lists and returns an array.
+const BATCH_SIZE = 25;
+const OM_PARAMS =
+  'current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
+  '&hourly=cape,lifted_index,wind_speed_80m' +
+  '&wind_speed_unit=mph&temperature_unit=fahrenheit&forecast_days=1&timezone=auto';
+
+async function fetchBatch(defs) {
+  const lats = defs.map(d => d.la).join(',');
+  const lons = defs.map(d => d.lo).join(',');
+  const url  = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&${OM_PARAMS}`;
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    if (!r.ok) throw new Error(r.status);
+    const json = await r.json();
+    // Single station returns an object; multiple stations returns an array
+    const arr = Array.isArray(json) ? json : [json];
+    return arr.map((d, i) => parseStationResult(defs[i], d)).filter(Boolean);
+  } catch { return []; }
+}
+
+async function loadStations() {
+  document.getElementById('liveDot').style.background = 'var(--cyan)';
+
+  // Chunk DEFS and fire all chunks in parallel — ~50 stations = 2 requests total
+  const chunks = [];
+  for (let i = 0; i < DEFS.length; i += BATCH_SIZE) chunks.push(DEFS.slice(i, i + BATCH_SIZE));
+  const results = await Promise.all(chunks.map(fetchBatch));
+  stations = results.flat();
+
+  drawStations();
+  redrawOverlays();
+  checkTh();
+  updateHomeDashboard();
+  document.getElementById('liveDot').style.background = 'var(--green)';
+  document.getElementById('dataSource').textContent =
+    `Open-Meteo · NWS · ${stations.length} stations · ${chunks.length} req/cycle`;
+  lastStationFetch = Date.now();
+}
+
+function rescaleStations(k) {
+  if (!gStations) return;
+  const s = 1 / k;
+  gStations.selectAll('.station-glow').each(function() {
+    d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s);
+  });
+  gStations.selectAll('.station-dot').each(function() {
+    const el = d3.select(this);
+    el.attr('r', +el.attr('data-base-r') * s)
+      .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
+  });
+  gStations.selectAll('.station-label').each(function() {
+    const el = d3.select(this);
+    const bx = +el.attr('data-base-x'), by = +el.attr('data-base-y');
+    el.attr('x', bx + 9 * s).attr('y', by + 4 * s).attr('font-size', 7.5 * s);
+  });
+}
+
+function drawStations() {
+  if (!gStations) return;
+  gStations.selectAll('*').remove();
+
+  // Station dots
+  stations.forEach(s => {
+    const pt = projection([s.lo, s.la]);
+    if (!pt) return;
+    const [px, py] = pt;
+    const col = rColor(s.risk);
+    const isHome = !!s.home;
+    const baseGlow = isHome ? 11 : 8;
+    const baseDot  = isHome ? 6 : 4.5;
+
+    gStations.append('circle')
+      .attr('cx', px).attr('cy', py).attr('r', baseGlow)
+      .attr('class', 'station-glow').attr('data-base-r', baseGlow)
+      .attr('fill', col).attr('opacity', isHome ? 0.2 : 0.12);
+
+    gStations.append('circle')
+      .attr('cx', px).attr('cy', py).attr('r', baseDot)
+      .attr('class', 'station-dot').attr('data-base-r', baseDot)
+      .attr('data-home', isHome ? '1' : null)
+      .attr('fill', col)
+      .attr('stroke', isHome ? 'var(--amber)' : 'rgba(255,255,255,0.4)')
+      .attr('stroke-width', isHome ? 1.8 : 1)
+      .style('cursor', 'pointer')
+      .on('mouseenter', (event) => showTooltip(s, event))
+      .on('mouseleave', hideTooltip)
+      .on('click', () => selectStation(s));
+
+    if (isHome) {
+      gStations.append('text')
+        .attr('x', px + 9).attr('y', py + 4)
+        .attr('class', 'station-label')
+        .attr('data-base-x', px).attr('data-base-y', py)
+        .attr('fill', 'rgba(245,166,35,0.75)')
+        .attr('font-family', "'Share Tech Mono', monospace")
+        .attr('font-size', '7.5').attr('letter-spacing', '0.5')
+        .style('pointer-events', 'none')
+        .text(s.n.split(',')[0].toUpperCase());
+    }
+  });
+
+  rescaleStations(currentTransform.k);
+}
+
+function zoomHome() {
+  if (!projection || !zoom) return;
+  const pt = projection([HOME.lon, HOME.lat]);
+  if (!pt) return;
+  const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+  const k = HOME.zoomScale;
+  const tx = W/2 - pt[0]*k, ty = H/2 - pt[1]*k;
+  svg.transition().duration(700)
+    .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
+}
+
+// ── Update home zone dashboard (desktop + mobile) ─────────
+function updateHomeDashboard() {
+  const homeStations = stations.filter(s => s.home);
+  if (!homeStations.length) return;
+  const avg = (key) => Math.round(homeStations.reduce((a,s)=>a+(s[key]||0),0)/homeStations.length);
+  const avgRisk = avg('risk'), avgTemp = avg('tF'), avgWind = avg('w'), avgCape = avg('cape');
+  const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
+
+  // Desktop
+  set('home-temp', avgTemp+'°F');
+  set('home-wind', avgWind+' mph');
+  set('home-cape', avgCape+' J');
+  set('home-risk', avgRisk);
+  const rf = document.getElementById('home-risk-fill');
+  if(rf){ rf.style.width=avgRisk+'%'; rf.style.background=rColor(avgRisk); }
+  const [lab] = rLabel(avgRisk);
+  const labelEl = document.getElementById('home-risk-label');
+  if(labelEl){ labelEl.textContent=lab; labelEl.style.color=rColor(avgRisk); }
+
+  // Mobile
+  set('home-temp-m', avgTemp+'°F');
+  set('home-wind-m', avgWind+' mph');
+  set('home-cape-m', avgCape+' J');
+  set('home-risk-m', avgRisk);
+  const rfM = document.getElementById('home-risk-fill-m');
+  if(rfM){ rfM.style.width=avgRisk+'%'; rfM.style.background=rColor(avgRisk); }
+  const lm = document.getElementById('home-risk-label-m');
+  if(lm){ lm.textContent=lab; lm.style.color=rColor(avgRisk); }
+
+  // Map chip
+  const chip = document.getElementById('homeChipRisk');
+  const chipLbl = document.getElementById('homeChipLabel');
+  if(chip){ chip.textContent=avgRisk; chip.style.color=rColor(avgRisk); }
+  if(chipLbl) chipLbl.textContent=lab;
+}
+
+// ══════════════════════════════════════════════════════════
+// TOOLTIP
+// ══════════════════════════════════════════════════════════
+function showTooltip(s, event) {
+  const tt = document.getElementById('mapTooltip');
+  const col = rColor(s.risk), [lab] = rLabel(s.risk);
+  const gustLine = s.gusts && s.gusts > s.w ? `<div class="tt-row"><span class="tt-key">GUSTS</span><span class="tt-val">${s.gusts} mph</span></div>` : '';
+  tt.innerHTML = `
+    <div class="tt-city">${s.n}</div>
+    <div class="tt-row"><span class="tt-key">TEMP</span><span class="tt-val">${s.tF}°F</span></div>
+    <div class="tt-row"><span class="tt-key">HUMIDITY</span><span class="tt-val">${s.h}%</span></div>
+    <div class="tt-row"><span class="tt-key">WIND</span><span class="tt-val">${s.w} mph ${s.wd!==undefined?compass(s.wd):''}</span></div>
+    ${gustLine}
+    <div class="tt-row"><span class="tt-key">DEWPT</span><span class="tt-val">${s.dF}°F</span></div>
+    <div class="tt-row"><span class="tt-key">CAPE</span><span class="tt-val">${s.cape} J/kg</span></div>
+    <div class="tt-row"><span class="tt-key">SRH (est)</span><span class="tt-val">${s.srh} m²/s²</span></div>
+    <div class="tt-row"><span class="tt-key">LIFT IDX</span><span class="tt-val">${s.lift !== undefined ? s.lift : '--'}</span></div>
+    <div class="tt-risk" style="background:${col}22;border:1px solid ${col};color:${col};">RISK ${s.risk}/100 — ${lab}</div>`;
+  const wrap = document.getElementById('mapWrap'), rect = wrap.getBoundingClientRect();
+  let tx = event.clientX - rect.left + 14, ty = event.clientY - rect.top - 10;
+  tt.style.display = 'block';
+  const tw = tt.offsetWidth || 220, th = tt.offsetHeight || 240;
+  if (tx + tw + 4 > wrap.offsetWidth)  tx = event.clientX - rect.left - tw - 14;
+  if (ty + th + 4 > wrap.offsetHeight) ty = event.clientY - rect.top  - th - 10;
+  if (tx < 4) tx = 4;
+  if (ty < 4) ty = 4;
+  tt.style.left=tx+'px'; tt.style.top=ty+'px';
+}
+function hideTooltip() { document.getElementById('mapTooltip').style.display='none'; }
+
+// ══════════════════════════════════════════════════════════
+// SELECT STATION → UPDATE PANEL
+// ══════════════════════════════════════════════════════════
+function selectStation(s) {
+  const set = (id, html, isHTML) => { const el=document.getElementById(id); if(el){ if(isHTML) el.innerHTML=html; else el.textContent=html; }};
+  const windStr = s.gusts && s.gusts > s.w ? `${s.w} / ${s.gusts}` : String(s.w);
+
+  // Desktop sidebar
+  set('selectedName', s.n);
+  set('m-temp',  s.tF+'<span class="metric-unit">°F</span>', true);
+  set('m-hum',   s.h+'<span class="metric-unit">%</span>', true);
+  set('m-wind',  windStr+'<span class="metric-unit">mph</span>', true);
+  set('m-dew',   s.dF+'<span class="metric-unit">°F</span>', true);
+  set('m-cape',  s.cape+'<span class="metric-unit">J</span>', true);
+  set('m-srh',   s.srh+'<span class="metric-unit">m²/s²</span>', true);
+  const [lab,cls] = rLabel(s.risk);
+  set('riskScore', s.risk);
+  const rl = document.getElementById('riskLevel');
+  if(rl){ rl.textContent=lab; rl.className='risk-level '+cls; }
+  const rf = document.getElementById('riskFill');
+  if(rf){ rf.style.width=s.risk+'%'; rf.style.background=rColor(s.risk); }
+  document.getElementById('bar-cape').style.width  = Math.min(s.cape/100,100)+'%';
+  document.getElementById('bar-srh').style.width   = Math.min(s.srh/6,100)+'%';
+  document.getElementById('bar-shear').style.width = Math.min((s.sh||0)*2,100)+'%';
+  document.getElementById('bar-lift').style.width  = Math.min(Math.abs(s.lift||0)*15,100)+'%';
+  set('iv-cape',  s.cape+' J');
+  set('iv-srh',   String(s.srh));
+  set('iv-shear', (s.sh||'--')+' kt');
+  set('iv-lift',  String(s.lift||'--'));
+
+  // Mobile sheet
+  set('selectedNameM', s.n);
+  set('m-temp-m',  s.tF+'<span class="metric-unit">°F</span>', true);
+  set('m-hum-m',   s.h+'<span class="metric-unit">%</span>', true);
+  set('m-wind-m',  windStr+'<span class="metric-unit">mph</span>', true);
+  set('m-dew-m',   s.dF+'<span class="metric-unit">°F</span>', true);
+  set('m-cape-m',  s.cape+'<span class="metric-unit">J</span>', true);
+  set('m-srh-m',   s.srh+'<span class="metric-unit">m²/s²</span>', true);
+  set('riskScoreM', s.risk);
+  const rlM = document.getElementById('riskLevelM');
+  if(rlM){ rlM.textContent=lab; rlM.className='risk-level '+cls; }
+  const rfM = document.getElementById('riskFillM');
+  if(rfM){ rfM.style.width=s.risk+'%'; rfM.style.background=rColor(s.risk); }
+  [['bar-cape-m', Math.min(s.cape/100,100)],
+   ['bar-srh-m',  Math.min(s.srh/6,100)],
+   ['bar-shear-m',Math.min((s.sh||0)*2,100)],
+   ['bar-lift-m', Math.min(Math.abs(s.lift||0)*15,100)]
+  ].forEach(([id,w]) => { const el=document.getElementById(id); if(el) el.style.width=w+'%'; });
+  set('iv-cape-m',  s.cape+' J');
+  set('iv-srh-m',   String(s.srh));
+  set('iv-shear-m', (s.sh||'--')+' kt');
+  set('iv-lift-m',  String(s.lift||'--'));
+
+  if (isMobile()) mobileNav('cond');
+}
+
+// ══════════════════════════════════════════════════════════
+// CANVAS OVERLAYS — heat + wind
+// ══════════════════════════════════════════════════════════
+const wCv = document.getElementById('windCanvas'), hCv = document.getElementById('heatCanvas');
+const wCtx = wCv.getContext('2d'), hCtx = hCv.getContext('2d');
+let lyr = {temp:true,wind:false,humidity:false,cape:false,dewpoint:false,warnings:true};
+let windOn = false, particles = [];
+
+function resizeCanvases() {
+  const W=mapWrap.offsetWidth, H=mapWrap.offsetHeight;
+  wCv.width=hCv.width=W; wCv.height=hCv.height=H;
+  svgEl.setAttribute('width',W); svgEl.setAttribute('height',H);
+}
+resizeCanvases();
+window.addEventListener('resize', () => {
+  resizeCanvases();
+  if (projection) {
+    const W=mapWrap.offsetWidth, H=mapWrap.offsetHeight;
+    projection.scale(W*1.15).translate([W/2,H/2]);
+    if (gMap) gMap.selectAll('path').attr('d', pathGen);
+    if (gWarn) gWarn.selectAll('path').attr('d', pathGen);
+    svg.select('rect').attr('width',W).attr('height',H);
+    drawStations();
+  }
+  redrawOverlays();
+});
+
+// Convert lat/lon → canvas pixel (accounting for d3 zoom + projection)
+function ll2canvas(lat, lon) {
+  if (!projection) return null;
+  const pt = projection([lon, lat]);
+  if (!pt) return null;
+  const t = currentTransform;
+  return { x: pt[0]*t.k + t.x, y: pt[1]*t.k + t.y };
+}
+
+function redrawOverlays() { /* wind only — heat layer removed */ }
+
+// Wind particles
+function initParts() {
+  particles = [];
+  for (let i=0; i<160; i++) particles.push({
+    x:Math.random()*wCv.width, y:Math.random()*wCv.height,
+    vx:(Math.random()-.3)*1.8, vy:(Math.random()-.6)*.9,
+    life:Math.random(), ml:.5+Math.random()*.5
+  });
+}
+initParts();
+
+function animWind() {
+  if (!windOn) { requestAnimationFrame(animWind); return; }
+  wCtx.fillStyle = 'rgba(5,7,10,0.12)';
+  wCtx.fillRect(0, 0, wCv.width, wCv.height);
+  particles.forEach(p => {
+    let ns=null, nd=Infinity;
+    stations.forEach(s => {
+      const pt=ll2canvas(s.la,s.lo);
+      if (!pt) return;
+      const dd=Math.hypot(p.x-pt.x, p.y-pt.y);
+      if (dd<nd){nd=dd;ns=s;}
+    });
+    if (ns&&nd<250) {
+      const rad=(ns.wd||270)*Math.PI/180;
+      p.vx=p.vx*.93+Math.cos(rad)*ns.w*.003;
+      p.vy=p.vy*.93-Math.sin(rad)*ns.w*.003;
+    }
+    p.x+=p.vx; p.y+=p.vy; p.life+=.007;
+    if (p.life>p.ml||p.x<0||p.x>wCv.width||p.y<0||p.y>wCv.height) {
+      p.x=Math.random()*wCv.width; p.y=Math.random()*wCv.height; p.life=0;
+    }
+    const al=Math.sin(p.life/p.ml*Math.PI)*.65, sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+    wCtx.strokeStyle=`hsla(${sp>1.2?35:190},100%,65%,${al})`;
+    wCtx.lineWidth=1;
+    wCtx.beginPath(); wCtx.moveTo(p.x,p.y); wCtx.lineTo(p.x-p.vx*7,p.y-p.vy*7); wCtx.stroke();
+  });
+  requestAnimationFrame(animWind);
+}
+animWind();
+
+function toggleLayer(name, btn) {
+  btn.classList.toggle('active'); lyr[name] = btn.classList.contains('active');
+  if (name==='wind') {
+    windOn=lyr[name]; wCv.style.opacity=windOn?'1':'0';
+    if (!windOn) wCtx.clearRect(0,0,wCv.width,wCv.height);
+  }
+  if (name==='warnings') {
+    d3.select('#gWarn').style('display', lyr[name] ? '' : 'none');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// NWS ALERTS
+// ══════════════════════════════════════════════════════════
+let nwsAlerts=[], seenIds=new Set();
+let nwsFetchFails = 0;
+
+async function fetchNWS() {
+  const events = 'Tornado%20Warning,Tornado%20Watch,Severe%20Thunderstorm%20Warning,Severe%20Thunderstorm%20Watch,Wind%20Advisory,Flash%20Flood%20Warning,Flash%20Flood%20Watch,Flood%20Warning,Flood%20Watch,Flash%20Flood%20Statement';
+  const urls = [
+    `https://api.weather.gov/alerts/active?area=US&event=${events}&status=actual&message_type=alert`,
+    `https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&severity=Extreme,Severe`
+  ];
+  let ok = false;
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, {
+        headers:{'Accept':'application/geo+json','User-Agent':'VortexStormTracker/2.0 (nwarkansas@vortexapp.local)'},
+        signal: AbortSignal.timeout(10000)
+      });
+      if (!r.ok) throw new Error(r.status);
+      const feats = (await r.json()).features || [];
+      // Filter to relevant types on the broad query
+      const relevant = ['tornado','thunderstorm','wind','flood'];
+      nwsAlerts = feats.filter(f => {
+        const ev = (f.properties?.event||'').toLowerCase();
+        return relevant.some(t => ev.includes(t));
+      });
+      document.getElementById('nwsStatus').textContent='OK';
+      document.getElementById('nwsStatus').style.color='var(--green)';
+      nwsFetchFails = 0;
+      ok = true;
+      break;
+    } catch(e) {}
+  }
+  if (!ok) {
+    nwsFetchFails++;
+    document.getElementById('nwsStatus').textContent = nwsFetchFails > 2 ? 'DOWN' : 'ERR';
+    document.getElementById('nwsStatus').style.color='var(--red)';
+  }
+  renderNWS();
+}
+
+// AR FIPS codes: Benton=05007, Washington=05143, Madison=05087, Carroll=05015, Boone=05009
+const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
+
+function isLocalAlert(areaDesc, geocode) {
+  // Check FIPS codes first (most reliable)
+  if (geocode) {
+    const fips = geocode.SAME || geocode.UGC || [];
+    const fipsArr = Array.isArray(fips) ? fips : Object.values(fips).flat();
+    if (fipsArr.some(f => HOME_FIPS.has(String(f).replace(/\D/g,'').slice(-5)))) return true;
+  }
+  // Fallback: text match
+  if (!areaDesc) return false;
+  const text = areaDesc.toUpperCase();
+  return HOME.counties.some(c => text.includes(c.toUpperCase())) ||
+         text.includes('BENTON') || text.includes('WASHINGTON') ||
+         text.includes(HOME.stateKeyword.toUpperCase().slice(0,3));
+}
+
+function renderNWS() {
+  if (!gWarn) { setTimeout(renderNWS, 500); return; }
+  gWarn.selectAll('*').remove();
+  const al = document.getElementById('alertsList'); al.innerHTML='';
+  let ct = {t:0,w:0,a:0};
+  let localItems = [], otherItems = [];
+
+  nwsAlerts.forEach(feat => {
+    const p=feat.properties, ev=p.event||'', area=p.areaDesc||'';
+    const exp=p.expires?new Date(p.expires).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CDT':'--';
+    const id=p.id;
+    const headline = (p.headline||'').replace(/^.*?(issued|until)/i,'').trim().slice(0,80);
+    let cls,col,ico,lbl;
+    if (ev.includes('Tornado Warning'))           {cls='tornado'; col='#e63946'; ico='🌪'; lbl='Tornado Warning'; ct.t++;}
+    else if (ev.includes('Tornado Watch'))         {cls='watch';   col='#f5a623'; ico='⚠';  lbl='Tornado Watch';   ct.w++;}
+    else if (ev.includes('Severe Thunderstorm W')) {cls='watch';   col='#ff7b00'; ico='⛈';  lbl='Svr Tstorm '+ev.split(' ').pop(); ct.w++;}
+    else if (ev.includes('Flash Flood Warning'))   {cls='tornado'; col='#00d4ff'; ico='🌊'; lbl='Flash Flood Warning'; ct.t++;}
+    else if (ev.includes('Flash Flood Watch'))     {cls='watch';   col='#00aaff'; ico='🌊'; lbl='Flash Flood Watch';   ct.w++;}
+    else if (ev.includes('Flood Warning'))         {cls='watch';   col='#00aaff'; ico='🌊'; lbl='Flood Warning';       ct.w++;}
+    else if (ev.includes('Flood Watch'))           {cls='advisory';col='#00d4ff'; ico='🌊'; lbl='Flood Watch';         ct.a++;}
+    else if (ev.includes('Flash Flood Statement')) {cls='advisory';col='#00d4ff'; ico='🌊'; lbl='Flash Flood Statement';ct.a++;}
+    else                                           {cls='advisory';col='#00d4ff'; ico='ℹ';  lbl=ev; ct.a++;}
+
+    const local = isLocalAlert(area, p.geocode);
+
+    // Draw polygon on map — local alerts get thicker stroke + brighter fill
+    if (feat.geometry && lyr.warnings) {
+      try {
+        const isWarning = cls === 'tornado';
+        gWarn.append('path')
+          .datum(feat)
+          .attr('d', pathGen)
+          .attr('fill', col)
+          .attr('fill-opacity', local ? 0.28 : isWarning ? 0.18 : 0.06)
+          .attr('stroke', col)
+          .attr('stroke-width', local ? 3 : isWarning ? 2 : 1.2)
+          .attr('stroke-dasharray', cls==='watch' ? '6,3' : 'none')
+          .attr('stroke-opacity', local ? 1 : 0.8)
+          .style('pointer-events', 'none');
+        // Pulse ring for local tornado warnings
+        if (local && cls === 'tornado') {
+          gWarn.append('path')
+            .datum(feat)
+            .attr('d', pathGen)
+            .attr('fill', 'none')
+            .attr('stroke', col)
+            .attr('stroke-width', 1.5)
+            .attr('stroke-opacity', 0.4)
+            .attr('stroke-dasharray', '3,4')
+            .style('pointer-events', 'none');
+        }
+      } catch(e) {}
+    }
+
+    const localBadge = local ? '<span class="local-flag-badge">📍 YOUR AREA</span>' : '';
+    const item = document.createElement('div');
+    item.className = `alert-item ${cls}${local ? ' local-flag' : ''}`;
+    const shortArea = area.length > 60 ? area.slice(0,57)+'…' : area;
+    item.innerHTML = `<div class="alert-type">${ico} ${lbl}${localBadge}</div><div class="alert-location">${shortArea}</div>${headline?`<div class="alert-time" style="color:var(--text);opacity:.7;font-size:10px;margin-top:3px;">${headline}</div>`:''}  <div class="alert-time">Exp ${exp}</div>`;
+
+    if (local) localItems.push({item, cls});
+    else otherItems.push({item, cls});
+
+    if (!seenIds.has(id)) {
+      seenIds.add(id);
+      if (cls==='tornado'||cls==='watch') fireAlert(lbl, area, col, local);
+    }
+  });
+
+  // Sort: tornado warnings first, then watches
+  const sortFn = (a,b) => (a.cls==='tornado'?0:a.cls==='watch'?1:2) - (b.cls==='tornado'?0:b.cls==='watch'?1:2);
+  localItems.sort(sortFn); otherItems.sort(sortFn);
+
+  // Local alerts at top, then others
+  if (localItems.length) {
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'font-family:var(--font-mono);font-size:9px;color:var(--amber);letter-spacing:1px;padding:4px 0 6px;text-transform:uppercase;';
+    hdr.textContent = '📍 Affecting Your Area';
+    al.appendChild(hdr);
+    localItems.forEach(({item}) => al.appendChild(item));
+    if (otherItems.length) {
+      const hdr2 = document.createElement('div');
+      hdr2.style.cssText = 'font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;padding:8px 0 6px;text-transform:uppercase;border-top:1px solid var(--border);margin-top:4px;';
+      hdr2.textContent = 'Regional Alerts';
+      al.appendChild(hdr2);
+    }
+  }
+  otherItems.forEach(({item}) => al.appendChild(item));
+
+  if (!nwsAlerts.length)
+    al.innerHTML='<div style="font-family:var(--font-mono);font-size:11px;color:var(--green);padding:8px 0;">✓ No active severe weather alerts.</div>';
+
+  const tot=ct.t+ct.w+ct.a;
+  document.getElementById('alertBadge').textContent = tot || '0';
+  document.getElementById('alertCount').textContent  = `${tot} ALERT${tot!==1?'S':''}`;
+  document.getElementById('alertDot').className = 'status-dot '+(ct.t>0?'alert':ct.w>0?'warn':'');
+  document.getElementById('activeCounties').textContent = tot;
+  const el=document.getElementById('spcOutlook');
+  if(ct.t>0){el.textContent='HIGH RISK';el.style.color='var(--red)';}
+  else if(ct.w>0){el.textContent='MODERATE RISK';el.style.color='var(--amber)';}
+  else if(tot>0){el.textContent='MARGINAL RISK';el.style.color='var(--cyan)';}
+  else{el.textContent='NO ACTIVE RISK';el.style.color='var(--green)';}
+
+  // Sync to mobile alerts sheet
+  const dst = document.getElementById('alertsListM');
+  if(dst) dst.innerHTML = al.innerHTML;
+  const badgeM = document.getElementById('alertBadgeM');
+  if(badgeM) badgeM.textContent = tot || '0';
+  const navDot = document.getElementById('navAlertDot');
+  if(navDot) navDot.classList.toggle('visible', tot > 0);
+}
+
+async function fireAlert(ev, area, col, local=false) {
+  const title = local ? `🚨 YOUR AREA: ${ev}` : ev;
+  showToast(ev.includes('Warning')?'tornado':'watch', title, area.split(';')[0]);
+  // Check both desktop + mobile push toggles
+  const pushOn = document.getElementById('togglePush').checked || document.getElementById('togglePushM')?.checked;
+  if(pushOn && cfg.push?.startsWith('http')) {
+    const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
+    try { await fetch(cfg.push,{method:'POST',
+      body:`${local?'🚨 YOUR AREA — ':''} ${ev}\n${area.split(';')[0]}\n${time} CDT`,
+      headers:{
+        'Title': local ? `🚨 VORTEX: ${ev} — YOUR AREA` : `VORTEX: ${ev}`,
+        'Priority': local ? 'urgent' : (ev.includes('Warning')?'urgent':'high'),
+        'Tags': local ? 'rotating_light,sos' : 'rotating_light'
+      }}); } catch{}
+  }
+  const hueOn = document.getElementById('toggleHue').checked || document.getElementById('toggleHueM')?.checked;
+  if(hueOn && cfg.hueIP) hueFlash(col);
+  const audioOn = document.getElementById('toggleAudio').checked || document.getElementById('toggleAudioM')?.checked;
+  if(audioOn) siren(ev.includes('Warning'));
+}
+
+// ══════════════════════════════════════════════════════════
+// THRESHOLDS
+// ══════════════════════════════════════════════════════════
+function checkTh() {
+  // Read thresholds from whichever inputs are visible/populated
+  const tc = +document.getElementById('th-cape').value  || +document.getElementById('th-cape-m')?.value  || 1500;
+  const ts = +document.getElementById('th-srh').value   || +document.getElementById('th-srh-m')?.value   || 250;
+  const tw = +document.getElementById('th-wind').value  || +document.getElementById('th-wind-m')?.value  || 60;
+  const tr = +document.getElementById('th-risk').value  || +document.getElementById('th-risk-m')?.value  || 70;
+
+  // Check home stations first, then all stations
+  const homeTriggered = stations.filter(s => s.home && s.cape>tc && s.srh>ts && s.w>tw && s.risk>tr);
+  const allTriggered  = stations.filter(s => s.cape>tc && s.srh>ts && s.w>tw && s.risk>tr);
+
+  // Hue feedback for any triggered station
+  allTriggered.forEach(s => {
+    const hueOn = document.getElementById('toggleHue').checked || document.getElementById('toggleHueM')?.checked;
+    if(hueOn && cfg.hueIP) {
+      document.getElementById('hueStatus').style.display='flex';
+      document.getElementById('hueStatusText').textContent=`Threshold: ${s.n} (Risk ${s.risk})`;
+    }
+  });
+
+  // Push + toast for home stations (highest priority)
+  if (homeTriggered.length) {
+    const worst = homeTriggered.sort((a,b) => b.risk-a.risk)[0];
+    const key = `th_home_${worst.n}_${Math.floor(Date.now()/300000)}`; // once per 5 min per station
+    if (!seenIds.has(key)) {
+      seenIds.add(key);
+      showToast('tornado', `🚨 HOME AREA THRESHOLD: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`);
+      const pushOn = document.getElementById('togglePush').checked || document.getElementById('togglePushM')?.checked;
+      if (pushOn && cfg.push?.startsWith('http')) {
+        const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
+        fetch(cfg.push, {method:'POST',
+          body:`🚨 NW Arkansas threshold exceeded\n${worst.n} — Risk ${worst.risk}/100\nCAPE ${worst.cape} J/kg · SRH ${worst.srh} · Wind ${worst.w} mph\n${time} CDT`,
+          headers:{
+            'Title': `🚨 VORTEX: Threshold Alert — YOUR AREA`,
+            'Priority': 'urgent',
+            'Tags': 'rotating_light,sos'
+          }}).catch(()=>{});
+      }
+    }
+  } else if (allTriggered.length) {
+    // Non-home station exceeded threshold — toast only, no push
+    const worst = allTriggered.sort((a,b) => b.risk-a.risk)[0];
+    const key = `th_${worst.n}_${Math.floor(Date.now()/300000)}`;
+    if (!seenIds.has(key)) {
+      seenIds.add(key);
+      showToast('watch', `⚡ Threshold Alert: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// HUE + AUDIO
+// ══════════════════════════════════════════════════════════
+function hueFlash(hex) {
+  if(!cfg.hueIP||!cfg.hueT) return;
+  const url=`http://${cfg.hueIP}/api/${cfg.hueT}/lights`;
+  const xy=hex==='#e63946'?[0.675,0.322]:hex==='#f5a623'?[0.503,0.415]:[0.167,0.040];
+  fetch(url).then(r=>r.json()).then(ls=>{
+    const ids=Object.keys(ls);
+    const f=on=>ids.forEach(id=>fetch(`${url}/${id}/state`,{method:'PUT',body:JSON.stringify({on,xy,bri:254,transitiontime:1})}));
+    f(true);[600,1200,1800,2400].forEach((t,i)=>setTimeout(()=>f(i%2===1),t));
+  }).catch(()=>{});
+  document.getElementById('hueStatus').style.display='flex';
+  document.getElementById('hueStatusText').textContent=`Lights: ${hex==='#e63946'?'red flash':'amber pulse'}`;
+}
+
+function siren(warn) {
+  try {
+    const ac=new(window.AudioContext||window.webkitAudioContext)();
+    (warn?[880,660,880,660]:[440,550]).forEach((f,i)=>{
+      const o=ac.createOscillator(),g=ac.createGain();
+      o.connect(g);g.connect(ac.destination);
+      o.frequency.value=f;o.type='square';
+      g.gain.setValueAtTime(0.12,ac.currentTime+i*.25);
+      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+i*.25+.2);
+      o.start(ac.currentTime+i*.25);o.stop(ac.currentTime+i*.25+.25);
+    });
+  } catch{}
+}
+
+async function testPush() {
+  if(!cfg.push){showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');return;}
+  const top=stations.sort((a,b)=>b.risk-a.risk)[0];
+  const msg=top?`${top.n} — Risk ${top.risk}/100 | CAPE ${top.cape} J/kg`:'Test from VORTEX';
+  showToast('tornado','🌪 TEST PUSH',msg);
+  if(cfg.push.startsWith('http')) {
+    try{await fetch(cfg.push,{method:'POST',body:`🌪 VORTEX TEST\n${msg}`,headers:{'Title':'VORTEX Alert','Priority':'urgent','Tags':'rotating_light'}});showToast('watch','Push Sent ✓','Check your phone.');}
+    catch{showToast('watch','Push Failed','Check ntfy.sh URL.');}
+  }
+}
+
+function testHue() {
+  if(!cfg.hueIP||!cfg.hueT){showToast('watch','Not Configured','Add Hue Bridge IP and token first.');return;}
+  hueFlash('#e63946');showToast('tornado','🔴 Hue Test',`Red flash → ${cfg.hueIP}`);
+}
+
+// ══════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════
+function showToast(type,title,body){
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');t.className=`toast ${type}`;
+  t.innerHTML=`<div class="toast-title">${title}</div><div class="toast-body">${body}</div>`;
+  c.appendChild(t);setTimeout(()=>t.remove(),5500);
+}
+
+// ══════════════════════════════════════════════════════════
+// SETUP MODAL
+// ══════════════════════════════════════════════════════════
+function saveSetup(){
+  const push = document.getElementById('pushToken').value.trim();
+  const hueIP = document.getElementById('hueIP').value.trim();
+  const hueT = document.getElementById('hueToken').value.trim();
+  if(push){  store.set('vx_push',push);      cfg.push=push; }
+  if(hueIP){ store.set('vx_hueIP',hueIP);    cfg.hueIP=hueIP; }
+  if(hueT){  store.set('vx_hueToken',hueT);  cfg.hueT=hueT; }
+  closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
+}
+function openSetup(){
+  document.getElementById('pushToken').value=cfg.push||'';
+  document.getElementById('hueIP').value=cfg.hueIP||'';
+  document.getElementById('hueToken').value=cfg.hueT||'';
+  document.getElementById('setupModal').style.display='flex';
+}
+function closeSetup(){document.getElementById('setupModal').style.display='none';}
+function updateCfgUI(){
+  document.getElementById('pushSub').textContent=cfg.push?(cfg.push.includes('ntfy')?'ntfy.sh · Connected':'Configured'):'ntfy.sh / Pushover';
+  document.getElementById('hueSub').textContent=cfg.hueIP?`Bridge: ${cfg.hueIP}`:'Philips Hue';
+}
+function toggleNotif(type, cb) {
+  if(type==='push' && cb.checked && !cfg.push){
+    showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');
+    cb.checked=false;
+    const peer = cb.id==='togglePush' ? document.getElementById('togglePushM') : document.getElementById('togglePush');
+    if(peer) peer.checked=false;
+    return;
+  }
+  if(type==='hue' && cb.checked && !cfg.hueIP){
+    showToast('watch','Not Configured','Add Hue Bridge IP in Configure.');
+    cb.checked=false;
+    const peer = cb.id==='toggleHue' ? document.getElementById('toggleHueM') : document.getElementById('toggleHue');
+    if(peer) peer.checked=false;
+    return;
+  }
+  // Sync peer toggle
+  const pairs = {togglePush:'togglePushM',togglePushM:'togglePush',toggleHue:'toggleHueM',toggleHueM:'toggleHue'};
+  const peer = document.getElementById(pairs[cb.id]);
+  if(peer && peer.checked !== cb.checked) peer.checked = cb.checked;
+}
+
+// ══════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════
+updateCfgUI();
+loadStations();
+fetchNWS();
+setInterval(loadStations, 10*60*1000);
+setInterval(fetchNWS,      60*1000);
+setInterval(checkTh,         30*1000);
+
+// ── Data freshness indicator ──────────────────────────────
+let lastStationFetch = Date.now();
+setInterval(() => {
+  const age = Math.round((Date.now() - lastStationFetch) / 60000);
+  const dot = document.getElementById('liveDot');
+  if (age >= 20 && dot) {
+    dot.style.background = 'var(--amber)';
+    dot.title = `Data ${age}min old`;
+  }
+}, 60000);
+
+// ══════════════════════════════════════════════════════════
+// MOBILE — nav, sheets, data sync, touch/pinch
+// ══════════════════════════════════════════════════════════
+
+// ── Sheet management ──────────────────────────────────────
+const SHEETS = {
+  layers:   document.getElementById('layersSheet'),
+  cond:     document.getElementById('condSheet'),
+  alerts:   document.getElementById('alertsSheet'),
+  settings: document.getElementById('settingsSheet'),
+};
+const overlay = document.getElementById('sheetOverlay');
+
+function openSheet(name) {
+  closeAllSheets();
+  const sheet = SHEETS[name];
+  if (!sheet) return;
+  overlay.classList.add('open');
+  setTimeout(() => sheet.classList.add('open'), 10);
+  // Swipe down to close
+  addSheetSwipe(sheet);
+}
+
+function closeAllSheets() {
+  Object.values(SHEETS).forEach(s => s.classList.remove('open'));
+  overlay.classList.remove('open');
+  // Reset nav
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-map')?.classList.add('active');
+}
+
+// ── Nav routing ───────────────────────────────────────────
+function mobileNav(tab) {
+  if (!isMobile()) return;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('nav-'+tab)?.classList.add('active');
+  if (tab === 'map') { closeAllSheets(); return; }
+  openSheet(tab);
+}
+
+// ── Swipe down to close sheet ─────────────────────────────
+function addSheetSwipe(sheet) {
+  let startY = 0;
+  const onStart = e => { startY = (e.touches||[e])[0].clientY; };
+  const onEnd   = e => {
+    const dy = (e.changedTouches||[e])[0].clientY - startY;
+    if (dy > 80) closeAllSheets();
+  };
+  sheet.addEventListener('touchstart', onStart, {passive:true, once:true});
+  sheet.addEventListener('touchend',   onEnd,   {passive:true, once:true});
+}
+
+// selectStation and updateHomeDashboard handle both desktop + mobile directly (see above)
+
+// updateHomeDashboard handles desktop + mobile directly (see above)
+
+// renderNWS syncs mobile sheet directly (see end of renderNWS body)
+
+// ── iOS pinch-to-zoom via D3 zoom ─────────────────────────
+let touchStartDist = 0, touchStartScale = 1;
+
+document.getElementById('mapSvg').addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    touchStartDist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    touchStartScale = currentTransform.k;
+  }
+}, {passive: false});
+
+document.getElementById('mapSvg').addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY
+    );
+    const factor = dist / touchStartDist;
+    const newK = Math.min(Math.max(touchStartScale * factor, 0.5), 12);
+    // Zoom around midpoint of the two touches
+    const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const rect = svgEl.getBoundingClientRect();
+    const cx = mx - rect.left, cy = my - rect.top;
+    const ratio = newK / currentTransform.k;
+    const tx = cx - ratio*(cx - currentTransform.x);
+    const ty = cy - ratio*(cy - currentTransform.y);
+    svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(newK));
+  }
+}, {passive: false});
+
+// Prevent iOS bounce/scroll on map
+document.getElementById('mapSvg').addEventListener('touchmove', e => {
+  if (e.touches.length === 1) e.preventDefault();
+}, {passive: false});
+
+// ── Disable hover tooltips on touch — use tap instead ─────
+let lastTap = 0;
+document.getElementById('mapSvg').addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 300) return; // ignore double-tap
+  lastTap = now;
+  hideTooltip();
+}, {passive:true});
+</script>
+</body>
+</html>
