@@ -610,6 +610,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <button class="layer-btn active" onclick="toggleLayer('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
       <button class="layer-btn active" onclick="toggleLayer('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" onclick="toggleLayer('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('earthquakes',this)"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('wildfires',this)"><span>🔥 Wildfires</span><div class="layer-indicator"></div></button>
     </div>
 
     <div class="panel-section">
@@ -670,6 +672,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <canvas id="heatCanvas"></canvas>
     <canvas id="windCanvas"></canvas>
     <svg id="warnSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
+    <svg id="hazardSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <svg id="gpsSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <div id="dangerBanner">🚨 YOU ARE INSIDE A WARNING ZONE</div>
     <div id="mapLegend"></div>
@@ -775,6 +778,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <button class="layer-btn active" id="mb-risk" onclick="toggleLayer('risk',this);syncLayerBtn('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
       <button class="layer-btn active" id="mb-warnings" onclick="toggleLayer('warnings',this);syncLayerBtn('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" id="mb-radar" onclick="toggleLayer('radar',this);syncLayerBtn('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-earthquakes" onclick="toggleLayer('earthquakes',this);syncLayerBtn('earthquakes',this)"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-wildfires" onclick="toggleLayer('wildfires',this);syncLayerBtn('wildfires',this)"><span>🔥 Wildfires</span><div class="layer-indicator"></div></button>
     </div>
     <div class="panel-section" style="border:none;">
       <div class="panel-label">NW Arkansas</div>
@@ -1129,7 +1134,7 @@ const svgEl   = document.getElementById('mapSvg');
 const svg     = d3.select('#mapSvg');
 const warnSvg = d3.select('#warnSvg');
 
-let projection, pathGen, zoom, gMap, gWarn, gStations;
+let projection, pathGen, zoom, gMap, gWarn, gStations, gHazard;
 let currentTransform = d3.zoomIdentity;
 
 function initMap(us) {
@@ -1153,7 +1158,9 @@ function initMap(us) {
       gMap.attr('transform', event.transform);
       gWarn.attr('transform', event.transform);
       gStations.attr('transform', event.transform);
+      gHazard.attr('transform', event.transform);
       rescaleStations(event.transform.k);
+      rescaleHazards();
       redrawOverlays();
       if (windOn) initParts();
       if (lyr.radar) {
@@ -1186,6 +1193,7 @@ function initMap(us) {
   gMap      = svg.append('g').attr('id', 'gMap');
   gStations = svg.append('g').attr('id', 'gStations');
   gWarn     = warnSvg.append('g').attr('id', 'gWarn');
+  gHazard   = d3.select('#hazardSvg').append('g').attr('id', 'gHazard');
 
   // Draw states — filled
   gMap.selectAll('.state-fill')
@@ -1214,6 +1222,9 @@ function initMap(us) {
   resizeCanvases();
   // Auto-zoom to NW Arkansas on load
   setTimeout(zoomHome, 600);
+  // Re-render hazard layers if they were toggled before map loaded
+  if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
+  if (lyr.wildfires   && wildfireData.length)   renderWildfires();
 }
 
 // Load TopoJSON — Cache API so it works offline after first load
@@ -1979,7 +1990,7 @@ const wCv = document.getElementById('windCanvas'), hCv = document.getElementById
 const rdrCv = document.getElementById('radarCanvas');
 const rdrCtx = rdrCv.getContext('2d');
 const wCtx = wCv.getContext('2d'), hCtx = hCv.getContext('2d');
-let lyr = {temp:false,wind:false,humidity:false,cape:false,dewpoint:false,risk:true,warnings:true,radar:false};
+let lyr = {temp:false,wind:false,humidity:false,cape:false,dewpoint:false,risk:true,warnings:true,radar:false,earthquakes:false,wildfires:false};
 let windOn = false, particles = [];
 
 function resizeCanvases() {
@@ -1998,6 +2009,7 @@ window.addEventListener('resize', () => {
     svg.select('rect').attr('width',W).attr('height',H);
     svg.attr('width',W).attr('height',H);
     warnSvg.attr('width',W).attr('height',H);
+    d3.select('#hazardSvg').attr('width',W).attr('height',H);
     d3.select('#gpsSvg').attr('width',W).attr('height',H);
     drawStations();
     if (geoActive) updateGPSDot();
@@ -2462,7 +2474,7 @@ function jumpRadarLive() {
 setInterval(() => { if (lyr.radar) fetchRadar(); }, 2 * 60 * 1000);
 
 function toggleLayer(name, btn) {
-  const isOverlay = name === 'wind' || name === 'warnings' || name === 'radar';
+  const isOverlay = name === 'wind' || name === 'warnings' || name === 'radar' || name === 'earthquakes' || name === 'wildfires';
   if (!isOverlay) {
     if (activeLayer === name) return;
     document.querySelectorAll('.layer-btn').forEach(b => {
@@ -2485,6 +2497,14 @@ function toggleLayer(name, btn) {
   }
   if (name === 'warnings') {
     d3.select('#gWarn').style('display', lyr[name] ? '' : 'none');
+  }
+  if (name === 'earthquakes') {
+    if (lyr.earthquakes) fetchEarthquakes();
+    else { if (gHazard) gHazard.selectAll('.eq-marker').remove(); }
+  }
+  if (name === 'wildfires') {
+    if (lyr.wildfires) fetchWildfires();
+    else { if (gHazard) gHazard.selectAll('.fire-marker').remove(); }
   }
   if (name === 'radar') {
     if (lyr.radar) {
@@ -2916,6 +2936,229 @@ function toggleNotif(type, cb) {
 function restoreToggles() {
   // No-op — toggles are restored by loadUserSettings() after login
 }
+
+// ══════════════════════════════════════════════════════════
+// MULTI-HAZARD — Earthquakes (USGS) + Wildfires (NIFC)
+// ══════════════════════════════════════════════════════════
+let earthquakeData = [];
+let wildfireData   = [];
+
+// ── Magnitude → visual size + color ──────────────────────
+function eqRadius(mag) { return Math.max(3, mag * 3.5); }
+function eqColor(mag) {
+  if (mag >= 6.0) return '#e040fb'; // violent purple
+  if (mag >= 5.0) return '#c862f5'; // bright purple
+  if (mag >= 4.0) return '#9c27b0'; // medium purple
+  return '#7b1fa2';                  // dark purple (M2.5–4)
+}
+
+// ── Acreage → fire icon size ──────────────────────────────
+function fireRadius(acres) {
+  if (!acres || acres < 10)   return 4;
+  if (acres < 100)  return 5;
+  if (acres < 1000) return 7;
+  if (acres < 10000)return 9;
+  return 12; // 10k+ acres
+}
+function fireColor(acres) {
+  if (!acres || acres < 100)  return '#ff9800'; // small — orange
+  if (acres < 5000) return '#ff6d00';            // medium — deep orange
+  return '#dd2c00';                               // large — red-orange
+}
+
+async function fetchEarthquakes() {
+  if (!lyr.earthquakes || !gHazard || !projection) return;
+  try {
+    const r = await fetch(
+      'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
+      { signal: AbortSignal.timeout(10000) }
+    );
+    if (!r.ok) throw new Error(r.status);
+    const json = await r.json();
+    earthquakeData = json.features || [];
+    renderEarthquakes();
+  } catch(e) {
+    console.warn('[Hazard] Earthquake fetch failed:', e.message);
+  }
+}
+
+function renderEarthquakes() {
+  if (!gHazard || !projection) return;
+  gHazard.selectAll('.eq-marker').remove();
+  if (!lyr.earthquakes || !earthquakeData.length) return;
+
+  const k = currentTransform ? currentTransform.k : 1;
+
+  earthquakeData.forEach(feat => {
+    const [lon, lat] = feat.geometry.coordinates;
+    const mag   = feat.properties.mag;
+    const place = feat.properties.place || 'Unknown';
+    const time  = new Date(feat.properties.time).toLocaleString('en-US', {
+      month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'
+    });
+    const pt = projection([lon, lat]);
+    if (!pt) return;
+    const [px, py] = pt;
+    const baseR = eqRadius(mag);
+    const col   = eqColor(mag);
+
+    const g = gHazard.append('g').attr('class', 'eq-marker')
+      .attr('data-base-r', baseR)
+      .style('cursor', 'pointer');
+
+    // Outer pulse ring
+    g.append('circle')
+      .attr('cx', px).attr('cy', py)
+      .attr('r', baseR * 1.9 / k)
+      .attr('fill', 'none')
+      .attr('stroke', col)
+      .attr('stroke-width', 0.8 / k)
+      .attr('opacity', 0.4);
+
+    // Main dot
+    g.append('circle')
+      .attr('cx', px).attr('cy', py)
+      .attr('r', baseR / k)
+      .attr('fill', col)
+      .attr('opacity', 0.85);
+
+    // Magnitude label
+    g.append('text')
+      .attr('x', px + (baseR + 2) / k)
+      .attr('y', py + 3 / k)
+      .attr('fill', col)
+      .attr('font-family', "'Share Tech Mono', monospace")
+      .attr('font-size', 7 / k)
+      .attr('font-weight', '700')
+      .style('pointer-events', 'none')
+      .text(`M${mag.toFixed(1)}`);
+
+    // Tooltip on hover
+    g.on('mouseenter', (event) => {
+      const tt = document.getElementById('mapTooltip');
+      tt.innerHTML = `
+        <div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div>
+        <div class="tt-row"><span class="tt-label">LOCATION</span><span class="tt-val">${place}</span></div>
+        <div class="tt-row"><span class="tt-label">TIME</span><span class="tt-val">${time}</span></div>
+        <div class="tt-row"><span class="tt-label">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>
+      `;
+      tt.style.display = 'block';
+      tt.style.left = (event.offsetX + 14) + 'px';
+      tt.style.top  = (event.offsetY - 10) + 'px';
+    })
+    .on('mouseleave', () => {
+      document.getElementById('mapTooltip').style.display = 'none';
+    });
+  });
+}
+
+async function fetchWildfires() {
+  if (!lyr.wildfires || !gHazard || !projection) return;
+  try {
+    const url = 'https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query' +
+      '?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200';
+    const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    if (!r.ok) throw new Error(r.status);
+    const json = await r.json();
+    wildfireData = (json.features || []).filter(f => f.geometry?.type === 'Point');
+    renderWildfires();
+  } catch(e) {
+    console.warn('[Hazard] Wildfire fetch failed:', e.message);
+  }
+}
+
+function renderWildfires() {
+  if (!gHazard || !projection) return;
+  gHazard.selectAll('.fire-marker').remove();
+  if (!lyr.wildfires || !wildfireData.length) return;
+
+  const k = currentTransform ? currentTransform.k : 1;
+
+  wildfireData.forEach(feat => {
+    const [lon, lat] = feat.geometry.coordinates;
+    const p     = feat.properties;
+    const name  = p.IncidentName || 'Unknown Fire';
+    const acres = p.DailyAcres   || 0;
+    const pct   = p.PercentContained != null ? `${p.PercentContained}% contained` : 'Containment unknown';
+    const state = p.POOState || '';
+    const pt = projection([lon, lat]);
+    if (!pt) return;
+    const [px, py] = pt;
+    const baseR = fireRadius(acres);
+    const col   = fireColor(acres);
+
+    const g = gHazard.append('g').attr('class', 'fire-marker')
+      .attr('data-base-r', baseR)
+      .style('cursor', 'pointer');
+
+    // Glow
+    g.append('circle')
+      .attr('cx', px).attr('cy', py)
+      .attr('r', baseR * 2 / k)
+      .attr('fill', col)
+      .attr('opacity', 0.15);
+
+    // Core dot
+    g.append('circle')
+      .attr('cx', px).attr('cy', py)
+      .attr('r', baseR / k)
+      .attr('fill', col)
+      .attr('opacity', 0.9);
+
+    // Fire emoji at center
+    g.append('text')
+      .attr('x', px).attr('y', py + 3 / k)
+      .attr('text-anchor', 'middle')
+      .attr('font-size', (baseR * 1.2) / k)
+      .style('pointer-events', 'none')
+      .text('🔥');
+
+    // Tooltip
+    g.on('mouseenter', (event) => {
+      const acreStr = acres >= 1000
+        ? `${(acres/1000).toFixed(1)}k acres`
+        : `${Math.round(acres)} acres`;
+      const tt = document.getElementById('mapTooltip');
+      tt.innerHTML = `
+        <div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div>
+        <div class="tt-row"><span class="tt-label">STATE</span><span class="tt-val">${state.replace('US-','')}</span></div>
+        <div class="tt-row"><span class="tt-label">SIZE</span><span class="tt-val">${acreStr}</span></div>
+        <div class="tt-row"><span class="tt-label">STATUS</span><span class="tt-val">${pct}</span></div>
+      `;
+      tt.style.display = 'block';
+      tt.style.left = (event.offsetX + 14) + 'px';
+      tt.style.top  = (event.offsetY - 10) + 'px';
+    })
+    .on('mouseleave', () => {
+      document.getElementById('mapTooltip').style.display = 'none';
+    });
+  });
+}
+
+// Re-render hazard markers after zoom (rescales dot sizes)
+function rescaleHazards() {
+  if (!gHazard || !projection) return;
+  const k = currentTransform ? currentTransform.k : 1;
+
+  gHazard.selectAll('.eq-marker, .fire-marker').each(function() {
+    const g      = d3.select(this);
+    const isEq   = this.classList.contains('eq-marker');
+    const baseR  = +(g.attr('data-base-r') || 4);
+    const circles = g.selectAll('circle');
+    circles.filter((d,i) => i === 0)  // outer ring / glow
+      .attr('r', baseR * (isEq ? 1.9 : 2) / k);
+    circles.filter((d,i) => i === 1)  // core dot
+      .attr('r', baseR / k);
+    g.selectAll('text')
+      .attr('font-size', (isEq ? 7 : baseR * 1.2) / k);
+  });
+}
+
+// Poll every 5 minutes when layers are active
+setInterval(() => {
+  if (lyr.earthquakes) fetchEarthquakes();
+  if (lyr.wildfires)   fetchWildfires();
+}, 5 * 60 * 1000);
 
 // ══════════════════════════════════════════════════════════
 // INIT
