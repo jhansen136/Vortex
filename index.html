@@ -2027,7 +2027,8 @@ function getRadarTileZoom() {
   const k = (currentTransform || d3.zoomIdentity).k;
   if (k >= 5) return 7;
   if (k >= 2) return 6;
-  return 5;
+  if (k >= 0.8) return 5;
+  return 4; // very zoomed out — fewer, larger tiles
 }
 
 // Convert a Web Mercator tile index to lon/lat of its NW corner
@@ -2050,33 +2051,53 @@ function getVisibleTiles(TILE_ZOOM) {
   const W = rdrCv.width, H = rdrCv.height;
 
   // AlbersUSA covers roughly lon -125 to -65, lat 24 to 50
-  // Expand slightly for safety at high zoom
+  // Expand slightly for safety
   const LON_MIN = -128, LON_MAX = -62, LAT_MIN = 22, LAT_MAX = 52;
 
   // Convert geographic bounds to tile index range
   const txMin = Math.max(0,   Math.floor(lon2tile(LON_MIN, N)) - 1);
   const txMax = Math.min(N-1, Math.ceil( lon2tile(LON_MAX, N)) + 1);
-  const tyMin = Math.max(0,   Math.floor(lat2tile(LAT_MAX, N)) - 1); // lat→tile is inverted
+  const tyMin = Math.max(0,   Math.floor(lat2tile(LAT_MAX, N)) - 1);
   const tyMax = Math.min(N-1, Math.ceil( lat2tile(LAT_MIN, N)) + 1);
 
+  const tileCount = (txMax - txMin + 1) * (tyMax - tyMin + 1);
+
+  // At low zoom levels (≤6) the tile count is small (≤ ~100) and AlbersUSA
+  // projection points are tiny on screen — skip the screen bounds check and
+  // return all tiles in the geographic range. At higher zoom, cull by screen.
+  if (TILE_ZOOM <= 6 || tileCount <= 120) {
+    const visible = [];
+    for (let tx = txMin; tx <= txMax; tx++) {
+      for (let ty = tyMin; ty <= tyMax; ty++) {
+        // Still require at least one corner to project (rejects ocean tiles)
+        const corners = [
+          [tile2lon(tx + 0.5, N), tile2lat(ty + 0.5, N)],
+          [tile2lon(tx,       N), tile2lat(ty,       N)],
+          [tile2lon(tx + 1,   N), tile2lat(ty + 1,   N)],
+        ];
+        if (corners.some(([lon, lat]) => !!projection([lon, lat]))) {
+          visible.push({ tx, ty });
+        }
+      }
+    }
+    return visible;
+  }
+
+  // High zoom: cull aggressively by screen bounds
   const visible = [];
   for (let tx = txMin; tx <= txMax; tx++) {
     for (let ty = tyMin; ty <= tyMax; ty++) {
-      // Check if this tile's center projects onto the screen (AlbersUSA returns null for outside CONUS)
       const lon = tile2lon(tx + 0.5, N);
       const lat = tile2lat(ty + 0.5, N);
       const pt  = projection([lon, lat]);
 
-      // At high tile zoom, also check at tile corners — tile may span the projection boundary
       let onScreen = false;
       if (pt) {
-        // Center projects — check if it's near the visible screen area (with generous margin)
         const sx = pt[0] * t.k + t.x, sy = pt[1] * t.k + t.y;
         onScreen = sx > -W && sx < W * 2 && sy > -H && sy < H * 2;
       }
 
       if (!onScreen) {
-        // Center didn't project — try all four corners of the tile
         const corners = [
           [tile2lon(tx,     N), tile2lat(ty,     N)],
           [tile2lon(tx + 1, N), tile2lat(ty,     N)],
@@ -2109,7 +2130,10 @@ function drawRadar(targetPath) {
 
   // Use geographic bounds to find visible tiles — works at all zoom levels
   const visibleTiles = getVisibleTiles(TILE_ZOOM);
-  if (!visibleTiles.length) return;
+  if (!visibleTiles.length) {
+    // Nothing projectable at this zoom — leave whatever is on canvas alone
+    return;
+  }
 
   const visible = visibleTiles.map(({ tx, ty }) => ({
     tx, ty,
