@@ -2172,23 +2172,33 @@ function scheduleRadarRepaint() {
   if (!lyr.radar) return;
   clearTimeout(radarRepaintTimer);
   radarRepaintTimer = setTimeout(() => {
+    if (!radarPath || !radarHost) return;
     const neededZoom = getRadarTileZoom();
-    if (neededZoom !== currentTileZoom) {
-      // Zoom level changed — fetch new tiles; old canvas stays visible via CSS transform
-      drawRadar(radarPath);
-      return;
-    }
-    const visibleTiles = getVisibleTiles(currentTileZoom);
-    const snapZoom = currentTileZoom;
+    const zoomChanged = neededZoom !== currentTileZoom;
+    if (zoomChanged) currentTileZoom = neededZoom;
+
+    const visibleTiles = getVisibleTiles(neededZoom);
+    const snapZoom = neededZoom;
     const cached = visibleTiles
       .map(({ tx, ty }) => {
-        const url = `${radarHost}${radarPath}/256/${currentTileZoom}/${tx}/${ty}/6/1_1.png`;
+        const url = `${radarHost}${radarPath}/256/${neededZoom}/${tx}/${ty}/6/1_1.png`;
         return radarTileCache[url] ? { tx, ty, url } : null;
       })
       .filter(Boolean);
-    if (cached.length > 0) paintRadar(cached, radarPath, snapZoom);
-    else drawRadar(radarPath);
-  }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
+
+    if (cached.length > 0) {
+      // Have some tiles — paint what we have, then prefetch any missing ones
+      paintRadar(cached, radarPath, snapZoom);
+    }
+    // Always fetch missing tiles (covers zoom changes, pans to new areas, cold cache)
+    const missing = visibleTiles.filter(({ tx, ty }) => {
+      const url = `${radarHost}${radarPath}/256/${neededZoom}/${tx}/${ty}/6/1_1.png`;
+      return !radarTileCache[url];
+    });
+    if (missing.length > 0) drawRadar(radarPath);
+    // Re-prefetch all frames for new viewport
+    prefetchAllFrames();
+  }, 120);
 }
 
 async function fetchRadar() {
@@ -2217,9 +2227,9 @@ async function fetchRadar() {
   } catch(e) {}
 }
 
-// Prefetch radar tiles for all frames — visible area only, using same bbox as getVisibleTiles
+// Prefetch radar tiles for all frames — current visible area only
 function prefetchAllFrames() {
-  if (prefetchInProgress || !radarFrames.length || !projection) return;
+  if (!radarFrames.length || !projection || !radarHost) return;
   prefetchInProgress = true;
   const TZ = getRadarTileZoom();
   const visibleTiles = getVisibleTiles(TZ);
@@ -2230,12 +2240,17 @@ function prefetchAllFrames() {
       if (!radarTileCache[url]) urlsToFetch.push(url);
     });
   });
+  if (!urlsToFetch.length) { prefetchInProgress = false; return; }
   let remaining = urlsToFetch.length;
-  if (!remaining) { prefetchInProgress = false; return; }
+  // Safety timeout — never leave prefetchInProgress stuck true
+  const safetyTimer = setTimeout(() => { prefetchInProgress = false; }, 30000);
+  const done = () => {
+    if (--remaining <= 0) { prefetchInProgress = false; clearTimeout(safetyTimer); }
+  };
   urlsToFetch.forEach(url => {
     const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload  = () => { addToRadarCache(url, img); if (--remaining === 0) prefetchInProgress = false; };
-    img.onerror = () => { if (--remaining === 0) prefetchInProgress = false; };
+    img.onload  = () => { addToRadarCache(url, img); done(); };
+    img.onerror = () => done();
     img.src = url;
   });
 }
