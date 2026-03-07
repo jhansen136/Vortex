@@ -1693,7 +1693,7 @@ function rescaleStations(k) {
       el.style('display', null)
         // Keep labels a constant screen size by scaling inversely with zoom,
         // but clamp so they don't get too tiny or huge
-        .attr('font-size', Math.max(bfs * s, tier === 1 ? 7 : 6))
+        .attr('font-size', Math.max(bfs * s, tier === 1 ? 6 : 5))
         .attr('x', bx + 9 * s)
         .attr('y', by + 4 * s);
     }
@@ -1714,7 +1714,7 @@ function rescaleStations(k) {
 }
 
 // Zoom thresholds at which each tier's label becomes visible
-const LABEL_ZOOM = { 1: 1.2, 2: 2.5, 3: 5.0 };
+const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
 
 function drawStations() {
   if (!gStations) return;
@@ -1756,7 +1756,7 @@ function drawStations() {
         ? 'rgba(255,255,255,0.80)' // bright white for major metros
         : 'rgba(200,220,255,0.60)';// dim blue-white for regional
 
-    const baseFontSize = tier === 1 ? 9 : 7.5;
+    const baseFontSize = tier === 1 ? 7 : 6;
     const cityName = s.n.split(',')[0].toUpperCase();
 
     gStations.append('text')
