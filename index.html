@@ -580,6 +580,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <canvas id="radarCanvas"></canvas>
     <canvas id="heatCanvas"></canvas>
     <canvas id="windCanvas"></canvas>
+    <svg id="warnSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <div id="mapLegend"></div>
     <div id="radarTimestamp"></div>
     <div id="mapTooltip"></div>
@@ -1024,6 +1025,7 @@ setInterval(()=>{
 const mapWrap = document.getElementById('mapWrap');
 const svgEl   = document.getElementById('mapSvg');
 const svg     = d3.select('#mapSvg');
+const warnSvg = d3.select('#warnSvg');
 
 let projection, pathGen, zoom, gMap, gWarn, gStations;
 let currentTransform = d3.zoomIdentity;
@@ -1039,6 +1041,7 @@ function initMap(us) {
   pathGen = d3.geoPath().projection(projection);
 
   svg.attr('width', W).attr('height', H);
+  warnSvg.attr('width', W).attr('height', H);
 
   // Zoom behavior
   zoom = d3.zoom()
@@ -1075,10 +1078,10 @@ function initMap(us) {
     .attr('stroke', '#0d1420')
     .attr('stroke-width', '0.5');
 
-  // Layer groups
+  // Layer groups — gWarn lives in warnSvg (above all canvases), others in mapSvg
   gMap      = svg.append('g').attr('id', 'gMap');
-  gWarn     = svg.append('g').attr('id', 'gWarn');
   gStations = svg.append('g').attr('id', 'gStations');
+  gWarn     = warnSvg.append('g').attr('id', 'gWarn');
 
   // Draw states — filled
   gMap.selectAll('.state-fill')
@@ -1686,6 +1689,8 @@ window.addEventListener('resize', () => {
     if (gMap) gMap.selectAll('path').attr('d', pathGen);
     if (gWarn) gWarn.selectAll('path').attr('d', pathGen);
     svg.select('rect').attr('width',W).attr('height',H);
+    svg.attr('width',W).attr('height',H);
+    warnSvg.attr('width',W).attr('height',H);
     drawStations();
   }
   redrawOverlays();
