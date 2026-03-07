@@ -3088,6 +3088,29 @@ document.getElementById('mapSvg').addEventListener('touchend', e => {
 }, {passive:true});
 // FIX(low): aria-live for alert list (accessibility)
 document.getElementById('alertsList').setAttribute('aria-live','polite');
+
+// FIX(bug): bfcache / tab-restore recovery
+// When the browser restores a frozen page (back-forward cache, mobile tab kill),
+// setIntervals are dead and onAuthStateChange won't re-fire.
+// We detect this via pageshow (persisted=true) and visibilitychange,
+// then restart polling if the user is still authenticated.
+function handlePageResume() {
+  if (!currentUser) return;              // not logged in — nothing to restart
+  if (!mapReady)    return;              // map never loaded — let normal init handle it
+  // Clear dead intervals and reset the dataInitialized guard
+  stopDataPolling();
+  // Re-set auth ready (was true when frozen, still true now)
+  authReady = true;
+  checkReadyToLoad();
+}
+
+window.addEventListener('pageshow', e => {
+  if (e.persisted) handlePageResume();   // restored from bfcache
+});
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') handlePageResume();
+});
 </script>
 </body>
 </html>
