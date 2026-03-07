@@ -834,26 +834,32 @@ function showAuthRegister() {
   document.getElementById('authFormRegister').style.display = 'flex';
   document.getElementById('authError').textContent = '';
 }
-function authSetLoading(on) {
+function authSetLoading(on, form = 'login') {
   document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
-  document.getElementById('authFormLogin').style.display = on ? 'none' : 'flex';
-  document.getElementById('authFormRegister').style.display = 'none';
-  document.getElementById('authLoginBtn').disabled = on;
-  document.getElementById('authRegisterBtn').disabled = on;
+  document.getElementById('authFormLogin').style.display = (!on && form === 'login') ? 'flex' : 'none';
+  document.getElementById('authFormRegister').style.display = (!on && form === 'register') ? 'flex' : 'none';
+  if (document.getElementById('authLoginBtn')) document.getElementById('authLoginBtn').disabled = on;
+  if (document.getElementById('authRegisterBtn')) document.getElementById('authRegisterBtn').disabled = on;
 }
 function authShowError(msg) {
   document.getElementById('authError').textContent = msg;
   document.getElementById('authSpinner').style.display = 'none';
-  document.getElementById('authFormLogin').style.display = 'flex';
+  // Show whichever form was active
+  const loginVisible = document.getElementById('authFormLogin').style.display !== 'none';
+  if (!loginVisible) {
+    document.getElementById('authFormRegister').style.display = 'flex';
+  } else {
+    document.getElementById('authFormLogin').style.display = 'flex';
+  }
 }
 
 async function authLogin() {
   const email = document.getElementById('authEmail').value.trim();
   const pw    = document.getElementById('authPassword').value;
   if (!email || !pw) { authShowError('Please enter email and password.'); return; }
-  authSetLoading(true);
+  authSetLoading(true, 'login');
   const { error } = await supa.auth.signInWithPassword({ email, password: pw });
-  if (error) { authShowError(error.message); return; }
+  if (error) { authSetLoading(false, 'login'); authShowError(error.message); return; }
   // onAuthStateChange will handle the rest
 }
 
@@ -863,20 +869,16 @@ async function authRegister() {
   const pw    = document.getElementById('authRegPassword').value;
   if (!name || !email || !pw) { authShowError('All fields required.'); return; }
   if (pw.length < 8) { authShowError('Password must be at least 8 characters.'); return; }
-  document.getElementById('authSpinner').style.display = 'block';
-  document.getElementById('authFormRegister').style.display = 'none';
-  const { error } = await supa.auth.signUp({
+  authSetLoading(true, 'register');
+  const { error: signUpError } = await supa.auth.signUp({
     email, password: pw,
     options: { data: { display_name: name } }
   });
-  if (error) {
-    document.getElementById('authFormRegister').style.display = 'flex';
-    document.getElementById('authSpinner').style.display = 'none';
-    authShowError(error.message);
-    return;
-  }
+  if (signUpError) { authSetLoading(false, 'register'); authShowError(signUpError.message); return; }
   // Auto sign-in after register
-  await supa.auth.signInWithPassword({ email, password: pw });
+  const { error: signInError } = await supa.auth.signInWithPassword({ email, password: pw });
+  if (signInError) { authSetLoading(false, 'register'); authShowError(signInError.message); return; }
+  // onAuthStateChange fires on success
 }
 
 async function authSignOut() {
