@@ -2326,42 +2326,23 @@ async function fetchRadar() {
   } catch(e) {}
 }
 
-// Prefetch strategy:
-// Phase 1 — current frame, ALL zoom levels (5,6,7): makes zoom in/out instant
-// Phase 2 — all other frames at current zoom only: makes animation smooth
-// Batched to 6 concurrent requests to match browser per-origin connection limit
+// Prefetch other animation frames at current zoom only.
+// Deliberately conservative — 4 concurrent, 500ms between batches —
+// to avoid hammering RainViewer's rate limit (429s block ALL tiles including
+// the ones drawRadar needs to actually display).
 function prefetchAllFrames() {
   if (prefetchInProgress || !radarFrames.length || !projection) return;
   prefetchInProgress = true;
 
-  const BATCH    = 6;
-  const curPath  = radarPath;
-  const curTZ    = getRadarTileZoom();
-  // All zoom levels we care about — prefetch lower zooms so zoom-out is instant
-  const ZOOM_LEVELS = [5, 6, 7].filter(tz => tz !== curTZ);
-  ZOOM_LEVELS.unshift(curTZ); // current zoom first
+  const BATCH  = 4;
+  const DELAY  = 500; // ms between batches — stay well under rate limit
+  const curTZ  = getRadarTileZoom();
+  const tiles  = getVisibleTiles(curTZ);
+  const urls   = [];
 
-  // Build a flat list of URLs in priority order:
-  // 1. Current frame × all zoom levels
-  // 2. Other frames × current zoom only
-  const urls = [];
-
-  // Phase 1: current frame at all zoom levels
-  for (const tz of ZOOM_LEVELS) {
-    const tiles = getVisibleTiles(tz);
-    const curFrame = radarFrames.find(f => f.path === curPath);
-    if (curFrame) {
-      for (const {tx, ty} of tiles) {
-        const url = `${radarHost}${curFrame.path}/256/${tz}/${tx}/${ty}/6/1_1.png`;
-        if (!radarTileCache[url]) urls.push(url);
-      }
-    }
-  }
-
-  // Phase 2: other frames at current zoom only
-  const tiles = getVisibleTiles(curTZ);
+  // Only prefetch other frames at current zoom — no multi-zoom blasting
   for (const frame of radarFrames) {
-    if (frame.path === curPath) continue;
+    if (frame.path === radarPath) continue; // current frame already loaded
     for (const {tx, ty} of tiles) {
       const url = `${radarHost}${frame.path}/256/${curTZ}/${tx}/${ty}/6/1_1.png`;
       if (!radarTileCache[url]) urls.push(url);
@@ -2377,10 +2358,10 @@ function prefetchAllFrames() {
     let inFlight = end - i;
     for (; i < end; i++) {
       const url = urls[i];
-      if (radarTileCache[url]) { if (--inFlight === 0) setTimeout(loadBatch, 0); continue; }
+      if (radarTileCache[url]) { if (--inFlight === 0) setTimeout(loadBatch, DELAY); continue; }
       const img = new Image(); img.crossOrigin = 'anonymous';
-      img.onload  = () => { addToRadarCache(url, img); if (--inFlight === 0) setTimeout(loadBatch, 20); };
-      img.onerror = () => { if (--inFlight === 0) setTimeout(loadBatch, 20); };
+      img.onload  = () => { addToRadarCache(url, img); if (--inFlight === 0) setTimeout(loadBatch, DELAY); };
+      img.onerror = () => { if (--inFlight === 0) setTimeout(loadBatch, DELAY); };
       img.src = url;
     }
   }
