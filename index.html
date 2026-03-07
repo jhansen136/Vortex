@@ -2260,8 +2260,8 @@ function paintRadar(tiles, snapPath) {
 
   tiles.forEach(({tx: tileTx, ty: tileTy, url}) => {
     let img = radarTileCache[url];
-    // Overzoom fallback: if this tile failed/missing, use parent tile cropped to quadrant
-    let srcX = 0, srcY = 0, srcS = S;
+    // Overzoom fallback: if this tile failed/missing, crop the parent tile quadrant
+    // into a temp 256×256 canvas so the rest of the draw loop is unchanged
     if (!img && TILE_ZOOM > 5) {
       const parentTZ  = TILE_ZOOM - 1;
       const parentTx  = Math.floor(tileTx / 2);
@@ -2269,11 +2269,11 @@ function paintRadar(tiles, snapPath) {
       const parentUrl = `${radarHost}${radarPath}/256/${parentTZ}/${parentTx}/${parentTy}/6/1_1.png`;
       const parentImg = radarTileCache[parentUrl];
       if (parentImg) {
-        img  = parentImg;
-        // Each parent tile covers 4 children — pick the right 128×128 quadrant
-        srcX = (tileTx % 2) * 128;
-        srcY = (tileTy % 2) * 128;
-        srcS = 128;
+        const qx = (tileTx % 2) * 128, qy = (tileTy % 2) * 128;
+        const tmp = document.createElement('canvas');
+        tmp.width = tmp.height = S;
+        tmp.getContext('2d').drawImage(parentImg, qx, qy, 128, 128, 0, 0, S, S);
+        img = tmp; // use the cropped canvas as the image source
       }
     }
     if (!img) return; // nothing to paint
@@ -2292,9 +2292,9 @@ function paintRadar(tiles, snapPath) {
         if (!p00||!p10||!p01||!p11) continue;
         const u0=srcX+i*srcS/SEGS, v0=srcY+j*srcS/SEGS, u1=srcX+(i+1)*srcS/SEGS, v1=srcY+(j+1)*srcS/SEGS;
         const af1=affineFrom3(u0,v0,u1,v0,u0,v1, p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
-        if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,srcX,srcY,srcS,srcS,0,0,S,S);offCtx.restore();}
+        if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
         const af2=affineFrom3(u1,v1,u0,v1,u1,v0, p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
-        if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,srcX,srcY,srcS,srcS,0,0,S,S);offCtx.restore();}
+        if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
       }
     }
   });
