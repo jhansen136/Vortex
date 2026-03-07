@@ -1138,6 +1138,7 @@ function initMap(us) {
       // On drag/zoom end: redraw radar at correct resolution and reset CSS transform
       if (lyr.radar) scheduleRadarRedraw();
     });
+  svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
   const graticule = d3.geoGraticule().step([5, 5]);
   svg.append('path').datum(graticule()).attr('d', pathGen)
