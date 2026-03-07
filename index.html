@@ -1117,25 +1117,23 @@ function initMap(us) {
     .scaleExtent([0.5, 12])
     .on('zoom', (event) => {
       currentTransform = event.transform;
+      const {x, y, k} = event.transform;
       gMap.attr('transform', event.transform);
       gWarn.attr('transform', event.transform);
       gStations.attr('transform', event.transform);
       gHazard.attr('transform', event.transform);
-      rescaleStations(event.transform.k);
-      rescaleHazards();
+      // Debounce expensive DOM rescaling to one rAF per frame
+      scheduleRescale(k);
       if (windOn) initParts();
       if (lyr.temp) drawHeatmap();
       if (lyr.radar) {
-        // During drag/zoom: apply CSS transform instantly — no pixel lag
-        // Full tile redraw is deferred to zoomend to avoid per-frame redraws
-        const {x, y, k} = event.transform;
+        // CSS transform tracks drag instantly — zero lag
         rdrCv.style.transformOrigin = '0 0';
         rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
       }
       if (geoActive) updateGPSDot();
     })
     .on('end', () => {
-      // On drag/zoom end: redraw radar at correct resolution and reset CSS transform
       if (lyr.radar) scheduleRadarRedraw();
     });
   svg.call(zoom);
@@ -1483,6 +1481,18 @@ async function loadStations() {
 function retryStationFetch() {
   document.getElementById('fetchErrorBanner').style.display = 'none';
   loadStations();
+}
+
+// rAF-debounced rescale — batches all per-frame zoom events into one DOM pass
+let rescaleRafId = null, pendingK = 1;
+function scheduleRescale(k) {
+  pendingK = k;
+  if (rescaleRafId) return;
+  rescaleRafId = requestAnimationFrame(() => {
+    rescaleRafId = null;
+    rescaleStations(pendingK);
+    rescaleHazards();
+  });
 }
 
 function rescaleStations(k) {
@@ -2105,19 +2115,18 @@ function drawRadar(targetPath) {
 
 function paintRadar(tiles, snapPath) {
   if (!lyr.radar || !projection) return;
-  // FIX(bug): guard uses snapPath parameter — safe even during rapid scrubbing
   if (snapPath && snapPath !== radarPath) return;
   const TILE_ZOOM = currentTileZoom;
   const N   = Math.pow(2, TILE_ZOOM);
   const W   = rdrCv.width, H = rdrCv.height;
   const SEGS = 8, S = 256;
-  rdrCtx.clearRect(0, 0, W, H);
-  rdrCtx.globalAlpha = 0.65;
-  if (currentTransform) {
-    const {x, y, k} = currentTransform;
-    rdrCv.style.transformOrigin = '0 0';
-    rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
-  }
+
+  // Draw into offscreen canvas first — don't touch rdrCv until fully painted
+  // This prevents the blank-flash when clearing before tiles are ready
+  const off = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const offCtx = off.getContext('2d');
+  offCtx.globalAlpha = 0.65;
   function affineFrom3(sx0,sy0,sx1,sy1,sx2,sy2,dx0,dy0,dx1,dy1,dx2,dy2) {
     const det = sx0*(sy1-sy2)+sx1*(sy2-sy0)+sx2*(sy0-sy1);
     if (Math.abs(det)<1e-10) return null;
@@ -2142,15 +2151,18 @@ function paintRadar(tiles, snapPath) {
       const p00=grid[j][i],p10=grid[j][i+1],p01=grid[j+1][i],p11=grid[j+1][i+1];
       if (!p00||!p10||!p01||!p11) continue;
       const u0=i*S/SEGS,v0=j*S/SEGS,u1=(i+1)*S/SEGS,v1=(j+1)*S/SEGS;
-      // No screen-space cull here — drawRadar/getVisibleTiles already filtered
-      // to on-screen tiles; per-quad culling in base coords is wrong when CSS transform is active
       const af1=affineFrom3(u0,v0,u1,v0,u0,v1,p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
-      if (af1){rdrCtx.save();rdrCtx.beginPath();rdrCtx.moveTo(p00[0],p00[1]);rdrCtx.lineTo(p10[0],p10[1]);rdrCtx.lineTo(p01[0],p01[1]);rdrCtx.closePath();rdrCtx.clip();rdrCtx.setTransform(...af1);rdrCtx.drawImage(img,0,0,S,S);rdrCtx.restore();}
+      if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
       const af2=affineFrom3(u1,v1,u0,v1,u1,v0,p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
-      if (af2){rdrCtx.save();rdrCtx.beginPath();rdrCtx.moveTo(p11[0],p11[1]);rdrCtx.lineTo(p01[0],p01[1]);rdrCtx.lineTo(p10[0],p10[1]);rdrCtx.closePath();rdrCtx.clip();rdrCtx.setTransform(...af2);rdrCtx.drawImage(img,0,0,S,S);rdrCtx.restore();}
+      if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
     }
   });
-  rdrCtx.globalAlpha = 1;
+  // Atomic swap — only clear+replace rdrCv once fully painted, no blank flash
+  rdrCtx.clearRect(0, 0, W, H);
+  rdrCtx.drawImage(off, 0, 0);
+  // Reset CSS transform — canvas is now drawn in base projection coordinates
+  rdrCv.style.transformOrigin = '0 0';
+  rdrCv.style.transform = 'none';
   rdrCv.style.opacity = '1';
 }
 
