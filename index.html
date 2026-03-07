@@ -87,7 +87,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .state-border{fill:none;stroke:#243040;stroke-width:.4;pointer-events:none;}
 .county-border{fill:none;stroke:#141e28;stroke-width:.25;pointer-events:none;}
 #windCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
+#radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
 #heatCanvas{display:none;}
+#radarTimestamp{position:absolute;bottom:36px;right:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.5px;pointer-events:none;z-index:20;display:none;}
+#mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;}
 
 /* ── TOOLTIP ── */
 #mapTooltip{position:absolute;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;display:none;z-index:60;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);}
@@ -411,12 +414,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <div class="sidebar-left">
     <div class="panel-section">
       <div class="panel-label">Map Layers</div>
-      <button class="layer-btn active" onclick="toggleLayer('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" onclick="toggleLayer('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" onclick="toggleLayer('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" onclick="toggleLayer('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" onclick="toggleLayer('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" onclick="toggleLayer('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
       <button class="layer-btn active" onclick="toggleLayer('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" onclick="toggleLayer('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
     </div>
 
     <div class="panel-section">
@@ -473,8 +478,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <!-- MAP -->
   <div class="map-wrap" id="mapWrap">
     <svg id="mapSvg"></svg>
+    <canvas id="radarCanvas"></canvas>
     <canvas id="heatCanvas"></canvas>
     <canvas id="windCanvas"></canvas>
+    <div id="mapLegend"></div>
+    <div id="radarTimestamp"></div>
     <div id="mapTooltip"></div>
     <div id="mapLoadMsg"><div class="load-spinner"></div>Loading map…</div>
     <div class="zoom-controls">
@@ -557,12 +565,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <div class="sheet-title">Map Layers</div>
   <div class="sheet-body">
     <div class="panel-section">
-      <button class="layer-btn active" id="mb-temp" onclick="toggleLayer('temp',this);syncLayerBtn('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-temp" onclick="toggleLayer('temp',this);syncLayerBtn('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" id="mb-wind" onclick="toggleLayer('wind',this);syncLayerBtn('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" id="mb-humidity" onclick="toggleLayer('humidity',this);syncLayerBtn('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" id="mb-cape" onclick="toggleLayer('cape',this);syncLayerBtn('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
       <button class="layer-btn" id="mb-dewpoint" onclick="toggleLayer('dewpoint',this);syncLayerBtn('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" id="mb-risk" onclick="toggleLayer('risk',this);syncLayerBtn('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
       <button class="layer-btn active" id="mb-warnings" onclick="toggleLayer('warnings',this);syncLayerBtn('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-radar" onclick="toggleLayer('radar',this);syncLayerBtn('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
     </div>
     <div class="panel-section" style="border:none;">
       <div class="panel-label">NW Arkansas</div>
@@ -760,6 +770,14 @@ function initMap(us) {
       gStations.attr('transform', event.transform);
       rescaleStations(event.transform.k);
       redrawOverlays();
+      if (windOn) initParts();
+      if (lyr.radar) {
+        // Apply D3 transform as CSS so radar tracks drag instantly
+        const {x, y, k} = event.transform;
+        rdrCv.style.transformOrigin = '0 0';
+        rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
+        scheduleRadarRedraw();
+      }
     });
 
   svg.call(zoom);
@@ -1117,7 +1135,7 @@ function drawStations() {
     const pt = projection([s.lo, s.la]);
     if (!pt) return;
     const [px, py] = pt;
-    const col = rColor(s.risk);
+    const col = stationColor(s);
     const isHome = !!s.home;
     const baseGlow = isHome ? 11 : 8;
     const baseDot  = isHome ? 6 : 4.5;
@@ -1153,6 +1171,7 @@ function drawStations() {
   });
 
   rescaleStations(currentTransform.k);
+  updateLegend();
 }
 
 function zoomHome() {
@@ -1291,14 +1310,79 @@ function selectStation(s) {
 // ══════════════════════════════════════════════════════════
 // CANVAS OVERLAYS — heat + wind
 // ══════════════════════════════════════════════════════════
+let activeLayer = 'risk'; // which variable colors the station dots
+
+// Color scales for each layer
+const LAYER_SCALES = {
+  temp: {
+    label: 'TEMP °F',
+    color: v => v < 32 ? '#a78bfa' : v < 50 ? '#60a5fa' : v < 65 ? '#34d399' : v < 80 ? '#f5a623' : v < 95 ? '#ff7b00' : '#e63946',
+    format: v => v + '°F',
+    stops: [{v:20,c:'#a78bfa'},{v:40,c:'#60a5fa'},{v:60,c:'#34d399'},{v:75,c:'#f5a623'},{v:90,c:'#ff7b00'},{v:100,c:'#e63946'}],
+    get: s => s.tF,
+  },
+  wind: {
+    label: 'WIND mph',
+    color: v => v < 10 ? '#34d399' : v < 25 ? '#00d4ff' : v < 40 ? '#f5a623' : v < 55 ? '#ff7b00' : '#e63946',
+    format: v => v + ' mph',
+    stops: [{v:0,c:'#34d399'},{v:20,c:'#00d4ff'},{v:35,c:'#f5a623'},{v:50,c:'#ff7b00'},{v:60,c:'#e63946'}],
+    get: s => s.w,
+  },
+  humidity: {
+    label: 'HUMIDITY %',
+    color: v => v < 25 ? '#e63946' : v < 40 ? '#ff7b00' : v < 55 ? '#f5a623' : v < 70 ? '#34d399' : '#00d4ff',
+    format: v => v + '%',
+    stops: [{v:10,c:'#e63946'},{v:35,c:'#ff7b00'},{v:50,c:'#f5a623'},{v:65,c:'#34d399'},{v:85,c:'#00d4ff'}],
+    get: s => s.h,
+  },
+  cape: {
+    label: 'CAPE J/kg',
+    color: v => v < 100 ? '#34d399' : v < 500 ? '#00d4ff' : v < 1500 ? '#f5a623' : v < 2500 ? '#ff7b00' : '#e63946',
+    format: v => v + ' J',
+    stops: [{v:0,c:'#34d399'},{v:300,c:'#00d4ff'},{v:1000,c:'#f5a623'},{v:2000,c:'#ff7b00'},{v:3000,c:'#e63946'}],
+    get: s => s.cape,
+  },
+  dewpoint: {
+    label: 'DEWPT °F',
+    color: v => v < 35 ? '#a78bfa' : v < 50 ? '#60a5fa' : v < 60 ? '#34d399' : v < 65 ? '#f5a623' : v < 70 ? '#ff7b00' : '#e63946',
+    format: v => v + '°F',
+    stops: [{v:20,c:'#a78bfa'},{v:45,c:'#60a5fa'},{v:55,c:'#34d399'},{v:62,c:'#f5a623'},{v:68,c:'#ff7b00'},{v:75,c:'#e63946'}],
+    get: s => s.dF,
+  },
+  risk: {
+    label: 'RISK 0–100',
+    color: v => rColor(v),
+    format: v => 'Risk ' + v,
+    stops: [{v:0,c:'#39d353'},{v:30,c:'#00d4ff'},{v:55,c:'#f5a623'},{v:70,c:'#ff7b00'},{v:85,c:'#e63946'}],
+    get: s => s.risk,
+  },
+  warnings: null, // overlay only — no dot coloring
+};
+
+function stationColor(s) {
+  const scale = LAYER_SCALES[activeLayer];
+  if (!scale) return rColor(s.risk);
+  return scale.color(scale.get(s) || 0);
+}
+
+function updateLegend() {
+  const scale = LAYER_SCALES[activeLayer];
+  const legend = document.getElementById('mapLegend');
+  if (!legend) return;
+  if (!scale) { legend.innerHTML = ''; return; }
+  const stops = scale.stops.map(s => `<div style="display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;border-radius:50%;background:${s.c};flex-shrink:0;"></div><span>${scale.format(s.v)}</span></div>`).join('');
+  legend.innerHTML = `<div style="font-family:var(--font-mono);font-size:9px;color:var(--amber);letter-spacing:1px;margin-bottom:5px;">${scale.label}</div><div style="display:flex;flex-direction:column;gap:3px;font-family:var(--font-mono);font-size:9px;color:var(--text-dim);">${stops}</div>`;
+}
 const wCv = document.getElementById('windCanvas'), hCv = document.getElementById('heatCanvas');
+const rdrCv = document.getElementById('radarCanvas');
+const rdrCtx = rdrCv.getContext('2d');
 const wCtx = wCv.getContext('2d'), hCtx = hCv.getContext('2d');
-let lyr = {temp:true,wind:false,humidity:false,cape:false,dewpoint:false,warnings:true};
+let lyr = {temp:false,wind:false,humidity:false,cape:false,dewpoint:false,risk:true,warnings:true,radar:false};
 let windOn = false, particles = [];
 
 function resizeCanvases() {
   const W=mapWrap.offsetWidth, H=mapWrap.offsetHeight;
-  wCv.width=hCv.width=W; wCv.height=hCv.height=H;
+  wCv.width=hCv.width=rdrCv.width=W; wCv.height=hCv.height=rdrCv.height=H;
   svgEl.setAttribute('width',W); svgEl.setAttribute('height',H);
 }
 resizeCanvases();
@@ -1339,8 +1423,11 @@ initParts();
 
 function animWind() {
   if (!windOn) { requestAnimationFrame(animWind); return; }
-  wCtx.fillStyle = 'rgba(5,7,10,0.12)';
+  wCtx.clearRect(0, 0, wCv.width, wCv.height);
+  wCtx.fillStyle = 'rgba(5,7,10,0.04)';
   wCtx.fillRect(0, 0, wCv.width, wCv.height);
+  // Scale proximity threshold with zoom so influence radius stays geographically consistent
+  const proximityPx = 250 * (currentTransform ? currentTransform.k : 1);
   particles.forEach(p => {
     let ns=null, nd=Infinity;
     stations.forEach(s => {
@@ -1349,7 +1436,7 @@ function animWind() {
       const dd=Math.hypot(p.x-pt.x, p.y-pt.y);
       if (dd<nd){nd=dd;ns=s;}
     });
-    if (ns&&nd<250) {
+    if (ns&&nd<proximityPx) {
       const rad=(ns.wd||270)*Math.PI/180;
       p.vx=p.vx*.93+Math.cos(rad)*ns.w*.003;
       p.vy=p.vy*.93-Math.sin(rad)*ns.w*.003;
@@ -1359,22 +1446,264 @@ function animWind() {
       p.x=Math.random()*wCv.width; p.y=Math.random()*wCv.height; p.life=0;
     }
     const al=Math.sin(p.life/p.ml*Math.PI)*.65, sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
-    wCtx.strokeStyle=`hsla(${sp>1.2?35:190},100%,65%,${al})`;
-    wCtx.lineWidth=1;
+    wCtx.strokeStyle=`hsla(${sp>1.2?35:190},100%,75%,${Math.min(al*1.8,0.9)})`;
+    wCtx.lineWidth=1.5;
     wCtx.beginPath(); wCtx.moveTo(p.x,p.y); wCtx.lineTo(p.x-p.vx*7,p.y-p.vy*7); wCtx.stroke();
   });
   requestAnimationFrame(animWind);
 }
 animWind();
 
-function toggleLayer(name, btn) {
-  btn.classList.toggle('active'); lyr[name] = btn.classList.contains('active');
-  if (name==='wind') {
-    windOn=lyr[name]; wCv.style.opacity=windOn?'1':'0';
-    if (!windOn) wCtx.clearRect(0,0,wCv.width,wCv.height);
+// ══════════════════════════════════════════════════════════
+// RAINVIEWER RADAR
+// ══════════════════════════════════════════════════════════
+let radarPath = null, radarHost = null, radarTs = null;
+let radarTileCache = {};
+
+function drawRadar() {
+  if (!lyr.radar || !radarPath || !projection) {
+    console.warn('[Radar] drawRadar blocked — lyr.radar:', lyr.radar, '| radarPath:', !!radarPath, '| projection:', !!projection);
+    return;
   }
-  if (name==='warnings') {
+  const TILE_ZOOM = 5;
+  const N = Math.pow(2, TILE_ZOOM);
+  const t = currentTransform || d3.zoomIdentity;
+  const W = rdrCv.width, H = rdrCv.height;
+  console.log('[Radar] drawRadar — canvas:', W, 'x', H);
+  const visible = [];
+  for (let tx = 0; tx < N; tx++) {
+    for (let ty = 0; ty < N; ty++) {
+      const lon = (tx + 0.5) / N * 360 - 180;
+      const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ty + 0.5) / N)));
+      const lat = latRad * 180 / Math.PI;
+      const pt = projection([lon, lat]);
+      if (!pt) continue; // Albers projection clips non-CONUS naturally
+      visible.push({tx, ty, url: `${radarHost}${radarPath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`});
+    }
+  }
+
+  if (!visible.length) { console.warn('[Radar] No visible tiles culled'); return; }
+
+  console.log('[Radar] Visible tiles:', visible.length);
+
+  // Load missing tiles; paint when all are resolved
+  const toLoad = visible.filter(({url}) => !radarTileCache[url]);
+  if (toLoad.length === 0) { paintRadar(visible); return; }
+
+  let remaining = toLoad.length;
+  const done = () => { if (--remaining === 0) paintRadar(visible); };
+
+  toLoad.forEach(({url}) => {
+    const img = new Image();
+    // Try with CORS first (needed for HTTPS); fall back without if it fails (file://)
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { radarTileCache[url] = img; done(); };
+    img.onerror = () => {
+      // Retry without crossOrigin (works on file:// protocol)
+      const img2 = new Image();
+      img2.onload = () => { console.log('[Radar] Tile loaded (no-cors):', url.split('/').slice(-4).join('/')); radarTileCache[url] = img2; done(); };
+      img2.onerror = () => { console.warn('[Radar] Tile FAILED:', url.split('/').slice(-4).join('/')); done(); };
+      img2.src = url;
+    };
+    img.src = url;
+  });
+}
+
+function paintRadar(tiles) {
+  if (!lyr.radar || !radarPath || !projection) return;
+  console.log('[Radar] paintRadar — drawing', tiles.length, 'tiles');
+  const TILE_ZOOM = 5;
+  const N = Math.pow(2, TILE_ZOOM);
+  // Paint in BASE Albers coords (no D3 transform) — CSS transform on the canvas handles pan/zoom live
+  const W = rdrCv.width, H = rdrCv.height;
+  const SEGS = 8;
+  const S = 256;
+
+  rdrCtx.clearRect(0, 0, W, H);
+  rdrCtx.globalAlpha = 0.65;
+
+  // Apply current D3 transform to canvas CSS so it stays aligned after repaint
+  if (currentTransform) {
+    const {x, y, k} = currentTransform;
+    rdrCv.style.transformOrigin = '0 0';
+    rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
+  }
+
+  function affineFrom3(sx0,sy0, sx1,sy1, sx2,sy2,
+                       dx0,dy0, dx1,dy1, dx2,dy2) {
+    const det = sx0*(sy1-sy2) + sx1*(sy2-sy0) + sx2*(sy0-sy1);
+    if (Math.abs(det) < 1e-10) return null;
+    const a = (dx0*(sy1-sy2) + dx1*(sy2-sy0) + dx2*(sy0-sy1)) / det;
+    const c = (dx0*(sx2-sx1) + dx1*(sx0-sx2) + dx2*(sx1-sx0)) / det;
+    const e = (dx0*(sx1*sy2-sx2*sy1) + dx1*(sx2*sy0-sx0*sy2) + dx2*(sx0*sy1-sx1*sy0)) / det;
+    const b = (dy0*(sy1-sy2) + dy1*(sy2-sy0) + dy2*(sy0-sy1)) / det;
+    const d = (dy0*(sx2-sx1) + dy1*(sx0-sx2) + dy2*(sx1-sx0)) / det;
+    const f = (dy0*(sx1*sy2-sx2*sy1) + dy1*(sx2*sy0-sx0*sy2) + dy2*(sx0*sy1-sx1*sy0)) / det;
+    return [a,b,c,d,e,f];
+  }
+
+  tiles.forEach(({tx, ty, url}) => {
+    const img = radarTileCache[url];
+    if (!img) return;
+
+    // Project grid in BASE Albers coords only (no t.k / t.x / t.y)
+    const grid = [];
+    for (let j = 0; j <= SEGS; j++) {
+      grid[j] = [];
+      for (let i = 0; i <= SEGS; i++) {
+        const lon = ((tx + i/SEGS) / N) * 360 - 180;
+        const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2*(ty + j/SEGS)/N)));
+        const lat = latRad * 180 / Math.PI;
+        const pt = projection([lon, lat]);
+        grid[j][i] = pt ? [pt[0], pt[1]] : null; // base coords, no transform
+      }
+    }
+
+    for (let j = 0; j < SEGS; j++) {
+      for (let i = 0; i < SEGS; i++) {
+        const p00 = grid[j][i],   p10 = grid[j][i+1];
+        const p01 = grid[j+1][i], p11 = grid[j+1][i+1];
+        if (!p00 || !p10 || !p01 || !p11) continue;
+
+        const u0 = i*S/SEGS, v0 = j*S/SEGS;
+        const u1 = (i+1)*S/SEGS, v1 = (j+1)*S/SEGS;
+
+        const minX = Math.min(p00[0],p10[0],p01[0],p11[0]);
+        const maxX = Math.max(p00[0],p10[0],p01[0],p11[0]);
+        const minY = Math.min(p00[1],p10[1],p01[1],p11[1]);
+        const maxY = Math.max(p00[1],p10[1],p01[1],p11[1]);
+        if (minX>W || maxX<0 || minY>H || maxY<0) continue;
+
+        const af1 = affineFrom3(u0,v0, u1,v0, u0,v1,
+                                p00[0],p00[1], p10[0],p10[1], p01[0],p01[1]);
+        if (af1) {
+          rdrCtx.save();
+          rdrCtx.beginPath();
+          rdrCtx.moveTo(p00[0],p00[1]); rdrCtx.lineTo(p10[0],p10[1]); rdrCtx.lineTo(p01[0],p01[1]);
+          rdrCtx.closePath(); rdrCtx.clip();
+          rdrCtx.setTransform(...af1);
+          rdrCtx.drawImage(img, 0, 0, S, S);
+          rdrCtx.restore();
+        }
+
+        const af2 = affineFrom3(u1,v1, u0,v1, u1,v0,
+                                p11[0],p11[1], p01[0],p01[1], p10[0],p10[1]);
+        if (af2) {
+          rdrCtx.save();
+          rdrCtx.beginPath();
+          rdrCtx.moveTo(p11[0],p11[1]); rdrCtx.lineTo(p01[0],p01[1]); rdrCtx.lineTo(p10[0],p10[1]);
+          rdrCtx.closePath(); rdrCtx.clip();
+          rdrCtx.setTransform(...af2);
+          rdrCtx.drawImage(img, 0, 0, S, S);
+          rdrCtx.restore();
+        }
+      }
+    }
+  });
+
+  rdrCtx.globalAlpha = 1;
+  rdrCv.style.opacity = '1';
+}
+
+// Debounced radar redraw for zoom/pan events
+let radarRedrawTimer = null;
+function scheduleRadarRedraw() {
+  if (!lyr.radar) return;
+  clearTimeout(radarRedrawTimer);
+  radarRedrawTimer = setTimeout(() => {
+    // If tiles already cached just repaint, else full redraw
+    const TILE_ZOOM = 5, N = Math.pow(2, TILE_ZOOM);
+    const t = currentTransform || d3.zoomIdentity;
+    const W = rdrCv.width, H = rdrCv.height;
+    const cached = [];
+    for (let tx = 0; tx < N; tx++) {
+      for (let ty = 0; ty < N; ty++) {
+        const url = `${radarHost}${radarPath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`;
+        if (radarTileCache[url]) {
+          const lon = (tx+0.5)/N*360-180;
+          const latRad = Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)));
+          const pt = projection([(tx+0.5)/N*360-180, latRad*180/Math.PI]);
+          if (!pt) continue;
+          const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
+          if (cx < -W || cx > 2*W || cy < -H || cy > 2*H) continue;
+          cached.push({tx, ty, url});
+        }
+      }
+    }
+    if (cached.length > 0) paintRadar(cached);
+    else drawRadar();
+  }, 150);
+}
+
+async function fetchRadar() {
+  if (!lyr.radar) return;
+  try {
+    console.log('[Radar] Fetching weather-maps.json...');
+    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data = await res.json();
+    const frames = data.radar?.past;
+    console.log('[Radar] Frames received:', frames?.length, '| host:', data.host);
+    if (!frames || !frames.length) { console.warn('[Radar] No frames'); return; }
+    const latest = frames[frames.length - 1];
+    if (radarPath !== latest.path) radarTileCache = {};
+    radarHost = data.host;
+    radarPath = latest.path;
+    radarTs   = latest.time;
+    console.log('[Radar] Path:', radarPath, '| Sample URL:', `${radarHost}${radarPath}/256/4/4/6/6/1_1.png`);
+    drawRadar();
+    const el = document.getElementById('radarTimestamp');
+    if (el) {
+      const d = new Date(radarTs * 1000);
+      el.textContent = '📡 ' + d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'}) + ' CDT';
+    }
+  } catch(e) { console.warn('[Radar] fetch failed:', e); }
+}
+
+// Refresh radar data every 2 minutes
+setInterval(() => { if (lyr.radar) fetchRadar(); }, 2 * 60 * 1000);
+
+function toggleLayer(name, btn) {
+  const isOverlay = name === 'wind' || name === 'warnings' || name === 'radar';
+  if (!isOverlay) {
+    if (activeLayer === name) return;
+    document.querySelectorAll('.layer-btn').forEach(b => {
+      const n = b.getAttribute('onclick')?.match(/toggleLayer\('(\w+)'/)?.[1];
+      if (n && n !== 'wind' && n !== 'warnings' && n !== 'radar') b.classList.remove('active');
+    });
+    btn.classList.add('active');
+    activeLayer = name;
+    drawStations();
+    updateLegend();
+    return;
+  }
+  // Overlays toggle independently
+  btn.classList.toggle('active');
+  lyr[name] = btn.classList.contains('active');
+  if (name === 'wind') {
+    windOn = lyr[name];
+    wCv.style.opacity = windOn ? '1' : '0';
+    if (!windOn) wCtx.clearRect(0, 0, wCv.width, wCv.height);
+  }
+  if (name === 'warnings') {
     d3.select('#gWarn').style('display', lyr[name] ? '' : 'none');
+  }
+  if (name === 'radar') {
+    if (lyr.radar) {
+      console.log('[Radar] Layer toggled ON — canvas size:', rdrCv.width, 'x', rdrCv.height);
+      // Ensure canvas is sized before fetching
+      if (!rdrCv.width || !rdrCv.height) {
+        const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+        rdrCv.width = W; rdrCv.height = H;
+        console.log('[Radar] Resized canvas to', W, 'x', H);
+      }
+      fetchRadar();
+      document.getElementById('radarTimestamp').style.display = 'block';
+    } else {
+      rdrCtx.clearRect(0, 0, rdrCv.width, rdrCv.height);
+      rdrCv.style.opacity = '0';
+      rdrCv.style.transform = '';
+      document.getElementById('radarTimestamp').style.display = 'none';
+    }
   }
 }
 
@@ -1385,10 +1714,10 @@ let nwsAlerts=[], seenIds=new Set();
 let nwsFetchFails = 0;
 
 async function fetchNWS() {
-  const events = 'Tornado%20Warning,Tornado%20Watch,Severe%20Thunderstorm%20Warning,Severe%20Thunderstorm%20Watch,Wind%20Advisory,Flash%20Flood%20Warning,Flash%20Flood%20Watch,Flood%20Warning,Flood%20Watch,Flash%20Flood%20Statement';
+  // Use broad severity/urgency filter — NWS rejects long event= lists with 400
   const urls = [
-    `https://api.weather.gov/alerts/active?area=US&event=${events}&status=actual&message_type=alert`,
-    `https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&severity=Extreme,Severe`
+    `https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&severity=Extreme,Severe`,
+    `https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate&severity=Extreme,Severe,Moderate`
   ];
   let ok = false;
   for (const url of urls) {
@@ -1705,6 +2034,26 @@ function updateCfgUI(){
   document.getElementById('pushSub').textContent=cfg.push?(cfg.push.includes('ntfy')?'ntfy.sh · Connected':'Configured'):'ntfy.sh / Pushover';
   document.getElementById('hueSub').textContent=cfg.hueIP?`Bridge: ${cfg.hueIP}`:'Philips Hue';
 }
+function syncLayerBtn(name, srcBtn) {
+  // Sync desktop ↔ mobile layer button active states
+  const desktopBtns = document.querySelectorAll(`.layer-btn:not([id^="mb-"])`);
+  const mobileBtns  = document.querySelectorAll(`.layer-btn[id^="mb-"]`);
+  const isActive = srcBtn.classList.contains('active');
+  const isOverlay = name === 'wind' || name === 'warnings';
+  if (isOverlay) {
+    // Just sync the matching peer
+    desktopBtns.forEach(b => { if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.toggle('active', isActive); });
+    mobileBtns.forEach(b  => { if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.toggle('active', isActive); });
+  } else {
+    // Exclusive — clear all data layer buttons then activate matching one
+    const allBtns = [...desktopBtns, ...mobileBtns];
+    allBtns.forEach(b => {
+      const n = b.getAttribute('onclick')?.match(/toggleLayer\('(\w+)'/)?.[1];
+      if (n && n !== 'wind' && n !== 'warnings') b.classList.remove('active');
+      if (n === name) b.classList.add('active');
+    });
+  }
+}
 function toggleNotif(type, cb) {
   if(type==='push' && cb.checked && !cfg.push){
     showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');
@@ -1747,6 +2096,7 @@ function restoreToggles() {
 // ══════════════════════════════════════════════════════════
 updateCfgUI();
 restoreToggles();
+updateLegend();
 loadStations();
 fetchNWS();
 setInterval(loadStations, 10*60*1000);
