@@ -848,6 +848,8 @@ let cfg = { push: '', hueIP: '', hueT: '' };
 
 // FIX(security): track active polling interval IDs so signOut can stop them
 let pollingIntervals = [];
+// Build timestamp injected at deploy time — used to detect stale tabs
+const BUILD_TS = Date.now(); // replaced by build step; good enough as a unique-per-load marker
 let dataInitialized  = false;
 
 // FIX(medium): cached threshold values — updated on input change, read by checkTh()
@@ -2066,9 +2068,10 @@ function clearRadarCache() {
 
 function getRadarTileZoom() {
   const k = (currentTransform || d3.zoomIdentity).k;
-  if (k >= 5) return 7;
-  if (k >= 2) return 6;
-  return 5; // bottoms out at 5 — TZ4 tiles are too large and cause blank canvas on zoom-out
+  if (k >= 5)   return 7;
+  if (k >= 2)   return 6;
+  if (k >= 0.8) return 5;
+  return 4; // very zoomed out — fewer, larger tiles
 }
 
 // Convert a Web Mercator tile index to lon/lat of its NW corner
@@ -3182,19 +3185,37 @@ document.getElementById('mapSvg').addEventListener('touchend', e => {
 // FIX(low): aria-live for alert list (accessibility)
 document.getElementById('alertsList').setAttribute('aria-live','polite');
 
-// FIX(bug): bfcache / tab-restore recovery
-// When the browser restores a frozen page (back-forward cache, mobile tab kill),
-// setIntervals are dead and onAuthStateChange won't re-fire.
-// We detect this via pageshow (persisted=true) and visibilitychange,
-// then restart polling if the user is still authenticated.
+// FIX(bug): stale-tab / bfcache recovery
+// When the browser restores a frozen page OR the user returns to a tab after a
+// new Vercel deployment, we need to detect staleness and reload if necessary.
+// Strategy: fetch the live HTML with cache-busting, extract its BUILD_TS,
+// and force a reload if it differs from ours.
+
+async function checkForNewDeployment() {
+  try {
+    const res  = await fetch('/?_=' + Date.now(), { cache: 'no-store' });
+    const html = await res.text();
+    const match = html.match(/const BUILD_TS = (\d+)/);
+    if (match && match[1] !== String(BUILD_TS)) {
+      console.log('[VORTEX] New deployment detected — reloading');
+      window.location.reload(true);
+      return true; // reloading
+    }
+  } catch(e) {
+    // network error — don't reload, just resume normally
+  }
+  return false;
+}
+
 function handlePageResume() {
   if (!currentUser) return;              // not logged in — nothing to restart
   if (!mapReady)    return;              // map never loaded — let normal init handle it
-  // Clear dead intervals and reset the dataInitialized guard
-  stopDataPolling();
-  // Re-set auth ready (was true when frozen, still true now)
-  authReady = true;
-  checkReadyToLoad();
+  checkForNewDeployment().then(reloading => {
+    if (reloading) return;
+    stopDataPolling();
+    authReady = true;
+    checkReadyToLoad();
+  });
 }
 
 window.addEventListener('pageshow', e => {
