@@ -1029,6 +1029,9 @@ function startDataPolling() {
     setInterval(fetchNWS,      INTERVAL_NWS),
     setInterval(checkTh,       INTERVAL_THRESHOLD),
     setInterval(() => { if (lyr.radar) fetchRadar(); }, INTERVAL_RADAR),
+    // Delay initial radar fetch until after zoomHome (600ms) has settled,
+    // so drawRadar uses the correct tile zoom from the start
+    setTimeout(() => { if (lyr.radar) fetchRadar(); }, 800),
     setInterval(() => {
       if (lyr.earthquakes) fetchEarthquakes();
       if (lyr.wildfires)   fetchWildfires();
@@ -2173,14 +2176,13 @@ function drawRadar(targetPath) {
   // Snapshot both path AND tile zoom — if either changes before tiles finish
   // loading, the paint is stale and should be discarded
   const snapPath = activePath;
-  const snapZoom = TILE_ZOOM;
   const toLoad   = visible.filter(({ url }) => !radarTileCache[url]);
-  if (toLoad.length === 0) { paintRadar(visible, snapPath, snapZoom); return; }
+  if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
   // Paint whatever is already cached immediately so canvas isn't blank during fetch
   const alreadyCached = visible.filter(({ url }) => radarTileCache[url]);
-  if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath, snapZoom);
+  if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath);
   let remaining = toLoad.length;
-  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath, snapZoom); };
+  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
   toLoad.forEach(({url}) => {
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload  = () => { addToRadarCache(url, img); done(); };
@@ -2189,16 +2191,11 @@ function drawRadar(targetPath) {
   });
 }
 
-function paintRadar(tiles, snapPath, snapZoom) {
+function paintRadar(tiles, snapPath) {
   if (!lyr.radar || !projection) return;
   if (snapPath && snapPath !== radarPath) {
     // radarPath changed while tiles were loading — redraw with current path
     drawRadar(radarPath);
-    return;
-  }
-  if (snapZoom !== undefined && snapZoom !== currentTileZoom) {
-    // Zoom level changed while tiles were loading — discard stale paint,
-    // drawRadar already running for new zoom level
     return;
   }
   const TILE_ZOOM = currentTileZoom;
@@ -2283,7 +2280,7 @@ function scheduleRadarRepaint() {
         return radarTileCache[url] ? { tx, ty, url } : null;
       })
       .filter(Boolean);
-    if (cached.length > 0) paintRadar(cached, radarPath, currentTileZoom);
+    if (cached.length > 0) paintRadar(cached, radarPath);
     else drawRadar(radarPath);
   }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
 }
