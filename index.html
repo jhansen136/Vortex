@@ -2178,23 +2178,6 @@ function drawRadar(targetPath) {
   const alreadyCached = visible.filter(({ url }) => radarTileCache[url]);
   if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath);
 
-  // Also silently fetch parent tiles (TILE_ZOOM-1) for any tile that might fail
-  // paintRadar will use them as overzoom fallback without any async complexity
-  if (TILE_ZOOM > 5) {
-    const parentTZ = TILE_ZOOM - 1;
-    const parentsSeen = new Set();
-    visibleTiles.forEach(({ tx, ty }) => {
-      const ptx = Math.floor(tx / 2), pty = Math.floor(ty / 2);
-      const purl = `${radarHost}${activePath}/256/${parentTZ}/${ptx}/${pty}/6/1_1.png`;
-      if (!radarTileCache[purl] && !parentsSeen.has(purl)) {
-        parentsSeen.add(purl);
-        const img = new Image(); img.crossOrigin = 'anonymous';
-        img.onload = () => addToRadarCache(purl, img);
-        img.src = purl;
-      }
-    });
-  }
-
   let remaining = toLoad.length;
   const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
   toLoad.forEach(({url}) => {
@@ -2259,24 +2242,7 @@ function paintRadar(tiles, snapPath) {
   offCtx.globalAlpha = 0.65;
 
   tiles.forEach(({tx: tileTx, ty: tileTy, url}) => {
-    let img = radarTileCache[url];
-    // Overzoom fallback: if this tile failed/missing, crop the parent tile quadrant
-    // into a temp 256×256 canvas so the rest of the draw loop is unchanged
-    if (!img && TILE_ZOOM > 5) {
-      const parentTZ  = TILE_ZOOM - 1;
-      const parentTx  = Math.floor(tileTx / 2);
-      const parentTy  = Math.floor(tileTy / 2);
-      const parentUrl = `${radarHost}${radarPath}/256/${parentTZ}/${parentTx}/${parentTy}/6/1_1.png`;
-      const parentImg = radarTileCache[parentUrl];
-      if (parentImg) {
-        const qx = (tileTx % 2) * 128, qy = (tileTy % 2) * 128;
-        const tmp = document.createElement('canvas');
-        tmp.width = tmp.height = S;
-        tmp.getContext('2d').drawImage(parentImg, qx, qy, 128, 128, 0, 0, S, S);
-        img = tmp; // use the cropped canvas as the image source
-      }
-    }
-    if (!img) return; // nothing to paint
+    const img = radarTileCache[url]; if (!img) return;
     const grid = [];
     for (let j = 0; j <= SEGS; j++) {
       grid[j] = [];
@@ -2290,7 +2256,7 @@ function paintRadar(tiles, snapPath) {
       for (let i = 0; i < SEGS; i++) {
         const p00=grid[j][i], p10=grid[j][i+1], p01=grid[j+1][i], p11=grid[j+1][i+1];
         if (!p00||!p10||!p01||!p11) continue;
-        const u0=srcX+i*srcS/SEGS, v0=srcY+j*srcS/SEGS, u1=srcX+(i+1)*srcS/SEGS, v1=srcY+(j+1)*srcS/SEGS;
+        const u0=i*S/SEGS, v0=j*S/SEGS, u1=(i+1)*S/SEGS, v1=(j+1)*S/SEGS;
         const af1=affineFrom3(u0,v0,u1,v0,u0,v1, p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
         if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
         const af2=affineFrom3(u1,v1,u0,v1,u1,v0, p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
