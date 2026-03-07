@@ -1048,14 +1048,26 @@ function trackSeen(id) {
 
 // ── AUTH STATE LISTENER ───────────────────────────────────
 // FIX(security): data polling only starts after auth resolves
+// ── AUTH/MAP READY HANDSHAKE ──────────────────────────────
+// Both auth AND map must be initialized before data polling starts.
+// Either can finish first — the second one triggers the start.
+let authReady = false, mapReady = false;
+function checkReadyToLoad() {
+  if (!authReady || !mapReady) return;
+  startDataPolling();
+}
+
 supa.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
     await loadUserSettings(session.user.id);
-    startDataPolling();   // only fires once due to dataInitialized guard
+    authReady = true;
+    checkReadyToLoad();
   } else {
     currentUser = null;
+    authReady = false;
+    dataInitialized = false;
     document.getElementById('authOverlay').style.display = 'flex';
     showAuthLogin();
   }
@@ -1136,6 +1148,9 @@ function initMap(us) {
   setTimeout(zoomHome, 600);
   if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
   if (lyr.wildfires   && wildfireData.length)   renderWildfires();
+  // Signal that map is ready — triggers data load if auth already resolved
+  mapReady = true;
+  checkReadyToLoad();
 }
 
 const MAP_URL       = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json';
@@ -1494,72 +1509,67 @@ function rescaleStations(k) {
 function drawStations() {
   if (!gStations) return;
 
-  const stationData = stations.filter(s => {
-    const pt = projection([s.lo, s.la]);
-    return !!pt;
-  });
+  const stationData = stations.filter(s => !!projection([s.lo, s.la]));
 
-  // Update existing glows
-  const glows = gStations.selectAll('.station-glow').data(stationData, d => d.n);
-  glows.enter().each(function(s) {
-    const pt     = projection([s.lo, s.la]);
-    const col    = stationColor(s);
-    const isHome = !!s.home;
-    const baseGlow = isHome ? 7 : 5;
-    gStations.append('circle')
-      .attr('cx', pt[0]).attr('cy', pt[1]).attr('r', baseGlow)
-      .attr('class', 'station-glow').attr('data-base-r', baseGlow)
-      .attr('fill', col).attr('opacity', isHome ? 0.2 : 0.12);
-  });
-  glows.attr('fill', s => stationColor(s));
-  glows.exit().remove();
+  // ── GLOWS (enter + update) ──
+  const glowSel = gStations.selectAll('.station-glow').data(stationData, d => d.n);
+  glowSel.enter().append('circle')
+    .attr('class', 'station-glow')
+    .each(function(s) {
+      const pt = projection([s.lo, s.la]);
+      const isHome = !!s.home, baseGlow = isHome ? 7 : 5;
+      d3.select(this)
+        .attr('cx', pt[0]).attr('cy', pt[1])
+        .attr('r', baseGlow).attr('data-base-r', baseGlow)
+        .attr('opacity', isHome ? 0.2 : 0.12);
+    })
+    .merge(glowSel)
+    .attr('fill', s => stationColor(s));
+  glowSel.exit().remove();
 
-  // Update existing dots
-  const dots = gStations.selectAll('.station-dot').data(stationData, d => d.n);
-  dots.enter().each(function(s) {
-    const pt     = projection([s.lo, s.la]);
-    const col    = stationColor(s);
-    const isHome = !!s.home;
-    const baseDot  = isHome ? 4 : 3;
-    gStations.append('circle')
-      .attr('cx', pt[0]).attr('cy', pt[1]).attr('r', baseDot)
-      .attr('class', 'station-dot').attr('data-base-r', baseDot)
-      .attr('data-home', isHome ? '1' : null)
-      .attr('fill', col)
-      .attr('stroke', isHome ? 'var(--amber)' : 'rgba(255,255,255,0.4)')
-      .attr('stroke-width', isHome ? 1.8 : 1)
-      .style('cursor', 'pointer')
-      // FIX(bug): stop propagation so map click handler doesn't also fire
-      .on('click', (event, d) => { event.stopPropagation(); selectStation(d); })
-      .on('mouseenter', (event, d) => showTooltip(d, event))
-      .on('mouseleave', hideTooltip);
-  });
-  dots.attr('fill', s => stationColor(s));
-  dots.exit().remove();
+  // ── DOTS (enter + update) ──
+  const dotSel = gStations.selectAll('.station-dot').data(stationData, d => d.n);
+  dotSel.enter().append('circle')
+    .attr('class', 'station-dot')
+    .each(function(s) {
+      const pt = projection([s.lo, s.la]);
+      const isHome = !!s.home, baseDot = isHome ? 4 : 3;
+      d3.select(this)
+        .attr('cx', pt[0]).attr('cy', pt[1])
+        .attr('r', baseDot).attr('data-base-r', baseDot)
+        .attr('data-home', isHome ? '1' : null)
+        .attr('stroke', isHome ? 'var(--amber)' : 'rgba(255,255,255,0.4)')
+        .attr('stroke-width', isHome ? 1.8 : 1)
+        .style('cursor', 'pointer')
+        .on('click', (event, d) => { event.stopPropagation(); selectStation(d); })
+        .on('mouseenter', (event, d) => showTooltip(d, event))
+        .on('mouseleave', hideTooltip);
+    })
+    .merge(dotSel)
+    .attr('fill', s => stationColor(s));
+  dotSel.exit().remove();
 
-  // Labels — only add new ones, don't redraw
-  const labels = gStations.selectAll('.station-label').data(stationData, d => d.n);
-  labels.enter().each(function(s) {
-    const pt        = projection([s.lo, s.la]);
-    const isHome    = !!s.home;
-    const tier      = s.tier || 2;
-    const labelColor = isHome ? 'rgba(245,166,35,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)';
-    const cityName  = s.n.split(',')[0].toUpperCase();
-    gStations.append('text')
-      .attr('x', pt[0] + 8).attr('y', pt[1] + 3)
-      .attr('class', 'station-label')
-      .attr('data-base-x', pt[0]).attr('data-base-y', pt[1])
-      .attr('data-tier', tier)
-      .attr('fill', labelColor)
-      .attr('font-family', "'Share Tech Mono', monospace")
-      .attr('font-size', tier === 1 ? 8 : 7)
-      .attr('font-weight', tier === 1 ? '700' : '400')
-      .attr('letter-spacing', tier === 1 ? '0.5' : '0.3')
-      .style('pointer-events', 'none')
-      .style('display', 'none')
-      .text(cityName);
-  });
-  labels.exit().remove();
+  // ── LABELS (enter only — text doesn't change) ──
+  const labelSel = gStations.selectAll('.station-label').data(stationData, d => d.n);
+  labelSel.enter().append('text')
+    .attr('class', 'station-label')
+    .each(function(s) {
+      const pt = projection([s.lo, s.la]);
+      const isHome = !!s.home, tier = s.tier || 2;
+      d3.select(this)
+        .attr('x', pt[0] + 8).attr('y', pt[1] + 3)
+        .attr('data-base-x', pt[0]).attr('data-base-y', pt[1])
+        .attr('data-tier', tier)
+        .attr('fill', isHome ? 'rgba(245,166,35,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)')
+        .attr('font-family', "'Share Tech Mono', monospace")
+        .attr('font-size', tier === 1 ? 8 : 7)
+        .attr('font-weight', tier === 1 ? '700' : '400')
+        .attr('letter-spacing', tier === 1 ? '0.5' : '0.3')
+        .style('pointer-events', 'none')
+        .style('display', 'none')
+        .text(s.n.split(',')[0].toUpperCase());
+    });
+  labelSel.exit().remove();
 
   rescaleStations(currentTransform.k);
   updateLegend();
@@ -1752,8 +1762,11 @@ const LAYER_SCALES = {
 };
 
 // ══════════════════════════════════════════════════════════
-// TEMPERATURE HEATMAP — FIX(dead→feature): replaces unused heatCanvas
-// Renders a smooth IDW-interpolated temperature surface over the map
+// TEMPERATURE HEATMAP — draws in projection-space (base coords)
+// CSS transform is NOT applied — the canvas sits inside the SVG
+// coordinate space so it naturally tracks pan/zoom via gMap's transform.
+// Instead we draw onto a canvas that matches the SVG's base dimensions
+// and use the same D3 transform that gMap uses.
 // ══════════════════════════════════════════════════════════
 function drawHeatmap() {
   if (!projection || !stations.length) return;
@@ -1761,35 +1774,44 @@ function drawHeatmap() {
   hCtx.clearRect(0, 0, W, H);
   if (!lyr.temp) { hCv.style.opacity = '0'; return; }
 
-  // Collect station screen positions + temperature values
+  // Always reset transform — heatmap drawn in base projection space,
+  // then shifted by currentTransform so it aligns with the SVG groups
   const t = currentTransform || d3.zoomIdentity;
+
+  // Collect station positions in BASE projection coordinates (not screen)
   const pts = stations.map(s => {
     const pt = projection([s.lo, s.la]);
     if (!pt) return null;
-    return { x: pt[0]*t.k + t.x, y: pt[1]*t.k + t.y, v: s.tF };
+    return { x: pt[0], y: pt[1], v: s.tF };
   }).filter(Boolean);
   if (!pts.length) return;
 
-  // IDW interpolation on a coarse grid, then upscale with imageSmoothingQuality
-  const STEP = 18; // sample every 18px — upscaled by canvas filter
-  const cols = Math.ceil(W / STEP) + 1, rows = Math.ceil(H / STEP) + 1;
+  // Sample grid in base projection space
+  // Back-transform screen bounds to projection space to know what to draw
+  const invT = t.invert ? t : d3.zoomIdentity; // fallback
+  // Work in base coords: sample the full base map area
+  const STEP = 14;
+  const baseW = Math.ceil(W / t.k), baseH = Math.ceil(H / t.k);
+  const x0 = -t.x / t.k, y0 = -t.y / t.k; // top-left in base coords
+  const cols = Math.ceil(baseW / STEP) + 2, rows = Math.ceil(baseH / STEP) + 2;
+
   const offscreen = document.createElement('canvas');
-  offscreen.width = cols; offscreen.height = rows;
+  offscreen.width  = cols;
+  offscreen.height = rows;
   const octx = offscreen.getContext('2d');
   const imgData = octx.createImageData(cols, rows);
 
-  // Temperature → RGBA using the temp scale color stops
   function tempToRGBA(tF) {
     const col = LAYER_SCALES.temp.color(tF);
-    const hex = col.replace('#','');
-    return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+    const h = col.replace('#','');
+    return [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)];
   }
 
-  // IDW power parameter
   const P = 2;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const px = c * STEP, py = r * STEP;
+      // Sample position in base projection coordinates
+      const px = x0 + c * STEP, py = y0 + r * STEP;
       let wSum = 0, vSum = 0;
       pts.forEach(p => {
         const d2 = Math.hypot(px - p.x, py - p.y);
@@ -1797,25 +1819,32 @@ function drawHeatmap() {
         wSum += w; vSum += w * p.v;
       });
       const tF = vSum / wSum;
-      const [r2, g, b] = tempToRGBA(tF);
+      const [rv, g, b] = tempToRGBA(tF);
       const i = (r * cols + c) * 4;
-      imgData.data[i]   = r2;
+      imgData.data[i]   = rv;
       imgData.data[i+1] = g;
       imgData.data[i+2] = b;
-      imgData.data[i+3] = 160; // semi-transparent
+      imgData.data[i+3] = 155;
     }
   }
   octx.putImageData(imgData, 0, 0);
 
-  // Upscale smoothly to full canvas size
-  hCtx.imageSmoothingEnabled = true;
-  hCtx.imageSmoothingQuality = 'high';
-  hCtx.drawImage(offscreen, 0, 0, W, H);
+  // Draw onto main canvas, scaled back to screen space
+  // Map base-coord grid → screen coords via currentTransform
+  hCtx.save();
+  hCtx.imageSmoothingEnabled  = true;
+  hCtx.imageSmoothingQuality  = 'high';
+  // Destination: screen position of x0,y0 and extent of the sampled area
+  const dstX = x0 * t.k + t.x;
+  const dstY = y0 * t.k + t.y;
+  const dstW = cols * STEP * t.k;
+  const dstH = rows * STEP * t.k;
+  hCtx.drawImage(offscreen, 0, 0, cols, rows, dstX, dstY, dstW, dstH);
+  hCtx.restore();
 
-  // Apply CSS transform to match map pan/zoom (same as radar canvas)
-  hCv.style.transformOrigin = '0 0';
-  hCv.style.transform = `translate(${t.x}px,${t.y}px) scale(${t.k})`;
-  hCv.style.opacity = '0.68';
+  // No CSS transform — drawn directly in screen space
+  hCv.style.transform = '';
+  hCv.style.opacity   = '0.65';
 }
 
 function stationColor(s) {
@@ -2195,14 +2224,29 @@ function toggleLayer(name, btn) {
   const OVERLAYS = new Set(['wind','warnings','radar','earthquakes','wildfires']);
   if (!OVERLAYS.has(name)) {
     const wasTemp = activeLayer === 'temp';
+
+    // Allow clicking active temp to toggle it off — switch back to risk
+    if (activeLayer === name && name === 'temp') {
+      lyr.temp = false;
+      hCv.style.opacity = '0';
+      hCtx.clearRect(0, 0, hCv.width, hCv.height);
+      activeLayer = 'risk';
+      document.querySelectorAll('[data-layer]').forEach(b => {
+        if (!OVERLAYS.has(b.getAttribute('data-layer'))) b.classList.remove('active');
+      });
+      document.querySelectorAll('[data-layer="risk"]').forEach(b => b.classList.add('active'));
+      drawStations();
+      updateLegend();
+      return;
+    }
+
+    // All other non-overlay layers: mutually exclusive
     if (activeLayer === name) return;
-    // Deactivate all data-layer buttons for non-overlay layers
     document.querySelectorAll('[data-layer]').forEach(b => {
       if (!OVERLAYS.has(b.getAttribute('data-layer'))) b.classList.remove('active');
     });
     btn.classList.add('active');
     activeLayer = name;
-    // FIX(feature): show/hide temperature heatmap overlay
     if (name === 'temp') {
       lyr.temp = true;
       drawHeatmap();
