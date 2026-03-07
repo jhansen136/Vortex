@@ -1015,6 +1015,7 @@ async function saveUserSettings(updates) {
 // ── DATA POLLING LIFECYCLE ────────────────────────────────
 // FIX(security): all intervals registered here, cleared on signOut
 function startDataPolling() {
+  console.log('[VORTEX] startDataPolling — dataInitialized:', dataInitialized);
   if (dataInitialized) return;
   dataInitialized = true;
   loadStations();
@@ -1060,11 +1061,13 @@ function trackSeen(id) {
 // Either can finish first — the second one triggers the start.
 let authReady = false, mapReady = false;
 function checkReadyToLoad() {
+  console.log('[VORTEX] checkReadyToLoad — authReady:', authReady, 'mapReady:', mapReady, 'dataInitialized:', dataInitialized);
   if (!authReady || !mapReady) return;
   startDataPolling();
 }
 
-async function resolveAuth(session) {
+async function resolveAuth(session, source) {
+  console.log('[VORTEX] resolveAuth from:', source, 'user:', session?.user?.email, 'authReady:', authReady, 'mapReady:', mapReady, 'dataInitialized:', dataInitialized);
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
@@ -1074,9 +1077,11 @@ async function resolveAuth(session) {
       console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
     } finally {
       authReady = true;
+      console.log('[VORTEX] authReady=true, mapReady=', mapReady, 'dataInitialized=', dataInitialized);
       checkReadyToLoad();
     }
   } else {
+    console.log('[VORTEX] resolveAuth: no session — showing login');
     currentUser = null;
     authReady = false;
     dataInitialized = false;
@@ -1086,16 +1091,17 @@ async function resolveAuth(session) {
 }
 
 supa.auth.onAuthStateChange(async (event, session) => {
-  await resolveAuth(session);
+  console.log('[VORTEX] onAuthStateChange event:', event, 'user:', session?.user?.email);
+  await resolveAuth(session, 'onAuthStateChange:' + event);
 });
 
-// FIX(bug): onAuthStateChange is not guaranteed to fire on every page load in Supabase v2.
-// If authReady is still false after 3s, fall back to getSession() to unblock the app.
 setTimeout(async () => {
+  console.log('[VORTEX] 3s fallback check — authReady:', authReady, 'mapReady:', mapReady);
   if (authReady) return;
   try {
     const { data: { session } } = await supa.auth.getSession();
-    if (!authReady) await resolveAuth(session);
+    console.log('[VORTEX] fallback getSession result:', session?.user?.email);
+    if (!authReady) await resolveAuth(session, 'getSession-fallback');
   } catch(e) {
     console.warn('[VORTEX] getSession fallback failed:', e);
   }
@@ -1196,6 +1202,7 @@ function initMap(us) {
   if (lyr.wildfires   && wildfireData.length)   renderWildfires();
   // Signal that map is ready — triggers data load if auth already resolved
   mapReady = true;
+  console.log('[VORTEX] mapReady=true, authReady=', authReady);
   checkReadyToLoad();
 }
 
