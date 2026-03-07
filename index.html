@@ -2069,15 +2069,10 @@ function getVisibleTiles(TILE_ZOOM) {
     const visible = [];
     for (let tx = txMin; tx <= txMax; tx++) {
       for (let ty = tyMin; ty <= tyMax; ty++) {
-        // Still require at least one corner to project (rejects ocean tiles)
-        const corners = [
-          [tile2lon(tx + 0.5, N), tile2lat(ty + 0.5, N)],
-          [tile2lon(tx,       N), tile2lat(ty,       N)],
-          [tile2lon(tx + 1,   N), tile2lat(ty + 1,   N)],
-        ];
-        if (corners.some(([lon, lat]) => !!projection([lon, lat]))) {
-          visible.push({ tx, ty });
-        }
+        // Geographic bounds already constrain to CONUS region — no projection
+        // check needed. AlbersUSA clips too aggressively at low zoom and rejects
+        // valid edge tiles whose centers fall outside the clip boundary.
+        visible.push({ tx, ty });
       }
     }
     return visible;
