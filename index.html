@@ -1064,16 +1064,15 @@ function checkReadyToLoad() {
   startDataPolling();
 }
 
-supa.auth.onAuthStateChange(async (event, session) => {
+async function resolveAuth(session) {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
     try {
       await loadUserSettings(session.user.id);
     } catch (err) {
-      console.warn('[VORTEX] onAuthStateChange loadUserSettings failed:', err);
+      console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
     } finally {
-      // Always mark auth ready — settings failure must not block data loading
       authReady = true;
       checkReadyToLoad();
     }
@@ -1084,7 +1083,23 @@ supa.auth.onAuthStateChange(async (event, session) => {
     document.getElementById('authOverlay').style.display = 'flex';
     showAuthLogin();
   }
+}
+
+supa.auth.onAuthStateChange(async (event, session) => {
+  await resolveAuth(session);
 });
+
+// FIX(bug): onAuthStateChange is not guaranteed to fire on every page load in Supabase v2.
+// If authReady is still false after 3s, fall back to getSession() to unblock the app.
+setTimeout(async () => {
+  if (authReady) return;
+  try {
+    const { data: { session } } = await supa.auth.getSession();
+    if (!authReady) await resolveAuth(session);
+  } catch(e) {
+    console.warn('[VORTEX] getSession fallback failed:', e);
+  }
+}, 3000);
 
 // ── CLOCK — FIX(low): robust UTC time via Intl instead of toUTCString split ──
 setInterval(() => {
@@ -1194,8 +1209,16 @@ async function loadMapData() {
     try {
       const cache  = await caches.open('vortex-map');
       const cached = await cache.match(MAP_CACHE_KEY);
-      if (cached) { initMap(await cached.json()); return; }
-    } catch(e) {}
+      if (cached) {
+        const data = await cached.json();
+        if (data && data.objects && data.arcs) { initMap(data); return; }
+        // Corrupt/incomplete cache — delete and fall through to network
+        await cache.delete(MAP_CACHE_KEY).catch(() => {});
+      }
+    } catch(e) {
+      // Parse or cache error — clear bad entry and fall through to network fetch
+      try { const c = await caches.open('vortex-map'); await c.delete(MAP_CACHE_KEY); } catch(_) {}
+    }
   }
   loadMsg.innerHTML = '<div class="load-spinner"></div><span id="loadTxt">Loading map data…</span>' +
     (isFile ? '<div style="font-family:var(--font-mono);font-size:9px;color:var(--amber);margin-top:4px;">Tip: serve via http for offline caching</div>' :
