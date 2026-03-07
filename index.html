@@ -1117,20 +1117,15 @@ function initMap(us) {
     .scaleExtent([0.5, 12])
     .on('zoom', (event) => {
       currentTransform = event.transform;
-      const {x, y, k} = event.transform;
+      const {k} = event.transform;
       gMap.attr('transform', event.transform);
       gWarn.attr('transform', event.transform);
       gStations.attr('transform', event.transform);
       gHazard.attr('transform', event.transform);
-      // Debounce expensive DOM rescaling to one rAF per frame
       scheduleRescale(k);
       if (windOn) initParts();
       if (lyr.temp) drawHeatmap();
-      if (lyr.radar) {
-        // CSS transform tracks drag instantly — zero lag
-        rdrCv.style.transformOrigin = '0 0';
-        rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
-      }
+      if (lyr.radar) scheduleRadarRedraw();
       if (geoActive) updateGPSDot();
     })
     .on('end', () => {
@@ -2117,16 +2112,22 @@ function paintRadar(tiles, snapPath) {
   if (!lyr.radar || !projection) return;
   if (snapPath && snapPath !== radarPath) return;
   const TILE_ZOOM = currentTileZoom;
-  const N   = Math.pow(2, TILE_ZOOM);
-  const W   = rdrCv.width, H = rdrCv.height;
+  const N    = Math.pow(2, TILE_ZOOM);
+  const W    = rdrCv.width, H = rdrCv.height;
   const SEGS = 8, S = 256;
+  const t    = currentTransform || d3.zoomIdentity;
+  const {x: tx, y: ty, k} = t;
 
-  // Draw into offscreen canvas first — don't touch rdrCv until fully painted
-  // This prevents the blank-flash when clearing before tiles are ready
-  const off = document.createElement('canvas');
+  // Always clear CSS transform — radar is drawn directly in screen coordinates
+  // so no CSS transform is ever needed or wanted on this canvas
+  rdrCv.style.transform = 'none';
+
+  // Draw into offscreen canvas first — atomic swap prevents blank flash
+  const off    = document.createElement('canvas');
   off.width = W; off.height = H;
   const offCtx = off.getContext('2d');
   offCtx.globalAlpha = 0.65;
+
   function affineFrom3(sx0,sy0,sx1,sy1,sx2,sy2,dx0,dy0,dx1,dy1,dx2,dy2) {
     const det = sx0*(sy1-sy2)+sx1*(sy2-sy0)+sx2*(sy0-sy1);
     if (Math.abs(det)<1e-10) return null;
@@ -2138,31 +2139,42 @@ function paintRadar(tiles, snapPath) {
     const f=(dy0*(sx1*sy2-sx2*sy1)+dy1*(sx2*sy0-sx0*sy2)+dy2*(sx0*sy1-sx1*sy0))/det;
     return [a,b,c,d,e,f];
   }
-  tiles.forEach(({tx, ty, url}) => {
+
+  // Apply currentTransform to projection points so canvas pixels are in screen space
+  // This means NO CSS transform is needed — ever
+  function project(lon, lat) {
+    const pt = projection([lon, lat]);
+    if (!pt) return null;
+    return [pt[0] * k + tx, pt[1] * k + ty];
+  }
+
+  tiles.forEach(({tx: tileTx, ty: tileTy, url}) => {
     const img = radarTileCache[url]; if (!img) return;
     const grid = [];
-    for (let j=0;j<=SEGS;j++) { grid[j]=[]; for (let i=0;i<=SEGS;i++) {
-      const lon=(((tx+i/SEGS)/N)*360-180);
-      const lat=(Math.atan(Math.sinh(Math.PI*(1-2*(ty+j/SEGS)/N)))*180/Math.PI);
-      const pt=projection([lon,lat]);
-      grid[j][i]=pt?[pt[0],pt[1]]:null;
-    }}
-    for (let j=0;j<SEGS;j++) for (let i=0;i<SEGS;i++) {
-      const p00=grid[j][i],p10=grid[j][i+1],p01=grid[j+1][i],p11=grid[j+1][i+1];
-      if (!p00||!p10||!p01||!p11) continue;
-      const u0=i*S/SEGS,v0=j*S/SEGS,u1=(i+1)*S/SEGS,v1=(j+1)*S/SEGS;
-      const af1=affineFrom3(u0,v0,u1,v0,u0,v1,p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
-      if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
-      const af2=affineFrom3(u1,v1,u0,v1,u1,v0,p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
-      if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
+    for (let j = 0; j <= SEGS; j++) {
+      grid[j] = [];
+      for (let i = 0; i <= SEGS; i++) {
+        const lon = ((tileTx + i/SEGS) / N) * 360 - 180;
+        const lat = Math.atan(Math.sinh(Math.PI * (1 - 2*(tileTy + j/SEGS)/N))) * 180/Math.PI;
+        grid[j][i] = project(lon, lat);
+      }
+    }
+    for (let j = 0; j < SEGS; j++) {
+      for (let i = 0; i < SEGS; i++) {
+        const p00=grid[j][i], p10=grid[j][i+1], p01=grid[j+1][i], p11=grid[j+1][i+1];
+        if (!p00||!p10||!p01||!p11) continue;
+        const u0=i*S/SEGS, v0=j*S/SEGS, u1=(i+1)*S/SEGS, v1=(j+1)*S/SEGS;
+        const af1=affineFrom3(u0,v0,u1,v0,u0,v1, p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
+        if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
+        const af2=affineFrom3(u1,v1,u0,v1,u1,v0, p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
+        if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
+      }
     }
   });
-  // Atomic swap — only clear+replace rdrCv once fully painted, no blank flash
+
+  // Atomic swap onto visible canvas
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.drawImage(off, 0, 0);
-  // Reset CSS transform — canvas is now drawn in base projection coordinates
-  rdrCv.style.transformOrigin = '0 0';
-  rdrCv.style.transform = 'none';
   rdrCv.style.opacity = '1';
 }
 
@@ -2173,7 +2185,6 @@ function scheduleRadarRedraw() {
   radarRedrawTimer = setTimeout(() => {
     const neededZoom = getRadarTileZoom();
     if (neededZoom !== currentTileZoom) { drawRadar(radarPath); return; }
-    // Use the same geographic bounds logic as drawRadar
     const visibleTiles = getVisibleTiles(currentTileZoom);
     const cached = visibleTiles
       .map(({ tx, ty }) => {
@@ -2183,7 +2194,7 @@ function scheduleRadarRedraw() {
       .filter(Boolean);
     if (cached.length > 0) paintRadar(cached, radarPath);
     else drawRadar(radarPath);
-  }, 150);
+  }, 16); // ~1 frame — fast enough to track drag, avoids redundant repaints
 }
 
 async function fetchRadar() {
