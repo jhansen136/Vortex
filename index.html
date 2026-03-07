@@ -45,6 +45,7 @@ self.addEventListener('fetch', e => {
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <style>
 :root {
   --bg:#0a0b0d; --panel:#0f1114; --border:#1e2229; --border-bright:#2e3540;
@@ -364,14 +365,107 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 /* Cleaner sheet scrollbar */
 .sheet-body::-webkit-scrollbar { width: 3px; }
 .sheet-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+/* ── AUTH OVERLAY ─────────────────────────────────────── */
+#authOverlay {
+  position:fixed; inset:0; z-index:9999;
+  background:linear-gradient(135deg,#0a0b0d 0%,#0d1420 100%);
+  display:flex; align-items:center; justify-content:center;
+}
+#authBox {
+  background:var(--panel); border:1px solid var(--border-bright);
+  border-radius:12px; padding:40px 36px; width:340px; max-width:90vw;
+  display:flex; flex-direction:column; gap:14px;
+}
+#authLogo {
+  font-family:'Share Tech Mono',monospace; font-size:28px;
+  color:var(--amber); text-align:center; letter-spacing:4px;
+}
+#authTagline {
+  font-family:'Barlow Condensed',sans-serif; font-size:13px;
+  color:var(--muted); text-align:center; letter-spacing:2px;
+  text-transform:uppercase; margin-bottom:8px;
+}
+#authFormLogin, #authFormRegister {
+  display:flex; flex-direction:column; gap:10px;
+}
+#authBox input[type=email],
+#authBox input[type=password],
+#authBox input[type=text] {
+  background:#0a0b0d; border:1px solid var(--border-bright);
+  border-radius:6px; padding:10px 12px; color:var(--text);
+  font-family:'Barlow',sans-serif; font-size:14px; outline:none;
+  transition:border-color .2s;
+}
+#authBox input:focus { border-color:var(--amber); }
+#authLoginBtn, #authRegisterBtn {
+  background:var(--amber); color:#000; border:none; border-radius:6px;
+  padding:11px; font-family:'Barlow Condensed',sans-serif;
+  font-size:15px; font-weight:700; letter-spacing:1px;
+  cursor:pointer; margin-top:4px; transition:opacity .2s;
+}
+#authLoginBtn:hover, #authRegisterBtn:hover { opacity:.85; }
+#authLoginBtn:disabled, #authRegisterBtn:disabled { opacity:.5; cursor:default; }
+#authSwitch, #authSwitch2 {
+  font-size:12px; color:var(--muted); text-align:center;
+}
+#authSwitch a, #authSwitch2 a { color:var(--amber); text-decoration:none; }
+#authError {
+  color:#ff6b6b; font-size:12px; text-align:center; min-height:16px;
+}
+#authSpinner {
+  color:var(--muted); font-size:13px; text-align:center;
+  font-family:'Share Tech Mono',monospace;
+}
+/* User pill in header */
+#userPill {
+  display:flex; align-items:center; gap:8px;
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:20px; padding:4px 12px 4px 8px; cursor:pointer;
+  transition:border-color .2s;
+}
+#userPill:hover { border-color:var(--amber); }
+#userAvatar {
+  width:24px; height:24px; border-radius:50%;
+  background:var(--amber); color:#000;
+  font-size:11px; font-weight:700;
+  display:flex; align-items:center; justify-content:center;
+}
+#userName { font-size:12px; color:var(--text); }
 </style>
 </head>
 <body>
 
+<!-- ══ AUTH OVERLAY ══════════════════════════════════════ -->
+<div id="authOverlay" style="display:flex;">
+  <div id="authBox">
+    <div id="authLogo">⟳ VORTEX</div>
+    <div id="authTagline">Storm Intelligence Platform</div>
+    <div id="authError"></div>
+    <div id="authFormLogin">
+      <input type="email" id="authEmail" placeholder="Email address" autocomplete="email">
+      <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+      <button id="authLoginBtn" onclick="authLogin()">Sign In</button>
+      <div id="authSwitch">New user? <a href="#" onclick="showAuthRegister();return false;">Create account</a></div>
+    </div>
+    <div id="authFormRegister" style="display:none;">
+      <input type="text" id="authName" placeholder="Display name" autocomplete="name">
+      <input type="email" id="authRegEmail" placeholder="Email address" autocomplete="email">
+      <input type="password" id="authRegPassword" placeholder="Password (min 8 chars)" autocomplete="new-password">
+      <button id="authRegisterBtn" onclick="authRegister()">Create Account</button>
+      <div id="authSwitch2">Have an account? <a href="#" onclick="showAuthLogin();return false;">Sign in</a></div>
+    </div>
+    <div id="authSpinner" style="display:none;">Authenticating…</div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="setupModal" style="display:none;">
   <div class="modal">
     <div class="modal-title">VORTEX Setup</div>
-    <div class="modal-sub">Configure alert integrations. Skip to configure later.</div>
+    <div class="modal-sub" id="setupUserInfo" style="color:var(--cyan);font-size:11px;letter-spacing:1px;"></div>
+    <div class="modal-field">
+      <label>Display Name</label>
+      <input type="text" id="setupDisplayName" placeholder="Your name">
+    </div>
     <div class="modal-field">
       <label>ntfy.sh Channel URL</label>
       <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
@@ -386,8 +480,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <input type="text" id="hueToken" placeholder="Your Hue API username">
       <div class="hint">Get at http://[bridge-ip]/debug/clip.html</div>
     </div>
-    <button class="btn-primary" onclick="saveSetup()">SAVE & LAUNCH</button>
-    <button class="btn-skip" onclick="closeSetup()">Skip for now</button>
+    <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
+    <button class="btn-skip" onclick="closeSetup()">Close</button>
+    <button class="btn-skip" onclick="authSignOut()" style="color:#ff6b6b;margin-top:4px;">Sign Out</button>
   </div>
 </div>
 
@@ -406,6 +501,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="status-item"><div class="status-dot warn" id="alertDot"></div><span id="alertCount">LOADING…</span></div>
     <div class="status-item">NWS: <span id="nwsStatus" style="color:var(--text-dim);margin-left:2px;">…</span></div>
     <div id="clock">--:--:-- UTC</div>
+    <div id="userPill" onclick="openSetup()" title="Account & Settings">
+      <div id="userAvatar">?</div>
+      <div id="userName">Loading…</div>
+    </div>
   </div>
 </header>
 
@@ -707,17 +806,196 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 // ══════════════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════════════
-// Safe localStorage wrapper — iOS Safari throws SecurityError on file:// URLs
+// Supabase client
+const SUPA_URL = 'https://dajqwkniduebplujkxht.supabase.co';
+const SUPA_KEY = 'sb_publishable_GJ3cf0S5z8RxdBVu0gksbA_jlvX-hrI';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// Safe localStorage wrapper — fallback for file:// or private mode
 const store = {
   get: (k) => { try { return localStorage.getItem(k) || ''; } catch(e) { return ''; } },
   set: (k, v) => { try { localStorage.setItem(k, v); } catch(e) {} },
 };
 
-const cfg = {
-  push:  store.get('vx_push'),
-  hueIP: store.get('vx_hueIP'),
-  hueT:  store.get('vx_hueToken'),
-};
+// Current user session & profile
+let currentUser = null;
+let userProfile = null;
+
+const cfg = { push: '', hueIP: '', hueT: '' };
+
+// ── AUTH UI HELPERS ────────────────────────────────────────
+function showAuthLogin() {
+  document.getElementById('authFormLogin').style.display = 'flex';
+  document.getElementById('authFormRegister').style.display = 'none';
+  document.getElementById('authError').textContent = '';
+}
+function showAuthRegister() {
+  document.getElementById('authFormLogin').style.display = 'none';
+  document.getElementById('authFormRegister').style.display = 'flex';
+  document.getElementById('authError').textContent = '';
+}
+function authSetLoading(on) {
+  document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
+  document.getElementById('authFormLogin').style.display = on ? 'none' : 'flex';
+  document.getElementById('authFormRegister').style.display = 'none';
+  document.getElementById('authLoginBtn').disabled = on;
+  document.getElementById('authRegisterBtn').disabled = on;
+}
+function authShowError(msg) {
+  document.getElementById('authError').textContent = msg;
+  document.getElementById('authSpinner').style.display = 'none';
+  document.getElementById('authFormLogin').style.display = 'flex';
+}
+
+async function authLogin() {
+  const email = document.getElementById('authEmail').value.trim();
+  const pw    = document.getElementById('authPassword').value;
+  if (!email || !pw) { authShowError('Please enter email and password.'); return; }
+  authSetLoading(true);
+  const { error } = await supa.auth.signInWithPassword({ email, password: pw });
+  if (error) { authShowError(error.message); return; }
+  // onAuthStateChange will handle the rest
+}
+
+async function authRegister() {
+  const name  = document.getElementById('authName').value.trim();
+  const email = document.getElementById('authRegEmail').value.trim();
+  const pw    = document.getElementById('authRegPassword').value;
+  if (!name || !email || !pw) { authShowError('All fields required.'); return; }
+  if (pw.length < 8) { authShowError('Password must be at least 8 characters.'); return; }
+  document.getElementById('authSpinner').style.display = 'block';
+  document.getElementById('authFormRegister').style.display = 'none';
+  const { error } = await supa.auth.signUp({
+    email, password: pw,
+    options: { data: { display_name: name } }
+  });
+  if (error) {
+    document.getElementById('authFormRegister').style.display = 'flex';
+    document.getElementById('authSpinner').style.display = 'none';
+    authShowError(error.message);
+    return;
+  }
+  // Auto sign-in after register
+  await supa.auth.signInWithPassword({ email, password: pw });
+}
+
+async function authSignOut() {
+  await supa.auth.signOut();
+  currentUser = null; userProfile = null;
+  document.getElementById('authOverlay').style.display = 'flex';
+  showAuthLogin();
+  closeSetup();
+}
+
+// ── LOAD USER SETTINGS FROM SUPABASE ──────────────────────
+async function loadUserSettings(userId) {
+  // Load all four tables in parallel
+  const [profRes, thRes, intRes, prefRes] = await Promise.all([
+    supa.from('profiles').select('*').eq('id', userId).single(),
+    supa.from('thresholds').select('*').eq('user_id', userId).single(),
+    supa.from('integrations').select('*').eq('user_id', userId).single(),
+    supa.from('preferences').select('*').eq('user_id', userId).single(),
+  ]);
+
+  userProfile = profRes.data || {};
+
+  // Apply integrations to cfg
+  if (intRes.data) {
+    cfg.push  = intRes.data.ntfy_url  || '';
+    cfg.hueIP = intRes.data.hue_ip    || '';
+    cfg.hueT  = intRes.data.hue_user  || '';
+  }
+
+  // Apply thresholds to UI inputs
+  if (thRes.data) {
+    const t = thRes.data;
+    ['cape','srh','wind','risk'].forEach(k => {
+      const el  = document.getElementById(`th-${k}`);
+      const elm = document.getElementById(`th-${k}-m`);
+      if (el)  el.value  = t[k];
+      if (elm) elm.value = t[k];
+    });
+  }
+
+  // Apply preferences (toggle states)
+  if (prefRes.data) {
+    const p = prefRes.data;
+    const setToggle = (id, val) => {
+      const el = document.getElementById(id);
+      if (el) el.checked = val;
+    };
+    setToggle('togglePush',  p.push_enabled);
+    setToggle('togglePushM', p.push_enabled);
+    setToggle('toggleHue',   p.hue_enabled);
+    setToggle('toggleHueM',  p.hue_enabled);
+    setToggle('toggleAudio', p.audio_enabled);
+    setToggle('toggleAudioM',p.audio_enabled);
+  }
+
+  // Update header user pill
+  const name = userProfile.display_name || currentUser.email.split('@')[0];
+  document.getElementById('userName').textContent = name;
+  document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
+  updateCfgUI();
+}
+
+// ── SAVE USER SETTINGS TO SUPABASE ────────────────────────
+async function saveUserSettings(updates) {
+  if (!currentUser) return;
+  const uid = currentUser.id;
+  const now = new Date().toISOString();
+
+  if (updates.integrations) {
+    await supa.from('integrations').upsert({
+      user_id: uid,
+      ntfy_url: cfg.push  || '',
+      hue_ip:   cfg.hueIP || '',
+      hue_user: cfg.hueT  || '',
+      updated_at: now
+    }, { onConflict: 'user_id' });
+  }
+  if (updates.thresholds) {
+    const cape = +document.getElementById('th-cape')?.value || 500;
+    const srh  = +document.getElementById('th-srh')?.value  || 150;
+    const wind = +document.getElementById('th-wind')?.value || 20;
+    const risk = +document.getElementById('th-risk')?.value || 55;
+    await supa.from('thresholds').upsert({
+      user_id: uid, cape, srh, wind, risk, updated_at: now
+    }, { onConflict: 'user_id' });
+  }
+  if (updates.preferences) {
+    await supa.from('preferences').upsert({
+      user_id: uid,
+      push_enabled:  document.getElementById('togglePush')?.checked  || false,
+      hue_enabled:   document.getElementById('toggleHue')?.checked   || false,
+      audio_enabled: document.getElementById('toggleAudio')?.checked || true,
+      updated_at: now
+    }, { onConflict: 'user_id' });
+  }
+  if (updates.profile) {
+    const displayName = document.getElementById('setupDisplayName')?.value.trim();
+    if (displayName) {
+      await supa.from('profiles').update({
+        display_name: displayName
+      }).eq('id', uid);
+      document.getElementById('userName').textContent = displayName;
+      document.getElementById('userAvatar').textContent = displayName.charAt(0).toUpperCase();
+    }
+  }
+}
+
+// ── AUTH STATE LISTENER ───────────────────────────────────
+supa.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    document.getElementById('authOverlay').style.display = 'none';
+    await loadUserSettings(session.user.id);
+  } else {
+    currentUser = null;
+    document.getElementById('authOverlay').style.display = 'flex';
+    showAuthLogin();
+  }
+});
 
 // Defined here so it's available to all functions regardless of declaration order
 const isMobile = () => window.innerWidth <= 768;
@@ -2018,15 +2296,23 @@ function saveSetup(){
   const push = document.getElementById('pushToken').value.trim();
   const hueIP = document.getElementById('hueIP').value.trim();
   const hueT = document.getElementById('hueToken').value.trim();
-  if(push){  store.set('vx_push',push);      cfg.push=push; }
-  if(hueIP){ store.set('vx_hueIP',hueIP);    cfg.hueIP=hueIP; }
-  if(hueT){  store.set('vx_hueToken',hueT);  cfg.hueT=hueT; }
+  if(push)  cfg.push  = push;
+  if(hueIP) cfg.hueIP = hueIP;
+  if(hueT)  cfg.hueT  = hueT;
+  // Save to Supabase
+  saveUserSettings({ integrations: true, profile: true });
   closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
 }
 function openSetup(){
-  document.getElementById('pushToken').value=cfg.push||'';
-  document.getElementById('hueIP').value=cfg.hueIP||'';
-  document.getElementById('hueToken').value=cfg.hueT||'';
+  document.getElementById('pushToken').value = cfg.push  || '';
+  document.getElementById('hueIP').value     = cfg.hueIP || '';
+  document.getElementById('hueToken').value  = cfg.hueT  || '';
+  // Populate display name and user email
+  if (currentUser) {
+    document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
+    document.getElementById('setupUserInfo').textContent =
+      `Signed in as ${currentUser.email}`;
+  }
   document.getElementById('setupModal').style.display='flex';
 }
 function closeSetup(){document.getElementById('setupModal').style.display='none';}
@@ -2073,29 +2359,18 @@ function toggleNotif(type, cb) {
   const pairs = {togglePush:'togglePushM',togglePushM:'togglePush',toggleHue:'toggleHueM',toggleHueM:'toggleHue'};
   const peer = document.getElementById(pairs[cb.id]);
   if(peer && peer.checked !== cb.checked) peer.checked = cb.checked;
-  // Persist state
-  store.set('vx_tog_push',  document.getElementById('togglePush').checked  ? '1' : '0');
-  store.set('vx_tog_hue',   document.getElementById('toggleHue').checked   ? '1' : '0');
-  store.set('vx_tog_audio', document.getElementById('toggleAudio').checked ? '1' : '0');
+  // Save to Supabase
+  saveUserSettings({ preferences: true });
 }
 
 function restoreToggles() {
-  const push  = store.get('vx_tog_push')  === '1';
-  const hue   = store.get('vx_tog_hue')   === '1';
-  const audio = store.get('vx_tog_audio') === '1';
-  // Only restore on if the integration is actually configured
-  const pushOn  = push  && !!cfg.push;
-  const hueOn   = hue   && !!cfg.hueIP;
-  ['togglePush','togglePushM'].forEach(id => { const el=document.getElementById(id); if(el) el.checked=pushOn; });
-  ['toggleHue','toggleHueM'].forEach(id   => { const el=document.getElementById(id); if(el) el.checked=hueOn; });
-  ['toggleAudio','toggleAudioM'].forEach(id => { const el=document.getElementById(id); if(el) el.checked=audio; });
+  // No-op — toggles are restored by loadUserSettings() after login
 }
 
 // ══════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════
 updateCfgUI();
-restoreToggles();
 updateLegend();
 loadStations();
 fetchNWS();
@@ -2103,7 +2378,21 @@ setInterval(loadStations, 10*60*1000);
 setInterval(fetchNWS,      60*1000);
 setInterval(checkTh,         30*1000);
 
-// ── Data freshness indicator ──────────────────────────────
+// Auto-save thresholds to Supabase when user changes them
+let thSaveTimer = null;
+['th-cape','th-srh','th-wind','th-risk','th-cape-m','th-srh-m','th-wind-m','th-risk-m'].forEach(id => {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.addEventListener('change', () => {
+    // Sync desktop ↔ mobile
+    const base = id.replace('-m','');
+    const peer = id.endsWith('-m') ? document.getElementById(base) : document.getElementById(id+'-m');
+    if (peer && el.value) peer.value = el.value;
+    // Debounced save
+    clearTimeout(thSaveTimer);
+    thSaveTimer = setTimeout(() => saveUserSettings({ thresholds: true }), 1500);
+  });
+});
 let lastStationFetch = Date.now();
 setInterval(() => {
   const age = Math.round((Date.now() - lastStationFetch) / 60000);
