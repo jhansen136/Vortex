@@ -2040,6 +2040,7 @@ let radarPaintedTransform = null; // transform active when canvas was last paint
 // FIX(perf): LRU-capped tile cache — evicts oldest when RADAR_CACHE_MAX exceeded
 let radarTileCache  = {};
 let radarTileCacheOrder = []; // tracks insertion order for LRU eviction
+let radarTileFailed = new Set(); // tiles that failed all retries — cleared on cache reset
 let currentTileZoom = 5;
 let radarPlaying    = false;
 let radarPlayTimer  = null;
@@ -2060,6 +2061,7 @@ function addToRadarCache(url, img) {
 function clearRadarCache() {
   radarTileCache = {};
   radarTileCacheOrder = [];
+  radarTileFailed.clear();
 }
 
 function getRadarTileZoom() {
@@ -2176,7 +2178,8 @@ function drawRadar(targetPath) {
   // Snapshot both path AND tile zoom — if either changes before tiles finish
   // loading, the paint is stale and should be discarded
   const snapPath = activePath;
-  const toLoad   = visible.filter(({ url }) => !radarTileCache[url]);
+  // Exclude tiles that permanently failed — they'll be retried on next drawRadar call
+  const toLoad   = visible.filter(({ url }) => !radarTileCache[url] && !radarTileFailed.has(url));
   if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
   // Paint whatever is already cached immediately so canvas isn't blank during fetch
   const alreadyCached = visible.filter(({ url }) => radarTileCache[url]);
@@ -2184,11 +2187,27 @@ function drawRadar(targetPath) {
   let remaining = toLoad.length;
   const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
   toLoad.forEach(({url}) => {
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload  = () => { addToRadarCache(url, img); done(); };
-    img.onerror = () => { const img2 = new Image(); img2.onload = () => { addToRadarCache(url, img2); done(); }; img2.onerror = () => done(); img2.src = url; };
-    img.src = url;
+    loadTileWithRetry(url, (img) => {
+      if (img) { addToRadarCache(url, img); radarTileFailed.delete(url); }
+      else      { radarTileFailed.add(url); }
+      done();
+    });
   });
+}
+
+// Retry a tile fetch with exponential backoff (3 attempts: 0ms, 800ms, 2400ms)
+function loadTileWithRetry(url, cb, attempt) {
+  attempt = attempt || 0;
+  const img = new Image(); img.crossOrigin = 'anonymous';
+  img.onload  = () => cb(img);
+  img.onerror = () => {
+    if (attempt < 2) {
+      setTimeout(() => loadTileWithRetry(url, cb, attempt + 1), 400 * Math.pow(3, attempt));
+    } else {
+      cb(null); // give up after 3 attempts
+    }
+  };
+  img.src = url;
 }
 
 function paintRadar(tiles, snapPath) {
@@ -2267,6 +2286,7 @@ function scheduleRadarRepaint() {
   if (!lyr.radar) return;
   clearTimeout(radarRepaintTimer);
   radarRepaintTimer = setTimeout(() => {
+    radarTileFailed.clear(); // retry any previously failed tiles on next repaint
     const neededZoom = getRadarTileZoom();
     if (neededZoom !== currentTileZoom) {
       // Zoom level changed — fetch new tiles; old canvas stays visible via CSS transform
