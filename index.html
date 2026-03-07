@@ -935,11 +935,15 @@ async function loadUserSettings(userId) {
   // FIX: use maybeSingle() — .single() throws if row doesn't exist (new user)
   // FIX: wrap entire function — any Supabase error must not prevent auth from completing
   try {
-    const [profRes, thRes, intRes, prefRes] = await Promise.all([
-      supa.from('profiles').select('*').eq('id', userId).maybeSingle(),
-      supa.from('thresholds').select('*').eq('user_id', userId).maybeSingle(),
-      supa.from('integrations').select('*').eq('user_id', userId).maybeSingle(),
-      supa.from('preferences').select('*').eq('user_id', userId).maybeSingle(),
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('loadUserSettings timeout')), 8000));
+    const [profRes, thRes, intRes, prefRes] = await Promise.race([
+      Promise.all([
+        supa.from('profiles').select('*').eq('id', userId).maybeSingle(),
+        supa.from('thresholds').select('*').eq('user_id', userId).maybeSingle(),
+        supa.from('integrations').select('*').eq('user_id', userId).maybeSingle(),
+        supa.from('preferences').select('*').eq('user_id', userId).maybeSingle(),
+      ]),
+      timeout
     ]);
     userProfile = profRes.data || {};
     if (intRes.data) {
@@ -1071,15 +1075,17 @@ async function resolveAuth(session, source) {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
-    try {
-      await loadUserSettings(session.user.id);
-    } catch (err) {
+    // FIX(bug): mark authReady BEFORE awaiting loadUserSettings
+    // loadUserSettings does 4 Supabase queries via Promise.all — if any hangs,
+    // the whole chain stalls and authReady never gets set, blocking the app forever.
+    // Data polling must not be held hostage to settings loading.
+    authReady = true;
+    console.log('[VORTEX] authReady=true (pre-settings), mapReady=', mapReady, 'dataInitialized=', dataInitialized);
+    checkReadyToLoad();
+    // Load settings in background — failure is non-fatal
+    loadUserSettings(session.user.id).catch(err => {
       console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
-    } finally {
-      authReady = true;
-      console.log('[VORTEX] authReady=true, mapReady=', mapReady, 'dataInitialized=', dataInitialized);
-      checkReadyToLoad();
-    }
+    });
   } else {
     console.log('[VORTEX] resolveAuth: no session — showing login');
     currentUser = null;
