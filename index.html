@@ -2118,39 +2118,40 @@ function getVisibleTiles(TILE_ZOOM) {
     return visible;
   }
 
-  // High zoom: cull aggressively by screen bounds
+  // High zoom: cull by screen bounds with generous margin
   const visible = [];
   for (let tx = txMin; tx <= txMax; tx++) {
     for (let ty = tyMin; ty <= tyMax; ty++) {
-      const lon = tile2lon(tx + 0.5, N);
-      const lat = tile2lat(ty + 0.5, N);
-      const pt  = projection([lon, lat]);
+      const testPoints = [
+        [tile2lon(tx + 0.5, N), tile2lat(ty + 0.5, N)], // center
+        [tile2lon(tx,       N), tile2lat(ty,       N)], // NW corner
+        [tile2lon(tx + 1,   N), tile2lat(ty,       N)], // NE corner
+        [tile2lon(tx,       N), tile2lat(ty + 1,   N)], // SW corner
+        [tile2lon(tx + 1,   N), tile2lat(ty + 1,   N)], // SE corner
+        [tile2lon(tx + 0.5, N), tile2lat(ty,       N)], // N edge mid
+        [tile2lon(tx + 0.5, N), tile2lat(ty + 1,   N)], // S edge mid
+        [tile2lon(tx,       N), tile2lat(ty + 0.5, N)], // W edge mid
+        [tile2lon(tx + 1,   N), tile2lat(ty + 0.5, N)], // E edge mid
+      ];
 
       let onScreen = false;
-      if (pt) {
-        const sx = pt[0] * t.k + t.x, sy = pt[1] * t.k + t.y;
-        onScreen = sx > -W && sx < W * 2 && sy > -H && sy < H * 2;
-      }
-
-      if (!onScreen) {
-        const corners = [
-          [tile2lon(tx,     N), tile2lat(ty,     N)],
-          [tile2lon(tx + 1, N), tile2lat(ty,     N)],
-          [tile2lon(tx,     N), tile2lat(ty + 1, N)],
-          [tile2lon(tx + 1, N), tile2lat(ty + 1, N)],
-        ];
-        for (const [clon, clat] of corners) {
-          const cpt = projection([clon, clat]);
-          if (cpt) {
-            const sx = cpt[0] * t.k + t.x, sy = cpt[1] * t.k + t.y;
-            if (sx > -W && sx < W * 2 && sy > -H && sy < H * 2) {
-              onScreen = true; break;
-            }
+      let anyProjected = false;
+      for (const [plon, plat] of testPoints) {
+        const pt = projection([plon, plat]);
+        if (pt) {
+          anyProjected = true;
+          const sx = pt[0] * t.k + t.x, sy = pt[1] * t.k + t.y;
+          // Use 1.5× margin — tiles near projection boundary can have corners
+          // that project to null even though the tile is visually on screen
+          if (sx > -W * 1.5 && sx < W * 2.5 && sy > -H * 1.5 && sy < H * 2.5) {
+            onScreen = true; break;
           }
         }
       }
-
-      if (onScreen) visible.push({ tx, ty });
+      // If NO point projects at all, AlbersUSA fully clips this tile —
+      // but include it anyway since it's within our geographic bounds.
+      // Better to fetch an invisible tile than to leave a visible gap.
+      if (onScreen || !anyProjected) visible.push({ tx, ty });
     }
   }
   return visible;
@@ -2178,18 +2179,40 @@ function drawRadar(targetPath) {
   // Snapshot both path AND tile zoom — if either changes before tiles finish
   // loading, the paint is stale and should be discarded
   const snapPath = activePath;
-  // Exclude tiles that permanently failed — they'll be retried on next drawRadar call
-  const toLoad   = visible.filter(({ url }) => !radarTileCache[url] && !radarTileFailed.has(url));
+  const toLoad = visible.filter(({ url }) => !radarTileCache[url]);
   if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
   // Paint whatever is already cached immediately so canvas isn't blank during fetch
   const alreadyCached = visible.filter(({ url }) => radarTileCache[url]);
   if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath);
   let remaining = toLoad.length;
   const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
-  toLoad.forEach(({url}) => {
+  toLoad.forEach(({tx: tileTx, ty: tileTy, url}) => {
     loadTileWithRetry(url, (img) => {
-      if (img) { addToRadarCache(url, img); radarTileFailed.delete(url); }
-      else      { radarTileFailed.add(url); }
+      if (img) {
+        addToRadarCache(url, img);
+      } else {
+        // Tile permanently failed — try to synthesize it from the parent zoom tile
+        const parentTZ  = TILE_ZOOM - 1;
+        const parentTx  = Math.floor(tileTx / 2);
+        const parentTy  = Math.floor(tileTy / 2);
+        const parentUrl = `${radarHost}${activePath}/256/${parentTZ}/${parentTx}/${parentTy}/6/1_1.png`;
+        if (radarTileCache[parentUrl]) {
+          // Crop the relevant quadrant from the parent and scale up to 256×256
+          const qx = (tileTx % 2) * 128, qy = (tileTy % 2) * 128;
+          const synth = document.createElement('canvas');
+          synth.width = synth.height = 256;
+          synth.getContext('2d').drawImage(radarTileCache[parentUrl], qx, qy, 128, 128, 0, 0, 256, 256);
+          // Convert to Image so paintRadar can drawImage it
+          const synthImg = new Image();
+          synthImg.onload = () => { addToRadarCache(url, synthImg); done(); };
+          synthImg.src = synth.toDataURL();
+          return;
+        }
+        // No parent available — fetch parent for future use
+        loadTileWithRetry(parentUrl, (pImg) => {
+          if (pImg) addToRadarCache(parentUrl, pImg);
+        });
+      }
       done();
     });
   });
@@ -2286,7 +2309,6 @@ function scheduleRadarRepaint() {
   if (!lyr.radar) return;
   clearTimeout(radarRepaintTimer);
   radarRepaintTimer = setTimeout(() => {
-    radarTileFailed.clear(); // retry any previously failed tiles on next repaint
     const neededZoom = getRadarTileZoom();
     if (neededZoom !== currentTileZoom) {
       // Zoom level changed — fetch new tiles; old canvas stays visible via CSS transform
