@@ -88,7 +88,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .state-border{fill:none;stroke:#243040;stroke-width:.4;pointer-events:none;}
 .county-border{fill:none;stroke:#141e28;stroke-width:.25;pointer-events:none;}
 #windCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
-#radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
+#radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;}
 #heatCanvas{display:none;}
 #radarTimestamp{position:absolute;bottom:36px;right:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.5px;z-index:20;display:none;}
 /* ── Radar Playbar ────────────────────────────────────── */
@@ -1845,16 +1845,19 @@ function drawRadar() {
     }
   }
 
+  // Snapshot the path at call time — radarPath may change before async tiles load
+  const snapPath = radarPath;
+
   if (!visible.length) { console.warn('[Radar] No visible tiles culled'); return; }
 
   console.log('[Radar] Visible tiles:', visible.length, 'at zoom', TILE_ZOOM);
 
   // Load missing tiles; paint when all are resolved
   const toLoad = visible.filter(({url}) => !radarTileCache[url]);
-  if (toLoad.length === 0) { paintRadar(visible); return; }
+  if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
 
   let remaining = toLoad.length;
-  const done = () => { if (--remaining === 0) paintRadar(visible); };
+  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
 
   toLoad.forEach(({url}) => {
     const img = new Image();
@@ -1870,11 +1873,12 @@ function drawRadar() {
   });
 }
 
-function paintRadar(tiles) {
-  if (!lyr.radar || !radarPath || !projection) return;
+function paintRadar(tiles, snapPath) {
+  if (!lyr.radar || !projection) return;
+  // If radarPath changed while tiles were loading, this frame is stale — discard it
+  if (snapPath && snapPath !== radarPath) return;
   const TILE_ZOOM = currentTileZoom;
   const N = Math.pow(2, TILE_ZOOM);
-  console.log('[Radar] paintRadar — drawing', tiles.length, 'tiles at zoom', TILE_ZOOM);
   // Paint in BASE Albers coords (no D3 transform) — CSS transform on the canvas handles pan/zoom live
   const W = rdrCv.width, H = rdrCv.height;
   const SEGS = 8;
@@ -1998,7 +2002,7 @@ function scheduleRadarRedraw() {
         }
       }
     }
-    if (cached.length > 0) paintRadar(cached);
+    if (cached.length > 0) paintRadar(cached, radarPath);
     else drawRadar();
   }, 150);
 }
