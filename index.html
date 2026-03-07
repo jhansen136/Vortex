@@ -1117,7 +1117,7 @@ function initMap(us) {
     .scaleExtent([0.5, 12])
     .on('zoom', (event) => {
       currentTransform = event.transform;
-      const {k} = event.transform;
+      const {x, y, k} = event.transform;
       gMap.attr('transform', event.transform);
       gWarn.attr('transform', event.transform);
       gStations.attr('transform', event.transform);
@@ -1125,11 +1125,31 @@ function initMap(us) {
       scheduleRescale(k);
       if (windOn) initParts();
       if (lyr.temp) drawHeatmap();
-      if (lyr.radar) scheduleRadarRedraw();
+      if (lyr.radar) {
+        // During drag/zoom: move canvas with CSS transform — GPU composited, zero CPU cost
+        // The canvas was last painted relative to radarPaintedTransform
+        // Apply the delta between current and painted transform as CSS
+        if (radarPaintedTransform) {
+          const pt = radarPaintedTransform;
+          // Scale delta between painted and current
+          const dk = k / pt.k;
+          // When we painted, pt.x/pt.y were the offsets. Now they've changed.
+          // CSS transform origin is top-left of canvas.
+          // New screen position of a painted pixel at (px,py):
+          //   painted screen pos: px*pt.k + pt.x, py*pt.k + pt.y
+          //   current screen pos: px*k + x, py*k + y
+          // delta translate: (x - pt.x*dk), (y - pt.y*dk)  with scale dk
+          const dtx = x - pt.x * dk;
+          const dty = y - pt.y * dk;
+          rdrCv.style.transformOrigin = '0 0';
+          rdrCv.style.transform = `translate(${dtx}px,${dty}px) scale(${dk})`;
+        }
+        scheduleRadarRepaint();
+      }
       if (geoActive) updateGPSDot();
     })
     .on('end', () => {
-      if (lyr.radar) scheduleRadarRedraw();
+      if (lyr.radar) scheduleRadarRepaint();
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -1977,6 +1997,7 @@ let radarFrames   = [];
 let radarFrameIdx = -1;
 let radarPath  = null;
 let radarTs    = null;
+let radarPaintedTransform = null; // transform active when canvas was last painted
 // FIX(perf): LRU-capped tile cache — evicts oldest when RADAR_CACHE_MAX exceeded
 let radarTileCache  = {};
 let radarTileCacheOrder = []; // tracks insertion order for LRU eviction
@@ -2115,18 +2136,9 @@ function paintRadar(tiles, snapPath) {
   const N    = Math.pow(2, TILE_ZOOM);
   const W    = rdrCv.width, H = rdrCv.height;
   const SEGS = 8, S = 256;
+  // Snapshot transform for this paint — CSS delta is computed against this
   const t    = currentTransform || d3.zoomIdentity;
   const {x: tx, y: ty, k} = t;
-
-  // Always clear CSS transform — radar is drawn directly in screen coordinates
-  // so no CSS transform is ever needed or wanted on this canvas
-  rdrCv.style.transform = 'none';
-
-  // Draw into offscreen canvas first — atomic swap prevents blank flash
-  const off    = document.createElement('canvas');
-  off.width = W; off.height = H;
-  const offCtx = off.getContext('2d');
-  offCtx.globalAlpha = 0.65;
 
   function affineFrom3(sx0,sy0,sx1,sy1,sx2,sy2,dx0,dy0,dx1,dy1,dx2,dy2) {
     const det = sx0*(sy1-sy2)+sx1*(sy2-sy0)+sx2*(sy0-sy1);
@@ -2140,13 +2152,16 @@ function paintRadar(tiles, snapPath) {
     return [a,b,c,d,e,f];
   }
 
-  // Apply currentTransform to projection points so canvas pixels are in screen space
-  // This means NO CSS transform is needed — ever
   function project(lon, lat) {
     const pt = projection([lon, lat]);
     if (!pt) return null;
     return [pt[0] * k + tx, pt[1] * k + ty];
   }
+
+  const off    = document.createElement('canvas');
+  off.width = W; off.height = H;
+  const offCtx = off.getContext('2d');
+  offCtx.globalAlpha = 0.65;
 
   tiles.forEach(({tx: tileTx, ty: tileTy, url}) => {
     const img = radarTileCache[url]; if (!img) return;
@@ -2172,19 +2187,26 @@ function paintRadar(tiles, snapPath) {
     }
   });
 
-  // Atomic swap onto visible canvas
+  // Atomic swap — record painted transform, clear CSS transform
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.drawImage(off, 0, 0);
+  radarPaintedTransform = { x: tx, y: ty, k };
+  rdrCv.style.transformOrigin = '0 0';
+  rdrCv.style.transform = 'none';
   rdrCv.style.opacity = '1';
 }
 
-let radarRedrawTimer = null;
-function scheduleRadarRedraw() {
+let radarRepaintTimer = null;
+function scheduleRadarRepaint() {
   if (!lyr.radar) return;
-  clearTimeout(radarRedrawTimer);
-  radarRedrawTimer = setTimeout(() => {
+  clearTimeout(radarRepaintTimer);
+  radarRepaintTimer = setTimeout(() => {
     const neededZoom = getRadarTileZoom();
-    if (neededZoom !== currentTileZoom) { drawRadar(radarPath); return; }
+    if (neededZoom !== currentTileZoom) {
+      // Zoom level changed — fetch new tiles; old canvas stays visible via CSS transform
+      drawRadar(radarPath);
+      return;
+    }
     const visibleTiles = getVisibleTiles(currentTileZoom);
     const cached = visibleTiles
       .map(({ tx, ty }) => {
@@ -2194,7 +2216,7 @@ function scheduleRadarRedraw() {
       .filter(Boolean);
     if (cached.length > 0) paintRadar(cached, radarPath);
     else drawRadar(radarPath);
-  }, 16); // ~1 frame — fast enough to track drag, avoids redundant repaints
+  }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
 }
 
 async function fetchRadar() {
