@@ -1524,35 +1524,57 @@ function setRadarSpeed(ms) {
 // ══════════════════════════════════════════════════════════
 // STATIONS + OPEN-METEO
 // ══════════════════════════════════════════════════════════
+// City tiers for label visibility:
+//   tier 1 = major metro  → label visible at k ≥ 1.2
+//   tier 2 = regional     → label visible at k ≥ 2.5
+//   tier 3 = home/small   → label visible at k ≥ 5.0
 const DEFS = [
   // ── NW Arkansas home stations ──────────────────────────
-  {n:'Fayetteville, AR',    la:36.07, lo:-94.16, home:true},
-  {n:'Springdale, AR',      la:36.19, lo:-94.13, home:true},
-  {n:'Bentonville, AR',     la:36.37, lo:-94.21, home:true},
-  {n:'Rogers, AR',          la:36.33, lo:-94.12, home:true},
-  {n:'Siloam Springs, AR',  la:36.19, lo:-94.54, home:true},
-  {n:'Harrison, AR',        la:36.23, lo:-93.11, home:true},
-  {n:'Fort Smith, AR',      la:35.39, lo:-94.42, home:true},
-  // ── Regional network ───────────────────────────────────
-  {n:'Oklahoma City, OK',la:35.47,lo:-97.52},{n:'Tulsa, OK',la:36.15,lo:-95.99},
-  {n:'Wichita, KS',la:37.69,lo:-97.34},{n:'Amarillo, TX',la:35.22,lo:-101.83},
-  {n:'Dallas, TX',la:32.78,lo:-96.80},{n:'Kansas City, MO',la:39.10,lo:-94.58},
-  {n:'Joplin, MO',la:37.08,lo:-94.51},{n:'Lubbock, TX',la:33.57,lo:-101.85},
-  {n:'Springfield, MO',la:37.21,lo:-93.30},{n:'Little Rock, AR',la:34.75,lo:-92.29},
-  {n:'Memphis, TN',la:35.15,lo:-90.05},{n:'Nashville, TN',la:36.17,lo:-86.78},
-  {n:'Jackson, MS',la:32.30,lo:-90.18},{n:'Shreveport, LA',la:32.52,lo:-93.75},
-  {n:'Topeka, KS',la:39.05,lo:-95.68},{n:'Lincoln, NE',la:40.81,lo:-96.70},
-  {n:'Omaha, NE',la:41.26,lo:-95.94},{n:'Des Moines, IA',la:41.60,lo:-93.61},
-  {n:'St. Louis, MO',la:38.63,lo:-90.20},{n:'Midland, TX',la:31.99,lo:-102.08},
-  {n:'Denver, CO',la:39.74,lo:-104.98},{n:'Minneapolis, MN',la:44.98,lo:-93.27},
-  {n:'Chicago, IL',      la:41.88, lo:-87.63},
-  {n:'Davenport, IA',    la:41.52, lo:-90.58},{n:'Indianapolis, IN',la:39.77,lo:-86.16},
-  {n:'Louisville, KY',la:38.25,lo:-85.76},{n:'Atlanta, GA',la:33.75,lo:-84.39},
-  {n:'Birmingham, AL',la:33.52,lo:-86.80},{n:'Houston, TX',la:29.76,lo:-95.37},
-  {n:'San Antonio, TX',la:29.42,lo:-98.49},{n:'Phoenix, AZ',la:33.45,lo:-112.07},
-  {n:'Albuquerque, NM',la:35.08,lo:-106.65},{n:'Salt Lake City, UT',la:40.76,lo:-111.89},
-  {n:'Billings, MT',la:45.78,lo:-108.50},{n:'Sioux Falls, SD',la:43.55,lo:-96.73},
-  {n:'Columbia, MO',la:38.95,lo:-92.33},
+  {n:'Fayetteville, AR',    la:36.07, lo:-94.16, home:true, tier:3},
+  {n:'Springdale, AR',      la:36.19, lo:-94.13, home:true, tier:3},
+  {n:'Bentonville, AR',     la:36.37, lo:-94.21, home:true, tier:3},
+  {n:'Rogers, AR',          la:36.33, lo:-94.12, home:true, tier:3},
+  {n:'Siloam Springs, AR',  la:36.19, lo:-94.54, home:true, tier:3},
+  {n:'Harrison, AR',        la:36.23, lo:-93.11, home:true, tier:3},
+  {n:'Fort Smith, AR',      la:35.39, lo:-94.42, home:true, tier:3},
+  // ── Tier 1 — Major metros ──────────────────────────────
+  {n:'Dallas, TX',        la:32.78, lo:-96.80,  tier:1},
+  {n:'Kansas City, MO',   la:39.10, lo:-94.58,  tier:1},
+  {n:'Chicago, IL',       la:41.88, lo:-87.63,  tier:1},
+  {n:'Minneapolis, MN',   la:44.98, lo:-93.27,  tier:1},
+  {n:'Des Moines, IA',    la:41.60, lo:-93.61,  tier:1},
+  {n:'Oklahoma City, OK', la:35.47, lo:-97.52,  tier:1},
+  {n:'Denver, CO',        la:39.74, lo:-104.98, tier:1},
+  {n:'Houston, TX',       la:29.76, lo:-95.37,  tier:1},
+  {n:'St. Louis, MO',     la:38.63, lo:-90.20,  tier:1},
+  {n:'Memphis, TN',       la:35.15, lo:-90.05,  tier:1},
+  {n:'Nashville, TN',     la:36.17, lo:-86.78,  tier:1},
+  {n:'Atlanta, GA',       la:33.75, lo:-84.39,  tier:1},
+  {n:'Indianapolis, IN',  la:39.77, lo:-86.16,  tier:1},
+  {n:'Salt Lake City, UT',la:40.76, lo:-111.89, tier:1},
+  {n:'Phoenix, AZ',       la:33.45, lo:-112.07, tier:1},
+  // ── Tier 2 — Regional cities ───────────────────────────
+  {n:'Tulsa, OK',         la:36.15, lo:-95.99,  tier:2},
+  {n:'Wichita, KS',       la:37.69, lo:-97.34,  tier:2},
+  {n:'Amarillo, TX',      la:35.22, lo:-101.83, tier:2},
+  {n:'Lubbock, TX',       la:33.57, lo:-101.85, tier:2},
+  {n:'Midland, TX',       la:31.99, lo:-102.08, tier:2},
+  {n:'San Antonio, TX',   la:29.42, lo:-98.49,  tier:2},
+  {n:'Joplin, MO',        la:37.08, lo:-94.51,  tier:2},
+  {n:'Springfield, MO',   la:37.21, lo:-93.30,  tier:2},
+  {n:'Columbia, MO',      la:38.95, lo:-92.33,  tier:2},
+  {n:'Little Rock, AR',   la:34.75, lo:-92.29,  tier:2},
+  {n:'Shreveport, LA',    la:32.52, lo:-93.75,  tier:2},
+  {n:'Jackson, MS',       la:32.30, lo:-90.18,  tier:2},
+  {n:'Birmingham, AL',    la:33.52, lo:-86.80,  tier:2},
+  {n:'Louisville, KY',    la:38.25, lo:-85.76,  tier:2},
+  {n:'Topeka, KS',        la:39.05, lo:-95.68,  tier:2},
+  {n:'Lincoln, NE',       la:40.81, lo:-96.70,  tier:2},
+  {n:'Omaha, NE',         la:41.26, lo:-95.94,  tier:2},
+  {n:'Sioux Falls, SD',   la:43.55, lo:-96.73,  tier:2},
+  {n:'Billings, MT',      la:45.78, lo:-108.50, tier:2},
+  {n:'Albuquerque, NM',   la:35.08, lo:-106.65, tier:2},
+  {n:'Davenport, IA',     la:41.52, lo:-90.58,  tier:2},
 ];
 
 let stations = [];
@@ -1646,19 +1668,37 @@ async function loadStations() {
 function rescaleStations(k) {
   if (!gStations) return;
   const s = 1 / k;
+
   gStations.selectAll('.station-glow').each(function() {
     d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s);
   });
+
   gStations.selectAll('.station-dot').each(function() {
     const el = d3.select(this);
     el.attr('r', +el.attr('data-base-r') * s)
       .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
   });
+
   gStations.selectAll('.station-label').each(function() {
-    const el = d3.select(this);
-    const bx = +el.attr('data-base-x'), by = +el.attr('data-base-y');
-    el.attr('x', bx + 9 * s).attr('y', by + 4 * s).attr('font-size', 7.5 * s);
+    const el    = d3.select(this);
+    const tier  = +(el.attr('data-tier') || 2);
+    const minK  = LABEL_ZOOM[tier] || 2.5;
+    const bx    = +el.attr('data-base-x');
+    const by    = +el.attr('data-base-y');
+    const bfs   = +(el.attr('data-base-fs') || 7.5);
+
+    if (k < minK) {
+      el.style('display', 'none');
+    } else {
+      el.style('display', null)
+        // Keep labels a constant screen size by scaling inversely with zoom,
+        // but clamp so they don't get too tiny or huge
+        .attr('font-size', Math.max(bfs * s, tier === 1 ? 7 : 6))
+        .attr('x', bx + 9 * s)
+        .attr('y', by + 4 * s);
+    }
   });
+
   // Scale NWS alert stroke widths with zoom so they stay thin when zoomed in
   if (gWarn) {
     gWarn.selectAll('.warn-path').each(function() {
@@ -1673,25 +1713,30 @@ function rescaleStations(k) {
   }
 }
 
+// Zoom thresholds at which each tier's label becomes visible
+const LABEL_ZOOM = { 1: 1.2, 2: 2.5, 3: 5.0 };
+
 function drawStations() {
   if (!gStations) return;
   gStations.selectAll('*').remove();
 
-  // Station dots
   stations.forEach(s => {
     const pt = projection([s.lo, s.la]);
     if (!pt) return;
     const [px, py] = pt;
-    const col = stationColor(s);
+    const col    = stationColor(s);
     const isHome = !!s.home;
+    const tier   = s.tier || 2;
     const baseGlow = isHome ? 7 : 5;
     const baseDot  = isHome ? 4 : 3;
 
+    // Glow halo
     gStations.append('circle')
       .attr('cx', px).attr('cy', py).attr('r', baseGlow)
       .attr('class', 'station-glow').attr('data-base-r', baseGlow)
       .attr('fill', col).attr('opacity', isHome ? 0.2 : 0.12);
 
+    // Main dot
     gStations.append('circle')
       .attr('cx', px).attr('cy', py).attr('r', baseDot)
       .attr('class', 'station-dot').attr('data-base-r', baseDot)
@@ -1704,17 +1749,30 @@ function drawStations() {
       .on('mouseleave', hideTooltip)
       .on('click', () => selectStation(s));
 
-    if (isHome) {
-      gStations.append('text')
-        .attr('x', px + 9).attr('y', py + 4)
-        .attr('class', 'station-label')
-        .attr('data-base-x', px).attr('data-base-y', py)
-        .attr('fill', 'rgba(245,166,35,0.75)')
-        .attr('font-family', "'Share Tech Mono', monospace")
-        .attr('font-size', '7.5').attr('letter-spacing', '0.5')
-        .style('pointer-events', 'none')
-        .text(s.n.split(',')[0].toUpperCase());
-    }
+    // City label — ALL cities get a label; visibility controlled by zoom in rescaleStations
+    const labelColor = isHome
+      ? 'rgba(245,166,35,0.85)'   // amber for home
+      : tier === 1
+        ? 'rgba(255,255,255,0.80)' // bright white for major metros
+        : 'rgba(200,220,255,0.60)';// dim blue-white for regional
+
+    const baseFontSize = tier === 1 ? 9 : 7.5;
+    const cityName = s.n.split(',')[0].toUpperCase();
+
+    gStations.append('text')
+      .attr('x', px + 9).attr('y', py + 4)
+      .attr('class', 'station-label')
+      .attr('data-base-x', px).attr('data-base-y', py)
+      .attr('data-tier', tier)
+      .attr('data-base-fs', baseFontSize)
+      .attr('fill', labelColor)
+      .attr('font-family', "'Share Tech Mono', monospace")
+      .attr('font-size', baseFontSize)
+      .attr('font-weight', tier === 1 ? '700' : '400')
+      .attr('letter-spacing', tier === 1 ? '0.8' : '0.5')
+      .style('pointer-events', 'none')
+      .style('display', 'none') // hidden until rescaleStations evaluates zoom
+      .text(cityName);
   });
 
   rescaleStations(currentTransform.k);
