@@ -2075,12 +2075,8 @@ function drawRadar(targetPath) {
   const TILE_ZOOM = getRadarTileZoom();
   currentTileZoom = TILE_ZOOM;
 
-  // Use geographic bounds to find visible tiles — works at all zoom levels
   const visibleTiles = getVisibleTiles(TILE_ZOOM);
-  if (!visibleTiles.length) {
-    // Nothing projectable at this zoom — leave whatever is on canvas alone
-    return;
-  }
+  if (!visibleTiles.length) return;
 
   const visible = visibleTiles.map(({ tx, ty }) => ({
     tx, ty,
@@ -2088,10 +2084,11 @@ function drawRadar(targetPath) {
   }));
 
   const snapPath = activePath;
+  const snapZoom = TILE_ZOOM; // snapshot zoom so paintRadar uses correct N even if currentTileZoom changes
   const toLoad   = visible.filter(({ url }) => !radarTileCache[url]);
-  if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
+  if (toLoad.length === 0) { paintRadar(visible, snapPath, snapZoom); return; }
   let remaining = toLoad.length;
-  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
+  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath, snapZoom); };
   toLoad.forEach(({url}) => {
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload  = () => { addToRadarCache(url, img); done(); };
@@ -2100,18 +2097,16 @@ function drawRadar(targetPath) {
   });
 }
 
-function paintRadar(tiles, snapPath) {
+function paintRadar(tiles, snapPath, snapZoom) {
   if (!lyr.radar || !projection) return;
   if (snapPath && snapPath !== radarPath) return;
-  const TILE_ZOOM = currentTileZoom;
+  // Use the zoom level that was current when tiles were fetched — NOT currentTileZoom
+  // If currentTileZoom changed while tiles were loading, the lon/lat math would be wrong
+  const TILE_ZOOM = snapZoom != null ? snapZoom : currentTileZoom;
   const N    = Math.pow(2, TILE_ZOOM);
   const W    = rdrCv.width, H = rdrCv.height;
-  // Fewer subdivisions at low zoom — tiles cover huge geographic areas so
-  // projection distortion per quad is acceptable with fewer segments.
-  // At high zoom we need more for accurate warping.
   const SEGS = TILE_ZOOM <= 4 ? 4 : TILE_ZOOM <= 5 ? 6 : 8;
   const S = 256;
-  // Snapshot transform for this paint — CSS delta is computed against this
   const t    = currentTransform || d3.zoomIdentity;
   const {x: tx, y: ty, k} = t;
 
@@ -2138,6 +2133,7 @@ function paintRadar(tiles, snapPath) {
   const offCtx = off.getContext('2d');
   offCtx.globalAlpha = 0.65;
 
+  let drawnQuads = 0;
   tiles.forEach(({tx: tileTx, ty: tileTy, url}) => {
     const img = radarTileCache[url]; if (!img) return;
     const grid = [];
@@ -2155,14 +2151,16 @@ function paintRadar(tiles, snapPath) {
         if (!p00||!p10||!p01||!p11) continue;
         const u0=i*S/SEGS, v0=j*S/SEGS, u1=(i+1)*S/SEGS, v1=(j+1)*S/SEGS;
         const af1=affineFrom3(u0,v0,u1,v0,u0,v1, p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
-        if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
+        if (af1){offCtx.save();offCtx.beginPath();offCtx.moveTo(p00[0],p00[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af1);offCtx.drawImage(img,0,0,S,S);offCtx.restore();drawnQuads++;}
         const af2=affineFrom3(u1,v1,u0,v1,u1,v0, p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
-        if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,0,0,S,S);offCtx.restore();}
+        if (af2){offCtx.save();offCtx.beginPath();offCtx.moveTo(p11[0],p11[1]);offCtx.lineTo(p01[0],p01[1]);offCtx.lineTo(p10[0],p10[1]);offCtx.closePath();offCtx.clip();offCtx.setTransform(...af2);offCtx.drawImage(img,0,0,S,S);offCtx.restore();drawnQuads++;}
       }
     }
   });
 
-  // Atomic swap — record painted transform, clear CSS transform
+  // Only swap if something was actually drawn — prevents blanking canvas on stale/wrong-zoom tiles
+  if (drawnQuads === 0) return;
+
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.drawImage(off, 0, 0);
   radarPaintedTransform = { x: tx, y: ty, k };
@@ -2183,13 +2181,14 @@ function scheduleRadarRepaint() {
       return;
     }
     const visibleTiles = getVisibleTiles(currentTileZoom);
+    const snapZoom = currentTileZoom;
     const cached = visibleTiles
       .map(({ tx, ty }) => {
         const url = `${radarHost}${radarPath}/256/${currentTileZoom}/${tx}/${ty}/6/1_1.png`;
         return radarTileCache[url] ? { tx, ty, url } : null;
       })
       .filter(Boolean);
-    if (cached.length > 0) paintRadar(cached, radarPath);
+    if (cached.length > 0) paintRadar(cached, radarPath, snapZoom);
     else drawRadar(radarPath);
   }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
 }
