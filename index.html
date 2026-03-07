@@ -394,8 +394,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div id="authTagline">Storm Intelligence Platform</div>
     <div id="authError"></div>
     <div id="authFormLogin">
-      <input type="email" id="authEmail" placeholder="Email address" autocomplete="email">
-      <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password">
+      <input type="email" id="authEmail" placeholder="Email address" autocomplete="email"
+        onkeydown="if(event.key==='Enter')document.getElementById('authPassword').focus()">
+      <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password"
+        onkeydown="if(event.key==='Enter')authLogin()">
       <button id="authLoginBtn" onclick="authLogin()">Sign In</button>
       <div id="authSwitch">New user? <a href="#" onclick="showAuthRegister();return false;">Create account</a></div>
     </div>
@@ -1124,14 +1126,18 @@ function initMap(us) {
       if (windOn) initParts();
       if (lyr.temp) drawHeatmap();
       if (lyr.radar) {
+        // During drag/zoom: apply CSS transform instantly — no pixel lag
+        // Full tile redraw is deferred to zoomend to avoid per-frame redraws
         const {x, y, k} = event.transform;
         rdrCv.style.transformOrigin = '0 0';
         rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
-        scheduleRadarRedraw();
       }
       if (geoActive) updateGPSDot();
+    })
+    .on('end', () => {
+      // On drag/zoom end: redraw radar at correct resolution and reset CSS transform
+      if (lyr.radar) scheduleRadarRedraw();
     });
-  svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
   const graticule = d3.geoGraticule().step([5, 5]);
   svg.append('path').datum(graticule()).attr('d', pathGen)
