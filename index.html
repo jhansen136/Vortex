@@ -1404,6 +1404,18 @@ function rescaleStations(k) {
     const bx = +el.attr('data-base-x'), by = +el.attr('data-base-y');
     el.attr('x', bx + 9 * s).attr('y', by + 4 * s).attr('font-size', 7.5 * s);
   });
+  // Scale NWS alert stroke widths with zoom so they stay thin when zoomed in
+  if (gWarn) {
+    gWarn.selectAll('.warn-path').each(function() {
+      const el = d3.select(this);
+      const baseW = el.attr('data-base-sw') ? +el.attr('data-base-sw') : (() => {
+        const w = +el.attr('stroke-width') || 1.2;
+        el.attr('data-base-sw', w);
+        return w;
+      })();
+      el.attr('stroke-width', baseW * s);
+    });
+  }
 }
 
 function drawStations() {
@@ -1417,8 +1429,8 @@ function drawStations() {
     const [px, py] = pt;
     const col = stationColor(s);
     const isHome = !!s.home;
-    const baseGlow = isHome ? 11 : 8;
-    const baseDot  = isHome ? 6 : 4.5;
+    const baseGlow = isHome ? 7 : 5;
+    const baseDot  = isHome ? 4 : 3;
 
     gStations.append('circle')
       .attr('cx', px).attr('cy', py).attr('r', baseGlow)
@@ -2087,6 +2099,9 @@ function renderNWS() {
           .attr('stroke-width', local ? 3 : isWarning ? 2 : 1.2)
           .attr('stroke-dasharray', cls==='watch' ? '6,3' : 'none')
           .attr('stroke-opacity', local ? 1 : 0.8)
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('class', 'warn-path')
           .style('pointer-events', 'none');
         // Pulse ring for local tornado warnings
         if (local && cls === 'tornado') {
@@ -2159,6 +2174,9 @@ function renderNWS() {
   if(badgeM) badgeM.textContent = tot || '0';
   const navDot = document.getElementById('navAlertDot');
   if(navDot) navDot.classList.toggle('visible', tot > 0);
+
+  // Rescale NWS stroke widths to match current zoom level
+  if (currentTransform) rescaleStations(currentTransform.k);
 }
 
 async function fireAlert(ev, area, col, local=false) {
