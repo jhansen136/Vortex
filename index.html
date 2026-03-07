@@ -91,6 +91,42 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 #radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
 #heatCanvas{display:none;}
 #radarTimestamp{position:absolute;bottom:36px;right:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.5px;pointer-events:none;z-index:20;display:none;}
+/* ── Radar Playbar ────────────────────────────────────── */
+#radarPlaybar{
+  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  display:none;align-items:center;gap:10px;
+  background:rgba(10,13,18,.92);border:1px solid var(--border-bright);
+  border-radius:20px;padding:7px 14px;z-index:30;
+  font-family:var(--font-mono);font-size:11px;
+  backdrop-filter:blur(4px);
+  white-space:nowrap;
+}
+#rdrPlayBtn{
+  background:none;border:1px solid var(--border-bright);color:var(--text);
+  width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:11px;
+  display:flex;align-items:center;justify-content:center;
+  transition:all .15s;flex-shrink:0;
+}
+#rdrPlayBtn:hover{border-color:var(--cyan);color:var(--cyan);}
+#rdrPlayBtn.playing{border-color:var(--amber);color:var(--amber);}
+#rdrFrameDots{display:flex;gap:5px;align-items:center;}
+.rdr-dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--border-bright);cursor:pointer;
+  transition:all .15s;flex-shrink:0;
+}
+.rdr-dot:hover{background:var(--text-dim);}
+.rdr-dot.active{background:var(--cyan);box-shadow:0 0 5px var(--cyan);}
+.rdr-dot.live{background:var(--green);}
+.rdr-dot.live.active{background:var(--green);box-shadow:0 0 6px var(--green);}
+#rdrTimeLabel{color:var(--cyan);font-size:10px;letter-spacing:.5px;min-width:52px;text-align:center;}
+#rdrLiveBtn{
+  background:none;border:1px solid var(--green);color:var(--green);
+  font-family:var(--font-mono);font-size:9px;letter-spacing:1px;
+  padding:2px 7px;border-radius:3px;cursor:pointer;transition:all .15s;
+}
+#rdrLiveBtn:hover{background:var(--green);color:#000;}
+#rdrLiveBtn.at-live{background:var(--green);color:#000;}
 #mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;}
 
 /* ── TOOLTIP ── */
@@ -583,6 +619,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <svg id="warnSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <div id="mapLegend"></div>
     <div id="radarTimestamp"></div>
+    <div id="radarPlaybar" style="display:none;">
+      <button id="rdrPlayBtn" onclick="toggleRadarPlay()" title="Play/Pause">▶</button>
+      <div id="rdrFrameDots"></div>
+      <div id="rdrTimeLabel">LIVE</div>
+      <button id="rdrLiveBtn" onclick="jumpRadarLive()" title="Jump to Live">LIVE</button>
+    </div>
     <div id="mapTooltip"></div>
     <div id="mapLoadMsg"><div class="load-spinner"></div>Loading map…</div>
     <div class="zoom-controls">
@@ -1754,9 +1796,18 @@ animWind();
 // ══════════════════════════════════════════════════════════
 // RAINVIEWER RADAR
 // ══════════════════════════════════════════════════════════
-let radarPath = null, radarHost = null, radarTs = null;
+let radarHost = null;
+let radarFrames = [];        // all past frames [{time, path}, ...]
+let radarFrameIdx = -1;      // currently displayed frame index (-1 = not set)
+let radarPath = null;        // active frame path (used by drawRadar/paintRadar)
+let radarTs   = null;        // active frame timestamp
 let radarTileCache = {};
 let currentTileZoom = 5;
+
+// Playback state
+let radarPlaying = false;
+let radarPlayTimer = null;
+const RADAR_FRAME_MS = 600;  // ms per frame during animation
 
 // Pick radar tile zoom based on D3 map zoom level — higher k = more detail
 function getRadarTileZoom() {
@@ -1955,25 +2006,176 @@ function scheduleRadarRedraw() {
 async function fetchRadar() {
   if (!lyr.radar) return;
   try {
-    console.log('[Radar] Fetching weather-maps.json...');
     const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
     const data = await res.json();
     const frames = data.radar?.past;
-    console.log('[Radar] Frames received:', frames?.length, '| host:', data.host);
     if (!frames || !frames.length) { console.warn('[Radar] No frames'); return; }
-    const latest = frames[frames.length - 1];
-    if (radarPath !== latest.path) radarTileCache = {};
+
     radarHost = data.host;
-    radarPath = latest.path;
-    radarTs   = latest.time;
-    console.log('[Radar] Path:', radarPath, '| Sample URL:', `${radarHost}${radarPath}/256/4/4/6/6/1_1.png`);
-    drawRadar();
-    const el = document.getElementById('radarTimestamp');
-    if (el) {
-      const d = new Date(radarTs * 1000);
-      el.textContent = '📡 ' + d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'}) + ' CDT';
+
+    // Check if latest frame changed — if so, clear cache and update frames list
+    const latestPath = frames[frames.length - 1].path;
+    if (radarPath !== latestPath) {
+      radarTileCache = {};
+      radarFrames = frames; // [{time, path}, ...]
     }
+
+    // If not playing, always snap to live (last frame)
+    if (!radarPlaying) {
+      radarFrameIdx = radarFrames.length - 1;
+    }
+
+    // Set active path from current frame index
+    radarPath = radarFrames[radarFrameIdx].path;
+    radarTs   = radarFrames[radarFrameIdx].time;
+
+    // Build/refresh the dot UI
+    buildPlaybarDots();
+    updatePlaybarUI();
+
+    // Draw the current frame
+    drawRadar();
+
+    // Pre-fetch all frames in background (so playback is smooth)
+    prefetchAllFrames();
+
   } catch(e) { console.warn('[Radar] fetch failed:', e); }
+}
+
+// Pre-fetch tiles for all frames silently in the background
+function prefetchAllFrames() {
+  if (!radarFrames.length || !projection) return;
+  const TZ = getRadarTileZoom();
+  const N = Math.pow(2, TZ);
+  const t = currentTransform || d3.zoomIdentity;
+  const W = rdrCv.width, H = rdrCv.height;
+
+  radarFrames.forEach(frame => {
+    for (let tx = 0; tx < N; tx++) {
+      for (let ty = 0; ty < N; ty++) {
+        const lon = (tx+0.5)/N*360-180;
+        const latRad = Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)));
+        const pt = projection([lon, latRad*180/Math.PI]);
+        if (!pt) continue;
+        if (TZ >= 6) {
+          const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
+          if (cx < -W*0.5 || cx > W*1.5 || cy < -H*0.5 || cy > H*1.5) continue;
+        }
+        const url = `${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
+        if (radarTileCache[url]) continue;
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => { radarTileCache[url] = img; };
+        img.onerror = () => {
+          const img2 = new Image();
+          img2.onload = () => { radarTileCache[url] = img2; };
+          img2.src = url;
+        };
+        img.src = url;
+      }
+    }
+  });
+}
+
+// Switch to a specific frame index and repaint
+function goToFrame(idx) {
+  if (!radarFrames.length) return;
+  idx = Math.max(0, Math.min(radarFrames.length - 1, idx));
+  radarFrameIdx = idx;
+  radarPath = radarFrames[idx].path;
+  radarTs   = radarFrames[idx].time;
+  updatePlaybarUI();
+  drawRadar();
+}
+
+// Build the dot row from current radarFrames
+function buildPlaybarDots() {
+  const container = document.getElementById('rdrFrameDots');
+  if (!container) return;
+  container.innerHTML = '';
+  radarFrames.forEach((f, i) => {
+    const dot = document.createElement('div');
+    dot.className = 'rdr-dot' + (i === radarFrames.length - 1 ? ' live' : '');
+    dot.title = new Date(f.time * 1000).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'}) + ' CDT';
+    dot.onclick = () => { stopRadarPlay(); goToFrame(i); };
+    container.appendChild(dot);
+  });
+}
+
+// Update dot highlights, time label, LIVE button state
+function updatePlaybarUI() {
+  const dots = document.querySelectorAll('.rdr-dot');
+  dots.forEach((d, i) => {
+    d.classList.toggle('active', i === radarFrameIdx);
+  });
+
+  const isLive = radarFrameIdx === radarFrames.length - 1;
+  const liveBtn = document.getElementById('rdrLiveBtn');
+  if (liveBtn) liveBtn.classList.toggle('at-live', isLive);
+
+  const label = document.getElementById('rdrTimeLabel');
+  if (label && radarFrames[radarFrameIdx]) {
+    if (isLive) {
+      label.textContent = 'LIVE';
+      label.style.color = 'var(--green)';
+    } else {
+      const now = Math.floor(Date.now() / 1000);
+      const diffMin = Math.round((now - radarFrames[radarFrameIdx].time) / 60);
+      label.textContent = `−${diffMin}m`;
+      label.style.color = 'var(--cyan)';
+    }
+  }
+
+  // Also update legacy timestamp div
+  const ts = document.getElementById('radarTimestamp');
+  if (ts && radarFrames[radarFrameIdx]) {
+    const d = new Date(radarFrames[radarFrameIdx].time * 1000);
+    ts.textContent = '📡 ' + d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'}) + ' CDT';
+  }
+
+  const playBtn = document.getElementById('rdrPlayBtn');
+  if (playBtn) {
+    playBtn.textContent = radarPlaying ? '⏸' : '▶';
+    playBtn.classList.toggle('playing', radarPlaying);
+  }
+}
+
+function toggleRadarPlay() {
+  if (radarPlaying) {
+    stopRadarPlay();
+  } else {
+    startRadarPlay();
+  }
+}
+
+function startRadarPlay() {
+  if (!radarFrames.length) return;
+  radarPlaying = true;
+  // If already at live, restart from beginning
+  if (radarFrameIdx >= radarFrames.length - 1) radarFrameIdx = 0;
+  updatePlaybarUI();
+  radarPlayTimer = setInterval(() => {
+    const next = radarFrameIdx + 1;
+    if (next >= radarFrames.length) {
+      // End of loop — pause on live
+      stopRadarPlay();
+      goToFrame(radarFrames.length - 1);
+    } else {
+      goToFrame(next);
+    }
+  }, RADAR_FRAME_MS);
+}
+
+function stopRadarPlay() {
+  radarPlaying = false;
+  clearInterval(radarPlayTimer);
+  radarPlayTimer = null;
+  updatePlaybarUI();
+}
+
+function jumpRadarLive() {
+  stopRadarPlay();
+  goToFrame(radarFrames.length - 1);
 }
 
 // Refresh radar data every 2 minutes
@@ -2006,20 +2208,20 @@ function toggleLayer(name, btn) {
   }
   if (name === 'radar') {
     if (lyr.radar) {
-      console.log('[Radar] Layer toggled ON — canvas size:', rdrCv.width, 'x', rdrCv.height);
-      // Ensure canvas is sized before fetching
       if (!rdrCv.width || !rdrCv.height) {
         const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
         rdrCv.width = W; rdrCv.height = H;
-        console.log('[Radar] Resized canvas to', W, 'x', H);
       }
       fetchRadar();
-      document.getElementById('radarTimestamp').style.display = 'block';
+      document.getElementById('radarPlaybar').style.display = 'flex';
     } else {
+      stopRadarPlay();
+      radarFrames = [];
+      radarFrameIdx = -1;
       rdrCtx.clearRect(0, 0, rdrCv.width, rdrCv.height);
       rdrCv.style.opacity = '0';
       rdrCv.style.transform = '';
-      document.getElementById('radarTimestamp').style.display = 'none';
+      document.getElementById('radarPlaybar').style.display = 'none';
     }
   }
 }
