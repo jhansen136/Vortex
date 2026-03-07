@@ -2063,8 +2063,7 @@ function getRadarTileZoom() {
   const k = (currentTransform || d3.zoomIdentity).k;
   if (k >= 5) return 7;
   if (k >= 2) return 6;
-  if (k >= 0.8) return 5;
-  return 4; // very zoomed out — fewer, larger tiles
+  return 5; // bottoms out at 5 — TZ4 tiles are too large and cause blank canvas on zoom-out
 }
 
 // Convert a Web Mercator tile index to lon/lat of its NW corner
