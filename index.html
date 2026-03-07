@@ -2025,10 +2025,12 @@ function clearRadarCache() {
 
 function getRadarTileZoom() {
   const k = (currentTransform || d3.zoomIdentity).k;
-  if (k >= 5) return 7;
-  if (k >= 2) return 6;
+  if (k >= 5)   return 7;
+  if (k >= 2)   return 6;
   if (k >= 0.8) return 5;
-  return 4; // very zoomed out — fewer, larger tiles
+  if (k >= 0.4) return 4;
+  if (k >= 0.2) return 3;
+  return 2; // full-country or wider
 }
 
 // Convert a Web Mercator tile index to lon/lat of its NW corner
@@ -2062,9 +2064,16 @@ function getVisibleTiles(TILE_ZOOM) {
 
   const tileCount = (txMax - txMin + 1) * (tyMax - tyMin + 1);
 
-  // At low zoom levels (≤6) the tile count is small (≤ ~100) and AlbersUSA
-  // projection points are tiny on screen — skip the screen bounds check and
-  // return all tiles in the geographic range. At higher zoom, cull by screen.
+  // At very low zoom levels tile counts are tiny — skip all projection/screen checks
+  // and just return every tile in the geographic bbox. At zoom 2: ~6 tiles, zoom 3: ~20, zoom 4: ~70.
+  if (TILE_ZOOM <= 4) {
+    const visible = [];
+    for (let tx = txMin; tx <= txMax; tx++)
+      for (let ty = tyMin; ty <= tyMax; ty++)
+        visible.push({ tx, ty });
+    return visible;
+  }
+
   if (TILE_ZOOM <= 6 || tileCount <= 120) {
     const visible = [];
     for (let tx = txMin; tx <= txMax; tx++) {
@@ -2159,7 +2168,11 @@ function paintRadar(tiles, snapPath) {
   const TILE_ZOOM = currentTileZoom;
   const N    = Math.pow(2, TILE_ZOOM);
   const W    = rdrCv.width, H = rdrCv.height;
-  const SEGS = 8, S = 256;
+  // Fewer subdivisions at low zoom — tiles cover huge geographic areas so
+  // projection distortion per quad is acceptable with fewer segments.
+  // At high zoom we need more for accurate warping.
+  const SEGS = TILE_ZOOM <= 4 ? 4 : TILE_ZOOM <= 5 ? 6 : 8;
+  const S = 256;
   // Snapshot transform for this paint — CSS delta is computed against this
   const t    = currentTransform || d3.zoomIdentity;
   const {x: tx, y: ty, k} = t;
