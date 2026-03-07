@@ -1409,7 +1409,7 @@ function rescaleStations(k) {
     gWarn.selectAll('.warn-path').each(function() {
       const el = d3.select(this);
       const baseW = el.attr('data-base-sw') ? +el.attr('data-base-sw') : (() => {
-        const w = +el.attr('stroke-width') || 1.2;
+        const w = +el.attr('stroke-width') || 1.8;
         el.attr('data-base-sw', w);
         return w;
       })();
@@ -2090,19 +2090,36 @@ function renderNWS() {
     if (feat.geometry && lyr.warnings) {
       try {
         const isWarning = cls === 'tornado';
+        const strokeW = local ? 3.5 : isWarning ? 2.5 : 1.8;
+
+        // Dark halo behind the colored stroke — gives contrast on top of any radar color
+        gWarn.append('path')
+          .datum(feat)
+          .attr('d', pathGen)
+          .attr('fill', 'none')
+          .attr('stroke', '#000')
+          .attr('stroke-width', strokeW + 2.5)
+          .attr('stroke-opacity', 0.55)
+          .attr('stroke-linejoin', 'round')
+          .attr('stroke-linecap', 'round')
+          .attr('class', 'warn-path warn-halo')
+          .style('pointer-events', 'none');
+
+        // Colored warning border on top
         gWarn.append('path')
           .datum(feat)
           .attr('d', pathGen)
           .attr('fill', col)
-          .attr('fill-opacity', local ? 0.28 : isWarning ? 0.18 : 0.06)
+          .attr('fill-opacity', local ? 0.32 : isWarning ? 0.22 : 0.10)
           .attr('stroke', col)
-          .attr('stroke-width', local ? 3 : isWarning ? 2 : 1.2)
+          .attr('stroke-width', strokeW)
           .attr('stroke-dasharray', cls==='watch' ? '6,3' : 'none')
-          .attr('stroke-opacity', local ? 1 : 0.8)
+          .attr('stroke-opacity', 1)
           .attr('stroke-linejoin', 'round')
           .attr('stroke-linecap', 'round')
           .attr('class', 'warn-path')
           .style('pointer-events', 'none');
+
         // Pulse ring for local tornado warnings
         if (local && cls === 'tornado') {
           gWarn.append('path')
@@ -2110,9 +2127,10 @@ function renderNWS() {
             .attr('d', pathGen)
             .attr('fill', 'none')
             .attr('stroke', col)
-            .attr('stroke-width', 1.5)
-            .attr('stroke-opacity', 0.4)
+            .attr('stroke-width', 2)
+            .attr('stroke-opacity', 0.5)
             .attr('stroke-dasharray', '3,4')
+            .attr('class', 'warn-path')
             .style('pointer-events', 'none');
         }
       } catch(e) {}
