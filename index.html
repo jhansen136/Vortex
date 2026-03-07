@@ -1756,17 +1756,27 @@ animWind();
 // ══════════════════════════════════════════════════════════
 let radarPath = null, radarHost = null, radarTs = null;
 let radarTileCache = {};
+let currentTileZoom = 5;
+
+// Pick radar tile zoom based on D3 map zoom level — higher k = more detail
+function getRadarTileZoom() {
+  const k = (currentTransform || d3.zoomIdentity).k;
+  if (k >= 5) return 7;
+  if (k >= 2) return 6;
+  return 5;
+}
 
 function drawRadar() {
   if (!lyr.radar || !radarPath || !projection) {
     console.warn('[Radar] drawRadar blocked — lyr.radar:', lyr.radar, '| radarPath:', !!radarPath, '| projection:', !!projection);
     return;
   }
-  const TILE_ZOOM = 5;
+  const TILE_ZOOM = getRadarTileZoom();
+  currentTileZoom = TILE_ZOOM;
   const N = Math.pow(2, TILE_ZOOM);
   const t = currentTransform || d3.zoomIdentity;
   const W = rdrCv.width, H = rdrCv.height;
-  console.log('[Radar] drawRadar — canvas:', W, 'x', H);
+  console.log('[Radar] drawRadar — canvas:', W, 'x', H, '| tileZoom:', TILE_ZOOM);
   const visible = [];
   for (let tx = 0; tx < N; tx++) {
     for (let ty = 0; ty < N; ty++) {
@@ -1774,14 +1784,19 @@ function drawRadar() {
       const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ty + 0.5) / N)));
       const lat = latRad * 180 / Math.PI;
       const pt = projection([lon, lat]);
-      if (!pt) continue; // Albers projection clips non-CONUS naturally
+      if (!pt) continue;
+      // At higher tile zooms, also cull tiles that are off-screen to keep tile count manageable
+      if (TILE_ZOOM >= 6) {
+        const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
+        if (cx < -W*0.5 || cx > W*1.5 || cy < -H*0.5 || cy > H*1.5) continue;
+      }
       visible.push({tx, ty, url: `${radarHost}${radarPath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`});
     }
   }
 
   if (!visible.length) { console.warn('[Radar] No visible tiles culled'); return; }
 
-  console.log('[Radar] Visible tiles:', visible.length);
+  console.log('[Radar] Visible tiles:', visible.length, 'at zoom', TILE_ZOOM);
 
   // Load missing tiles; paint when all are resolved
   const toLoad = visible.filter(({url}) => !radarTileCache[url]);
@@ -1792,13 +1807,11 @@ function drawRadar() {
 
   toLoad.forEach(({url}) => {
     const img = new Image();
-    // Try with CORS first (needed for HTTPS); fall back without if it fails (file://)
     img.crossOrigin = 'anonymous';
     img.onload = () => { radarTileCache[url] = img; done(); };
     img.onerror = () => {
-      // Retry without crossOrigin (works on file:// protocol)
       const img2 = new Image();
-      img2.onload = () => { console.log('[Radar] Tile loaded (no-cors):', url.split('/').slice(-4).join('/')); radarTileCache[url] = img2; done(); };
+      img2.onload = () => { radarTileCache[url] = img2; done(); };
       img2.onerror = () => { console.warn('[Radar] Tile FAILED:', url.split('/').slice(-4).join('/')); done(); };
       img2.src = url;
     };
@@ -1808,9 +1821,9 @@ function drawRadar() {
 
 function paintRadar(tiles) {
   if (!lyr.radar || !radarPath || !projection) return;
-  console.log('[Radar] paintRadar — drawing', tiles.length, 'tiles');
-  const TILE_ZOOM = 5;
+  const TILE_ZOOM = currentTileZoom;
   const N = Math.pow(2, TILE_ZOOM);
+  console.log('[Radar] paintRadar — drawing', tiles.length, 'tiles at zoom', TILE_ZOOM);
   // Paint in BASE Albers coords (no D3 transform) — CSS transform on the canvas handles pan/zoom live
   const W = rdrCv.width, H = rdrCv.height;
   const SEGS = 8;
@@ -1908,8 +1921,15 @@ function scheduleRadarRedraw() {
   if (!lyr.radar) return;
   clearTimeout(radarRedrawTimer);
   radarRedrawTimer = setTimeout(() => {
-    // If tiles already cached just repaint, else full redraw
-    const TILE_ZOOM = 5, N = Math.pow(2, TILE_ZOOM);
+    const neededZoom = getRadarTileZoom();
+    // If zoom level changed, we need higher-res tiles — full refetch
+    if (neededZoom !== currentTileZoom) {
+      console.log('[Radar] Tile zoom changed', currentTileZoom, '→', neededZoom, '— refetching');
+      drawRadar();
+      return;
+    }
+    // Same zoom level — repaint from cache if possible, else full redraw
+    const TILE_ZOOM = currentTileZoom, N = Math.pow(2, TILE_ZOOM);
     const t = currentTransform || d3.zoomIdentity;
     const W = rdrCv.width, H = rdrCv.height;
     const cached = [];
@@ -1919,7 +1939,7 @@ function scheduleRadarRedraw() {
         if (radarTileCache[url]) {
           const lon = (tx+0.5)/N*360-180;
           const latRad = Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)));
-          const pt = projection([(tx+0.5)/N*360-180, latRad*180/Math.PI]);
+          const pt = projection([lon, latRad*180/Math.PI]);
           if (!pt) continue;
           const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
           if (cx < -W || cx > 2*W || cy < -H || cy > 2*H) continue;
