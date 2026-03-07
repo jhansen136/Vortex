@@ -46,6 +46,7 @@ self.addEventListener('fetch', e => {
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 <style>
 :root {
   --bg:#0a0b0d; --panel:#0f1114; --border:#1e2229; --border-bright:#2e3540;
@@ -467,6 +468,54 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   display:flex; align-items:center; justify-content:center;
 }
 #userName { font-size:12px; color:var(--text); }
+
+/* ── Geolocation button ─────────────────────────────────── */
+#geoBtn {
+  display:flex; align-items:center; gap:6px;
+  background:none; border:1px solid var(--border);
+  border-radius:20px; padding:4px 10px; cursor:pointer;
+  font-family:var(--font-mono); font-size:10px; color:var(--text-dim);
+  transition:all .2s; white-space:nowrap;
+}
+#geoBtn:hover { border-color:var(--cyan); color:var(--cyan); }
+#geoBtn.active { border-color:var(--green); color:var(--green); }
+#geoBtn.danger { border-color:var(--red); color:var(--red); animation:pulse 1s infinite; }
+#geoDot { width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
+
+/* ── GPS map dot ────────────────────────────────────────── */
+.gps-dot-outer {
+  fill:none; stroke:var(--cyan); stroke-width:1.5;
+  animation:gpsPulse 1.8s ease-in-out infinite;
+}
+.gps-dot-inner { fill:var(--cyan); }
+@keyframes gpsPulse {
+  0%,100% { r:10; opacity:.3; }
+  50% { r:6; opacity:.6; }
+}
+
+/* ── Personal danger banner ─────────────────────────────── */
+#dangerBanner {
+  display:none;
+  position:absolute; top:8px; left:50%; transform:translateX(-50%);
+  background:rgba(220,38,38,.95); color:#fff;
+  font-family:var(--font-cond); font-weight:700; font-size:13px;
+  letter-spacing:2px; padding:8px 20px; border-radius:4px;
+  z-index:50; pointer-events:none;
+  box-shadow:0 0 20px rgba(220,38,38,.6);
+  animation:bannerPulse 1.2s ease-in-out infinite;
+  white-space:nowrap;
+}
+@keyframes bannerPulse {
+  0%,100% { box-shadow:0 0 20px rgba(220,38,38,.6); }
+  50% { box-shadow:0 0 35px rgba(220,38,38,.9); }
+}
+
+/* ── Radar speed selector ───────────────────────────────── */
+#rdrSpeedSelect {
+  background:var(--bg); border:1px solid var(--border-bright);
+  color:var(--text); font-family:var(--font-mono); font-size:10px;
+  border-radius:3px; padding:2px 4px; cursor:pointer;
+}
 </style>
 </head>
 <body>
@@ -537,6 +586,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="status-item"><div class="status-dot warn" id="alertDot"></div><span id="alertCount">LOADING…</span></div>
     <div class="status-item">NWS: <span id="nwsStatus" style="color:var(--text-dim);margin-left:2px;">…</span></div>
     <div id="clock">--:--:-- UTC</div>
+    <button id="geoBtn" onclick="toggleGeolocation()" title="Use my current location">
+      <div id="geoDot"></div>
+      <span id="geoBtnLabel">MY LOCATION</span>
+    </button>
     <div id="userPill" onclick="openSetup()" title="Account & Settings">
       <div id="userAvatar">?</div>
       <div id="userName">Loading…</div>
@@ -617,12 +670,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <canvas id="heatCanvas"></canvas>
     <canvas id="windCanvas"></canvas>
     <svg id="warnSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
+    <svg id="gpsSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
+    <div id="dangerBanner">🚨 YOU ARE INSIDE A WARNING ZONE</div>
     <div id="mapLegend"></div>
     <div id="radarTimestamp"></div>
     <div id="radarPlaybar" style="display:none;">
       <button id="rdrPlayBtn" onclick="toggleRadarPlay()" title="Play/Pause">▶</button>
       <div id="rdrFrameDots"></div>
       <div id="rdrTimeLabel">LIVE</div>
+      <select id="rdrSpeedSelect" onchange="setRadarSpeed(this.value)" title="Playback speed">
+        <option value="1200">0.5×</option>
+        <option value="600" selected>1×</option>
+        <option value="300">2×</option>
+      </select>
       <button id="rdrLiveBtn" onclick="jumpRadarLive()" title="Jump to Live">LIVE</button>
     </div>
     <div id="mapTooltip"></div>
@@ -1103,6 +1163,8 @@ function initMap(us) {
         rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
         scheduleRadarRedraw();
       }
+      // Keep GPS dot aligned with map
+      if (geoActive) updateGPSDot();
     });
 
   svg.call(zoom);
@@ -1310,6 +1372,154 @@ const HOME = {
   stateKeyword: 'Arkansas',
   radiusDeg: 0.55,           // ~40 miles radius for area averaging
 };
+
+// ══════════════════════════════════════════════════════════
+// GEOLOCATION — current user position
+// ══════════════════════════════════════════════════════════
+let userLat = null, userLon = null;
+let geoWatchId = null;
+let geoActive = false;
+let gpsSvgGroup = null;
+
+function toggleGeolocation() {
+  if (geoActive) {
+    stopGeolocation();
+  } else {
+    startGeolocation();
+  }
+}
+
+function startGeolocation() {
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported by your browser.');
+    return;
+  }
+  const btn = document.getElementById('geoBtn');
+  const label = document.getElementById('geoBtnLabel');
+  btn.classList.remove('active','danger');
+  label.textContent = 'LOCATING…';
+
+  geoWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      userLat = pos.coords.latitude;
+      userLon = pos.coords.longitude;
+      geoActive = true;
+      label.textContent = 'TRACKING';
+      btn.classList.add('active');
+      updateGPSDot();
+      checkPersonalAlerts();
+    },
+    err => {
+      console.warn('[Geo] Error:', err.message);
+      label.textContent = err.code === 1 ? 'DENIED' : 'ERROR';
+      btn.classList.remove('active','danger');
+      geoActive = false;
+    },
+    { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
+  );
+}
+
+function stopGeolocation() {
+  if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId = null;
+  geoActive = false;
+  userLat = null; userLon = null;
+  const btn = document.getElementById('geoBtn');
+  btn.classList.remove('active','danger');
+  document.getElementById('geoBtnLabel').textContent = 'MY LOCATION';
+  document.getElementById('dangerBanner').style.display = 'none';
+  if (gpsSvgGroup) gpsSvgGroup.selectAll('*').remove();
+}
+
+function updateGPSDot() {
+  if (!projection || userLat === null) return;
+  const pt = projection([userLon, userLat]);
+  if (!pt) return;
+
+  if (!gpsSvgGroup) {
+    gpsSvgGroup = d3.select('#gpsSvg').append('g').attr('id', 'gGPS');
+  }
+  gpsSvgGroup.selectAll('*').remove();
+
+  // Apply current zoom transform
+  const t = currentTransform || d3.zoomIdentity;
+  const [cx, cy] = [pt[0] * t.k + t.x, pt[1] * t.k + t.y];
+
+  // Pulsing outer ring
+  gpsSvgGroup.append('circle')
+    .attr('cx', cx).attr('cy', cy).attr('r', 10)
+    .attr('class', 'gps-dot-outer');
+
+  // Solid inner dot
+  gpsSvgGroup.append('circle')
+    .attr('cx', cx).attr('cy', cy).attr('r', 4)
+    .attr('class', 'gps-dot-inner');
+
+  // Accuracy label
+  gpsSvgGroup.append('text')
+    .attr('x', cx + 14).attr('y', cy + 4)
+    .attr('fill', 'var(--cyan)').attr('font-size', 9)
+    .attr('font-family', 'var(--font-mono)')
+    .text('YOU');
+}
+
+// Check if user's GPS point is inside any active NWS warning polygon using Turf.js
+function checkPersonalAlerts() {
+  if (!geoActive || userLat === null || !nwsAlerts.length || typeof turf === 'undefined') return;
+
+  const userPoint = turf.point([userLon, userLat]);
+  let insideWarning = false;
+  let warningName = '';
+
+  for (const feat of nwsAlerts) {
+    if (!feat.geometry) continue;
+    const ev = feat.properties?.event || '';
+    // Only check for serious warnings (tornado, severe tstorm, flash flood)
+    const isSevere = ev.includes('Tornado') || ev.includes('Severe Thunderstorm') ||
+                     ev.includes('Flash Flood') || ev.includes('Flood Warning');
+    if (!isSevere) continue;
+
+    try {
+      // Turf handles Polygon natively; for MultiPolygon check each sub-polygon
+      const geom = feat.geometry;
+      let inside = false;
+      if (geom.type === 'Polygon') {
+        inside = turf.booleanPointInPolygon(userPoint, feat);
+      } else if (geom.type === 'MultiPolygon') {
+        inside = geom.coordinates.some(coords =>
+          turf.booleanPointInPolygon(userPoint, turf.polygon(coords))
+        );
+      }
+      if (inside) {
+        insideWarning = true;
+        warningName = ev.toUpperCase();
+        break;
+      }
+    } catch(e) { /* skip malformed geometry */ }
+  }
+
+  const banner = document.getElementById('dangerBanner');
+  const btn = document.getElementById('geoBtn');
+  if (insideWarning) {
+    banner.textContent = `🚨 YOU ARE INSIDE A ${warningName}`;
+    banner.style.display = 'block';
+    btn.classList.add('danger');
+    btn.classList.remove('active');
+  } else {
+    banner.style.display = 'none';
+    btn.classList.remove('danger');
+    btn.classList.add('active');
+  }
+}
+
+// Radar speed selector
+function setRadarSpeed(ms) {
+  RADAR_FRAME_MS = parseInt(ms, 10);
+  if (radarPlaying) {
+    stopRadarPlay();
+    startRadarPlay();
+  }
+}
 
 // ══════════════════════════════════════════════════════════
 // STATIONS + OPEN-METEO
@@ -1733,7 +1943,9 @@ window.addEventListener('resize', () => {
     svg.select('rect').attr('width',W).attr('height',H);
     svg.attr('width',W).attr('height',H);
     warnSvg.attr('width',W).attr('height',H);
+    d3.select('#gpsSvg').attr('width',W).attr('height',H);
     drawStations();
+    if (geoActive) updateGPSDot();
   }
   redrawOverlays();
 });
@@ -1807,7 +2019,7 @@ let currentTileZoom = 5;
 // Playback state
 let radarPlaying = false;
 let radarPlayTimer = null;
-const RADAR_FRAME_MS = 600;  // ms per frame during animation
+let RADAR_FRAME_MS = 600;  // ms per frame during animation
 
 // Pick radar tile zoom based on D3 map zoom level — higher k = more detail
 function getRadarTileZoom() {
@@ -2437,6 +2649,9 @@ function renderNWS() {
 
   // Rescale NWS stroke widths to match current zoom level
   if (currentTransform) rescaleStations(currentTransform.k);
+
+  // Re-check if user's GPS position is inside any active warning polygon
+  checkPersonalAlerts();
 }
 
 async function fireAlert(ev, area, col, local=false) {
