@@ -825,7 +825,7 @@ const INTERVAL_STATIONS    = 10 * 60000;
 const BATCH_SIZE      = 25;
 const FETCH_TIMEOUT   = 15000;
 const FETCH_RETRY_MAX = 2;
-const RADAR_CACHE_MAX = 2000;  // visible tiles × frames: 70 tiles × 12 frames = 840 max at zoom 5
+const RADAR_CACHE_MAX = 3000;  // current frame all zooms (~770) + other frames current zoom (~770)  // visible tiles × frames: 70 tiles × 12 frames = 840 max at zoom 5
 
 // Home zone
 const HOME = {
@@ -2311,53 +2311,65 @@ async function fetchRadar() {
   } catch(e) {}
 }
 
-// FIX(perf): staggered prefetch — current frame tiles load first, other frames follow
-// in batches so we don't flood the browser's connection pool (max 6 per origin).
+// Prefetch strategy:
+// Phase 1 — current frame, ALL zoom levels (5,6,7): makes zoom in/out instant
+// Phase 2 — all other frames at current zoom only: makes animation smooth
+// Batched to 6 concurrent requests to match browser per-origin connection limit
 function prefetchAllFrames() {
   if (prefetchInProgress || !radarFrames.length || !projection) return;
   prefetchInProgress = true;
 
-  const TZ        = getRadarTileZoom();
-  const visible   = getVisibleTiles(TZ); // reuse the same bbox logic as drawRadar
-  const frames    = radarFrames;
-  const curPath   = radarPath;
+  const BATCH    = 6;
+  const curPath  = radarPath;
+  const curTZ    = getRadarTileZoom();
+  // All zoom levels we care about — prefetch lower zooms so zoom-out is instant
+  const ZOOM_LEVELS = [5, 6, 7].filter(tz => tz !== curTZ);
+  ZOOM_LEVELS.unshift(curTZ); // current zoom first
 
-  // Build per-frame URL lists, current frame first, then others in order
-  const frameOrder = [
-    ...frames.filter(f => f.path === curPath),
-    ...frames.filter(f => f.path !== curPath),
-  ];
+  // Build a flat list of URLs in priority order:
+  // 1. Current frame × all zoom levels
+  // 2. Other frames × current zoom only
+  const urls = [];
 
-  const BATCH = 6; // match browser's per-origin connection limit
-  let frameIdx = 0;
-
-  function loadNextFrame() {
-    if (frameIdx >= frameOrder.length) { prefetchInProgress = false; return; }
-    const frame = frameOrder[frameIdx++];
-    const urls = visible
-      .map(({tx, ty}) => `${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`)
-      .filter(url => !radarTileCache[url]);
-
-    if (!urls.length) { loadNextFrame(); return; } // already cached — next frame immediately
-
-    let remaining = urls.length;
-    const done = () => { if (--remaining === 0) setTimeout(loadNextFrame, 50); };
-
-    // Load in batches of BATCH to avoid saturating the connection pool
-    function loadBatch(start) {
-      const end = Math.min(start + BATCH, urls.length);
-      for (let i = start; i < end; i++) {
-        const img = new Image(); img.crossOrigin = 'anonymous';
-        img.onload  = () => { addToRadarCache(urls[i], img); done(); };
-        img.onerror = () => done();
-        img.src = urls[i];
+  // Phase 1: current frame at all zoom levels
+  for (const tz of ZOOM_LEVELS) {
+    const tiles = getVisibleTiles(tz);
+    const curFrame = radarFrames.find(f => f.path === curPath);
+    if (curFrame) {
+      for (const {tx, ty} of tiles) {
+        const url = `${radarHost}${curFrame.path}/256/${tz}/${tx}/${ty}/6/1_1.png`;
+        if (!radarTileCache[url]) urls.push(url);
       }
-      if (end < urls.length) setTimeout(() => loadBatch(end), 30);
     }
-    loadBatch(0);
   }
 
-  loadNextFrame();
+  // Phase 2: other frames at current zoom only
+  const tiles = getVisibleTiles(curTZ);
+  for (const frame of radarFrames) {
+    if (frame.path === curPath) continue;
+    for (const {tx, ty} of tiles) {
+      const url = `${radarHost}${frame.path}/256/${curTZ}/${tx}/${ty}/6/1_1.png`;
+      if (!radarTileCache[url]) urls.push(url);
+    }
+  }
+
+  if (!urls.length) { prefetchInProgress = false; return; }
+
+  let i = 0;
+  function loadBatch() {
+    if (i >= urls.length) { prefetchInProgress = false; return; }
+    const end = Math.min(i + BATCH, urls.length);
+    let inFlight = end - i;
+    for (; i < end; i++) {
+      const url = urls[i];
+      if (radarTileCache[url]) { if (--inFlight === 0) setTimeout(loadBatch, 0); continue; }
+      const img = new Image(); img.crossOrigin = 'anonymous';
+      img.onload  = () => { addToRadarCache(url, img); if (--inFlight === 0) setTimeout(loadBatch, 20); };
+      img.onerror = () => { if (--inFlight === 0) setTimeout(loadBatch, 20); };
+      img.src = url;
+    }
+  }
+  loadBatch();
 }
 
 function goToFrame(idx) {
