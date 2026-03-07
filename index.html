@@ -2258,7 +2258,9 @@ function scheduleRadarRepaint() {
   radarRepaintTimer = setTimeout(() => {
     const neededZoom = getRadarTileZoom();
     if (neededZoom !== currentTileZoom) {
-      // Zoom level changed — fetch new tiles; old canvas stays visible via CSS transform
+      // Zoom level changed — update currentTileZoom immediately so subsequent
+      // scheduleRadarRepaint calls don't keep re-triggering drawRadar redundantly
+      currentTileZoom = neededZoom;
       drawRadar(radarPath);
       return;
     }
@@ -2269,8 +2271,16 @@ function scheduleRadarRepaint() {
         return radarTileCache[url] ? { tx, ty, url } : null;
       })
       .filter(Boolean);
-    if (cached.length > 0) paintRadar(cached, radarPath);
-    else drawRadar(radarPath);
+    if (cached.length === visibleTiles.length && cached.length > 0) {
+      // Full coverage in cache — paint immediately, no fetch needed
+      paintRadar(cached, radarPath);
+    } else if (cached.length > 0) {
+      // Partial cache — paint what we have for immediate feedback, then fetch missing
+      paintRadar(cached, radarPath);
+      drawRadar(radarPath);
+    } else {
+      drawRadar(radarPath);
+    }
   }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
 }
 
