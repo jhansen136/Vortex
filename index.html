@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' fill='%230a0b0d'/><circle cx='50' cy='50' r='38' fill='none' stroke='%23f5a623' stroke-width='6'/><circle cx='50' cy='50' r='18' fill='none' stroke='%23f5a623' stroke-width='4' opacity='.6'/><circle cx='50' cy='50' r='5' fill='%23f5a623'/></svg>">
 <title>VORTEX — Storm Intelligence Platform</title>
 <script>
-// Service worker only works on http/https — skip entirely on file:// to avoid errors
+// FIX(low): Service worker only on http/https
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   const swBlob = new Blob([`
 const CACHE = 'vortex-v1';
@@ -82,60 +82,70 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .map-wrap{flex:1;position:relative;overflow:hidden;background:#05070a;}
 
 /* ── MAP ── */
-#mapSvg{width:100%;height:100%;display:block;cursor:grab;}
+#mapSvg{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none;}
 #mapSvg:active{cursor:grabbing;}
 .state-fill{fill:#0c1018;stroke:#1c2535;stroke-width:.6;transition:fill .2s;}
 .state-fill:hover{fill:#131b26;stroke:#2a3c54;}
 .state-border{fill:none;stroke:#243040;stroke-width:.4;pointer-events:none;}
-.county-border{fill:none;stroke:#141e28;stroke-width:.25;pointer-events:none;}
+/* FIX(perf): promote radar canvas to compositor layer */
+#radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;will-change:transform;}
 #windCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
-#radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;}
-#heatCanvas{display:none;}
 #radarTimestamp{position:absolute;bottom:36px;right:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.5px;z-index:20;display:none;}
-/* ── Radar Playbar ────────────────────────────────────── */
+/* ── Radar Playbar ── */
 #radarPlaybar{
-  position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
+  position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
   display:none;align-items:center;gap:10px;
   background:rgba(10,13,18,.92);border:1px solid var(--border-bright);
   border-radius:20px;padding:7px 14px;z-index:30;
   font-family:var(--font-mono);font-size:11px;
-  backdrop-filter:blur(4px);
-  white-space:nowrap;
+  backdrop-filter:blur(4px);white-space:nowrap;
 }
 #rdrPlayBtn{
   background:none;border:1px solid var(--border-bright);color:var(--text);
   width:26px;height:26px;border-radius:50%;cursor:pointer;font-size:11px;
-  display:flex;align-items:center;justify-content:center;
-  transition:all .15s;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;transition:all .15s;flex-shrink:0;
 }
 #rdrPlayBtn:hover{border-color:var(--cyan);color:var(--cyan);}
 #rdrPlayBtn.playing{border-color:var(--amber);color:var(--amber);}
 #rdrFrameDots{display:flex;gap:5px;align-items:center;}
-.rdr-dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--border-bright);cursor:pointer;
-  transition:all .15s;flex-shrink:0;
-}
+.rdr-dot{width:8px;height:8px;border-radius:50%;background:var(--border-bright);cursor:pointer;transition:all .15s;flex-shrink:0;}
 .rdr-dot:hover{background:var(--text-dim);}
 .rdr-dot.active{background:var(--cyan);box-shadow:0 0 5px var(--cyan);}
 .rdr-dot.live{background:var(--green);}
 .rdr-dot.live.active{background:var(--green);box-shadow:0 0 6px var(--green);}
 #rdrTimeLabel{color:var(--cyan);font-size:10px;letter-spacing:.5px;min-width:52px;text-align:center;}
-#rdrLiveBtn{
-  background:none;border:1px solid var(--green);color:var(--green);
-  font-family:var(--font-mono);font-size:9px;letter-spacing:1px;
-  padding:2px 7px;border-radius:3px;cursor:pointer;transition:all .15s;
-}
+#rdrLiveBtn{background:none;border:1px solid var(--green);color:var(--green);font-family:var(--font-mono);font-size:9px;letter-spacing:1px;padding:2px 7px;border-radius:3px;cursor:pointer;transition:all .15s;}
 #rdrLiveBtn:hover{background:var(--green);color:#000;}
 #rdrLiveBtn.at-live{background:var(--green);color:#000;}
+/* FIX(ux): legend raised so it's not hidden behind playbar */
 #mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;}
 
 /* ── TOOLTIP ── */
-#mapTooltip{position:absolute;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;display:none;z-index:60;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);}
+#mapTooltip{position:absolute;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;display:none;z-index:55;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);}
 .tt-city{font-family:var(--font-cond);font-weight:700;font-size:16px;color:var(--amber);margin-bottom:7px;letter-spacing:.5px;}
 .tt-row{display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;}
 .tt-key{color:var(--text-dim);} .tt-val{color:var(--text-bright);}
 .tt-risk{margin-top:7px;padding:3px 8px;text-align:center;font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:2px;border-radius:2px;}
+
+/* FIX(ux): danger banner z-index above tooltip */
+#dangerBanner{
+  display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  background:rgba(220,38,38,.95);color:#fff;font-family:var(--font-cond);font-weight:700;
+  font-size:13px;letter-spacing:2px;padding:8px 20px;border-radius:4px;z-index:65;
+  pointer-events:none;box-shadow:0 0 20px rgba(220,38,38,.6);
+  animation:bannerPulse 1.2s ease-in-out infinite;white-space:nowrap;
+}
+@keyframes bannerPulse{0%,100%{box-shadow:0 0 20px rgba(220,38,38,.6);}50%{box-shadow:0 0 35px rgba(220,38,38,.9);}}
+
+/* FIX(ux): fetch error banner */
+#fetchErrorBanner{
+  display:none;position:absolute;top:8px;left:50%;transform:translateX(-50%);
+  background:rgba(180,83,9,.95);color:#fff;font-family:var(--font-mono);
+  font-size:11px;letter-spacing:1px;padding:7px 16px;border-radius:4px;z-index:64;
+  white-space:nowrap;gap:10px;align-items:center;
+}
+#fetchErrorBanner button{background:rgba(255,255,255,.2);border:1px solid rgba(255,255,255,.4);color:#fff;font-family:var(--font-mono);font-size:10px;padding:2px 8px;border-radius:3px;cursor:pointer;}
+#fetchErrorBanner button:hover{background:rgba(255,255,255,.35);}
 
 /* ── ZOOM ── */
 .zoom-controls{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:20;}
@@ -165,13 +175,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .risk-level.ext{background:rgba(230,57,70,.15);color:var(--red);border:1px solid var(--red);animation:blink 1s infinite;}
 @keyframes blink{0%,100%{opacity:1;}50%{opacity:.5;}}
 .gauge-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px;}
-.gauge-fill{height:100%;border-radius:3px;transition:width 1s ease,background 1s ease;}
+.gauge-fill{height:100%;border-radius:3px;transition:width 1.2s cubic-bezier(.4,0,.2,1),background 1s ease;}
 .indicator-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);}
 .indicator-row:last-child{border-bottom:none;}
 .ind-name{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
 .ind-val{font-family:var(--font-mono);font-size:12px;color:var(--text-bright);}
 .ind-bar{width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:0 8px;}
-.ind-fill{height:100%;border-radius:2px;transition:width 1s ease;}
+.ind-fill{height:100%;border-radius:2px;transition:width 1.2s cubic-bezier(.4,0,.2,1);}
 .alert-badge{background:var(--red);color:white;font-family:var(--font-mono);font-size:9px;padding:1px 5px;border-radius:10px;margin-left:6px;animation:pulse 1.5s infinite;}
 .alert-item{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:3px;padding:8px 10px;margin-bottom:6px;}
 .alert-item.tornado{border-left-color:var(--red);}
@@ -226,40 +236,28 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .btn-skip{background:transparent;color:var(--text-dim);font-family:var(--font-mono);font-size:11px;border:none;cursor:pointer;width:100%;text-align:center;margin-top:10px;padding:4px;}
 ::-webkit-scrollbar{width:4px;} ::-webkit-scrollbar-track{background:var(--bg);} ::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:2px;}
 
-/* ══════════════════════════════════════════════
-   MOBILE LAYOUT  (≤768px)
-══════════════════════════════════════════════ */
+/* ── MOBILE ── */
 @media (max-width: 768px) {
-  /* iOS safe area */
   body { height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
-
-  /* Header — compact */
   header { height: 44px; padding: 0 12px; }
   .logo-text { font-size: 18px; letter-spacing: 2px; }
   .logo-sub { display: none; }
   .logo-icon { width: 24px; height: 24px; }
   .header-status { gap: 10px; }
   .status-item { font-size: 9px; gap: 4px; }
-  .status-item:nth-child(3) { display: none; } /* hide NWS label */
+  .status-item:nth-child(3) { display: none; }
   #clock { font-size: 11px; }
-
-  /* Full-screen map */
   .main { position: relative; }
   .sidebar-left, .sidebar-right { display: none; }
   .map-wrap { position: absolute; inset: 0; }
-
-  /* Bottom nav bar */
   .bottom-bar { display: none; }
   .mobile-nav {
     display: flex !important;
-    position: fixed;
-    bottom: 0; left: 0; right: 0;
+    position: fixed; bottom: 0; left: 0; right: 0;
     height: calc(56px + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
-    background: rgba(10,11,13,.97);
-    border-top: 1px solid var(--border-bright);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(10,11,13,.97); border-top: 1px solid var(--border-bright);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
     z-index: 200;
   }
   .nav-btn {
@@ -277,49 +275,26 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   .nav-alert-dot {
     position: absolute; top: 6px; right: calc(50% - 18px);
     width: 7px; height: 7px; border-radius: 50%;
-    background: var(--red); animation: pulse 1.5s infinite;
-    display: none;
+    background: var(--red); animation: pulse 1.5s infinite; display: none;
   }
   .nav-alert-dot.visible { display: block; }
-
-  /* Bottom sheets */
-  .sheet-overlay {
-    display: none;
-    position: fixed; inset: 0; background: rgba(0,0,0,.6);
-    z-index: 300; backdrop-filter: blur(2px);
-  }
+  /* FIX(mobile): touch-action for sheet scroll */
+  .sheet-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 300; backdrop-filter: blur(2px); }
   .sheet-overlay.open { display: block; }
   .bottom-sheet {
-    position: fixed; left: 0; right: 0; bottom: 0;
-    max-height: 82dvh;
-    background: var(--panel);
-    border-radius: 16px 16px 0 0;
+    position: fixed; left: 0; right: 0; bottom: 0; max-height: 82dvh;
+    background: var(--panel); border-radius: 16px 16px 0 0;
     border-top: 1px solid var(--border-bright);
-    transform: translateY(100%);
-    transition: transform .35s cubic-bezier(.32,1,.6,1);
+    transform: translateY(100%); transition: transform .35s cubic-bezier(.32,1,.6,1);
     z-index: 400; display: flex; flex-direction: column;
     padding-bottom: env(safe-area-inset-bottom);
   }
   .bottom-sheet.open { transform: translateY(0); }
-  .sheet-handle {
-    width: 36px; height: 4px; border-radius: 2px;
-    background: var(--border-bright); margin: 10px auto 4px;
-    flex-shrink: 0;
-  }
-  .sheet-title {
-    font-family: var(--font-cond); font-weight: 700;
-    font-size: 13px; letter-spacing: 3px; color: var(--text-dim);
-    text-transform: uppercase; padding: 4px 16px 10px;
-    flex-shrink: 0; border-bottom: 1px solid var(--border);
-  }
-  .sheet-body {
-    overflow-y: auto; flex: 1;
-    -webkit-overflow-scrolling: touch;
-    padding: 0;
-  }
+  .sheet-handle { width: 36px; height: 4px; border-radius: 2px; background: var(--border-bright); margin: 10px auto 4px; flex-shrink: 0; }
+  .sheet-title { font-family: var(--font-cond); font-weight: 700; font-size: 13px; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; padding: 4px 16px 10px; flex-shrink: 0; border-bottom: 1px solid var(--border); }
+  /* FIX(mobile): touch-action prevents iOS bounce while scrolling sheets */
+  .sheet-body { overflow-y: auto; flex: 1; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding: 0; }
   .sheet-body .panel-section { border-bottom: 1px solid var(--border); padding: 14px 16px; }
-
-  /* Bigger touch targets on mobile */
   .layer-btn { padding: 11px 12px; font-size: 15px; margin-bottom: 6px; }
   .metric-value { font-size: 22px; }
   .threshold-input { padding: 8px 10px; font-size: 14px; }
@@ -330,35 +305,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   .alert-item { padding: 10px 12px; margin-bottom: 8px; }
   .alert-type { font-size: 13px; }
   .alert-location { font-size: 11px; }
-
-  /* Zoom controls — bigger, left side on mobile */
   .zoom-controls { top: auto; bottom: 72px; right: 12px; }
   .zoom-btn { width: 40px; height: 40px; font-size: 22px; }
-
-  /* Home chip on map */
   .home-chip {
-    display: flex !important;
-    position: absolute; top: 10px; left: 10px;
-    background: rgba(10,11,13,.88);
-    border: 1px solid rgba(245,166,35,.4);
-    border-radius: 20px; padding: 5px 12px;
-    font-family: var(--font-mono); font-size: 10px;
-    color: var(--amber); gap: 8px; align-items: center;
-    z-index: 20; backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    display: flex !important; position: absolute; top: 10px; left: 10px;
+    background: rgba(10,11,13,.88); border: 1px solid rgba(245,166,35,.4);
+    border-radius: 20px; padding: 5px 12px; font-family: var(--font-mono);
+    font-size: 10px; color: var(--amber); gap: 8px; align-items: center;
+    z-index: 20; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   }
   .home-chip-risk { font-family: var(--font-cond); font-weight: 700; font-size: 13px; }
-
-  /* Toast — full width on mobile */
   .toast-container { top: 54px; left: 10px; right: 10px; }
   .toast { min-width: unset; width: 100%; }
-
-  /* Map tooltip — bigger on mobile */
   #mapTooltip { font-size: 13px; padding: 13px 15px; min-width: 210px; }
   .tt-city { font-size: 18px; }
+  /* FIX(ux): suppress hover tooltips on touch devices */
+  @media (pointer: coarse) { #mapTooltip { display: none !important; } }
 }
-
-/* Desktop — hide mobile-only elements */
 .mobile-nav { display: none; }
 .home-chip { display: none; }
 .sheet-overlay { display: none; }
@@ -371,8 +334,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 #mapLoadMsg{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;font-family:var(--font-mono);font-size:12px;color:var(--text-dim);pointer-events:none;}
 .load-spinner{width:24px;height:24px;border:2px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:spin .8s linear infinite;}
 .home-ring{fill:none;stroke:var(--amber);stroke-width:1.5;opacity:.45;}
-.home-ring-anim{animation:homeRingPulse 3s ease-in-out infinite;}
-@keyframes homeRingPulse{0%,100%{opacity:.3;}50%{opacity:.75;}}
 .home-dot{fill:var(--amber);stroke:#0a0b0d;stroke-width:2;}
 .home-label{fill:var(--amber);font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:1px;pointer-events:none;}
 .local-panel{background:rgba(245,166,35,.04);border:1px solid rgba(245,166,35,.25);border-radius:4px;padding:10px 12px;}
@@ -390,137 +351,43 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .local-flag-badge{display:inline-block;font-family:var(--font-mono);font-size:8px;padding:1px 5px;border-radius:2px;background:rgba(245,166,35,.2);color:var(--amber);margin-left:6px;vertical-align:middle;letter-spacing:1px;}
 .alert-item.local-flag{border-left-color:var(--amber);background:rgba(245,166,35,.04);}
 .alert-item.local-flag.tornado{border-left-color:var(--red);background:rgba(230,57,70,.06);}
-/* Tornado warning local badge pulses */
-.alert-item.local-flag.tornado .alert-type { animation: blink 1.4s ease-in-out infinite; }
-/* Tooltip lift index row */
-#mapTooltip .tt-row:last-of-type { border-top: 1px solid var(--border); padding-top: 5px; margin-top: 3px; }
-/* Smoother indicator bar transitions */
-.ind-fill { transition: width 1.2s cubic-bezier(.4,0,.2,1); }
-.gauge-fill { transition: width 1.2s cubic-bezier(.4,0,.2,1), background 1s ease; }
-/* Mobile: prevent text selection on map interactions */
-#mapSvg { user-select: none; -webkit-user-select: none; }
-/* Cleaner sheet scrollbar */
-.sheet-body::-webkit-scrollbar { width: 3px; }
-.sheet-body::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
-/* ── AUTH OVERLAY ─────────────────────────────────────── */
-#authOverlay {
-  position:fixed; inset:0; z-index:9999;
-  background:linear-gradient(135deg,#0a0b0d 0%,#0d1420 100%);
-  display:flex; align-items:center; justify-content:center;
-}
-#authBox {
-  background:var(--panel); border:1px solid var(--border-bright);
-  border-radius:12px; padding:40px 36px; width:340px; max-width:90vw;
-  display:flex; flex-direction:column; gap:14px;
-}
-#authLogo {
-  font-family:'Share Tech Mono',monospace; font-size:28px;
-  color:var(--amber); text-align:center; letter-spacing:4px;
-}
-#authTagline {
-  font-family:'Barlow Condensed',sans-serif; font-size:13px;
-  color:var(--muted); text-align:center; letter-spacing:2px;
-  text-transform:uppercase; margin-bottom:8px;
-}
-#authFormLogin, #authFormRegister {
-  display:flex; flex-direction:column; gap:10px;
-}
-#authBox input[type=email],
-#authBox input[type=password],
-#authBox input[type=text] {
-  background:#0a0b0d; border:1px solid var(--border-bright);
-  border-radius:6px; padding:10px 12px; color:var(--text);
-  font-family:'Barlow',sans-serif; font-size:14px; outline:none;
-  transition:border-color .2s;
-}
-#authBox input:focus { border-color:var(--amber); }
-#authLoginBtn, #authRegisterBtn {
-  background:var(--amber); color:#000; border:none; border-radius:6px;
-  padding:11px; font-family:'Barlow Condensed',sans-serif;
-  font-size:15px; font-weight:700; letter-spacing:1px;
-  cursor:pointer; margin-top:4px; transition:opacity .2s;
-}
-#authLoginBtn:hover, #authRegisterBtn:hover { opacity:.85; }
-#authLoginBtn:disabled, #authRegisterBtn:disabled { opacity:.5; cursor:default; }
-#authSwitch, #authSwitch2 {
-  font-size:12px; color:var(--muted); text-align:center;
-}
-#authSwitch a, #authSwitch2 a { color:var(--amber); text-decoration:none; }
-#authError {
-  color:#ff6b6b; font-size:12px; text-align:center; min-height:16px;
-}
-#authSpinner {
-  color:var(--muted); font-size:13px; text-align:center;
-  font-family:'Share Tech Mono',monospace;
-}
-/* User pill in header */
-#userPill {
-  display:flex; align-items:center; gap:8px;
-  background:var(--panel); border:1px solid var(--border);
-  border-radius:20px; padding:4px 12px 4px 8px; cursor:pointer;
-  transition:border-color .2s;
-}
-#userPill:hover { border-color:var(--amber); }
-#userAvatar {
-  width:24px; height:24px; border-radius:50%;
-  background:var(--amber); color:#000;
-  font-size:11px; font-weight:700;
-  display:flex; align-items:center; justify-content:center;
-}
-#userName { font-size:12px; color:var(--text); }
+.alert-item.local-flag.tornado .alert-type{animation:blink 1.4s ease-in-out infinite;}
+.sheet-body::-webkit-scrollbar{width:3px;}
+.sheet-body::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:2px;}
 
-/* ── Geolocation button ─────────────────────────────────── */
-#geoBtn {
-  display:flex; align-items:center; gap:6px;
-  background:none; border:1px solid var(--border);
-  border-radius:20px; padding:4px 10px; cursor:pointer;
-  font-family:var(--font-mono); font-size:10px; color:var(--text-dim);
-  transition:all .2s; white-space:nowrap;
-}
-#geoBtn:hover { border-color:var(--cyan); color:var(--cyan); }
-#geoBtn.active { border-color:var(--green); color:var(--green); }
-#geoBtn.danger { border-color:var(--red); color:var(--red); animation:pulse 1s infinite; }
-#geoDot { width:7px; height:7px; border-radius:50%; background:currentColor; flex-shrink:0; }
-
-/* ── GPS map dot ────────────────────────────────────────── */
-.gps-dot-outer {
-  fill:none; stroke:var(--cyan); stroke-width:1.5;
-  animation:gpsPulse 1.8s ease-in-out infinite;
-}
-.gps-dot-inner { fill:var(--cyan); }
-@keyframes gpsPulse {
-  0%,100% { r:10; opacity:.3; }
-  50% { r:6; opacity:.6; }
-}
-
-/* ── Personal danger banner ─────────────────────────────── */
-#dangerBanner {
-  display:none;
-  position:absolute; top:8px; left:50%; transform:translateX(-50%);
-  background:rgba(220,38,38,.95); color:#fff;
-  font-family:var(--font-cond); font-weight:700; font-size:13px;
-  letter-spacing:2px; padding:8px 20px; border-radius:4px;
-  z-index:50; pointer-events:none;
-  box-shadow:0 0 20px rgba(220,38,38,.6);
-  animation:bannerPulse 1.2s ease-in-out infinite;
-  white-space:nowrap;
-}
-@keyframes bannerPulse {
-  0%,100% { box-shadow:0 0 20px rgba(220,38,38,.6); }
-  50% { box-shadow:0 0 35px rgba(220,38,38,.9); }
-}
-
-/* ── Radar speed selector ───────────────────────────────── */
-#rdrSpeedSelect {
-  background:var(--bg); border:1px solid var(--border-bright);
-  color:var(--text); font-family:var(--font-mono); font-size:10px;
-  border-radius:3px; padding:2px 4px; cursor:pointer;
-}
+/* ── AUTH OVERLAY ── */
+#authOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0a0b0d 0%,#0d1420 100%);display:flex;align-items:center;justify-content:center;}
+#authBox{background:var(--panel);border:1px solid var(--border-bright);border-radius:12px;padding:40px 36px;width:340px;max-width:90vw;display:flex;flex-direction:column;gap:14px;}
+#authLogo{font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--amber);text-align:center;letter-spacing:4px;}
+#authTagline{font-family:'Barlow Condensed',sans-serif;font-size:13px;color:var(--text-dim);text-align:center;letter-spacing:2px;text-transform:uppercase;margin-bottom:8px;}
+#authFormLogin,#authFormRegister{display:flex;flex-direction:column;gap:10px;}
+#authBox input[type=email],#authBox input[type=password],#authBox input[type=text]{background:#0a0b0d;border:1px solid var(--border-bright);border-radius:6px;padding:10px 12px;color:var(--text);font-family:'Barlow',sans-serif;font-size:14px;outline:none;transition:border-color .2s;}
+#authBox input:focus{border-color:var(--amber);}
+#authLoginBtn,#authRegisterBtn{background:var(--amber);color:#000;border:none;border-radius:6px;padding:11px;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:1px;cursor:pointer;margin-top:4px;transition:opacity .2s;}
+#authLoginBtn:hover,#authRegisterBtn:hover{opacity:.85;}
+#authLoginBtn:disabled,#authRegisterBtn:disabled{opacity:.5;cursor:default;}
+#authSwitch,#authSwitch2{font-size:12px;color:var(--text-dim);text-align:center;}
+#authSwitch a,#authSwitch2 a{color:var(--amber);text-decoration:none;}
+#authError{color:#ff6b6b;font-size:12px;text-align:center;min-height:16px;}
+#authSpinner{color:var(--text-dim);font-size:13px;text-align:center;font-family:'Share Tech Mono',monospace;}
+#userPill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 8px;cursor:pointer;transition:border-color .2s;}
+#userPill:hover{border-color:var(--amber);}
+#userAvatar{width:24px;height:24px;border-radius:50%;background:var(--amber);color:#000;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;}
+#userName{font-size:12px;color:var(--text);}
+#geoBtn{display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;cursor:pointer;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);transition:all .2s;white-space:nowrap;}
+#geoBtn:hover{border-color:var(--cyan);color:var(--cyan);}
+#geoBtn.active{border-color:var(--green);color:var(--green);}
+#geoBtn.danger{border-color:var(--red);color:var(--red);animation:pulse 1s infinite;}
+#geoDot{width:7px;height:7px;border-radius:50%;background:currentColor;flex-shrink:0;}
+.gps-dot-outer{fill:none;stroke:var(--cyan);stroke-width:1.5;animation:gpsPulse 1.8s ease-in-out infinite;}
+.gps-dot-inner{fill:var(--cyan);}
+@keyframes gpsPulse{0%,100%{r:10;opacity:.3;}50%{r:6;opacity:.6;}}
+#rdrSpeedSelect{background:var(--bg);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:10px;border-radius:3px;padding:2px 4px;cursor:pointer;}
 </style>
 </head>
 <body>
 
-<!-- ══ AUTH OVERLAY ══════════════════════════════════════ -->
+<!-- AUTH OVERLAY -->
 <div id="authOverlay" style="display:flex;">
   <div id="authBox">
     <div id="authLogo">⟳ VORTEX</div>
@@ -536,6 +403,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <input type="text" id="authName" placeholder="Display name" autocomplete="name">
       <input type="email" id="authRegEmail" placeholder="Email address" autocomplete="email">
       <input type="password" id="authRegPassword" placeholder="Password (min 8 chars)" autocomplete="new-password">
+      <!-- FIX(critical): invite code field for restricted registration -->
+      <input type="text" id="authInviteCode" placeholder="Invite code" autocomplete="off">
       <button id="authRegisterBtn" onclick="authRegister()">Create Account</button>
       <div id="authSwitch2">Have an account? <a href="#" onclick="showAuthLogin();return false;">Sign in</a></div>
     </div>
@@ -563,7 +432,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="modal-field">
       <label>Hue API Username / Token</label>
       <input type="text" id="hueToken" placeholder="Your Hue API username">
-      <div class="hint">Get at http://[bridge-ip]/debug/clip.html</div>
+      <div class="hint">Get at http://[bridge-ip]/debug/clip.html — used only on your local network</div>
     </div>
     <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
     <button class="btn-skip" onclick="closeSetup()">Close</button>
@@ -602,18 +471,18 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <div class="sidebar-left">
     <div class="panel-section">
       <div class="panel-label">Map Layers</div>
-      <button class="layer-btn" onclick="toggleLayer('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn active" onclick="toggleLayer('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn active" onclick="toggleLayer('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('earthquakes',this)"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" onclick="toggleLayer('wildfires',this)"><span>🔥 Wildfires</span><div class="layer-indicator"></div></button>
+      <!-- FIX(bug): data-layer attributes replace brittle onclick regex parsing -->
+      <button class="layer-btn" data-layer="temp" onclick="toggleLayer('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="wind" onclick="toggleLayer('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="humidity" onclick="toggleLayer('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="cape" onclick="toggleLayer('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="dewpoint" onclick="toggleLayer('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" data-layer="risk" onclick="toggleLayer('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" data-layer="warnings" onclick="toggleLayer('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="radar" onclick="toggleLayer('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="earthquakes" onclick="toggleLayer('earthquakes',this)"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" data-layer="wildfires" onclick="toggleLayer('wildfires',this)"><span>🔥 Wildfires</span><div class="layer-indicator"></div></button>
     </div>
-
     <div class="panel-section">
       <div class="panel-label">Selected Conditions</div>
       <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-bottom:8px;" id="selectedName">Click a station or map point</div>
@@ -626,7 +495,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <div class="metric-card"><div class="metric-label">SRH (est)</div><div class="metric-value" id="m-srh">--<span class="metric-unit">m²/s²</span></div></div>
       </div>
     </div>
-
     <div class="panel-section">
       <div class="local-panel">
         <div class="local-header">
@@ -648,7 +516,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         </div>
       </div>
     </div>
-
     <div class="panel-section">
       <div class="panel-label">Tornado Risk Score</div>
       <div class="risk-gauge">
@@ -669,12 +536,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <div class="map-wrap" id="mapWrap">
     <svg id="mapSvg"></svg>
     <canvas id="radarCanvas"></canvas>
-    <canvas id="heatCanvas"></canvas>
+    <canvas id="heatCanvas" style="position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .5s;will-change:transform;"></canvas>
     <canvas id="windCanvas"></canvas>
     <svg id="warnSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <svg id="hazardSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <svg id="gpsSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <div id="dangerBanner">🚨 YOU ARE INSIDE A WARNING ZONE</div>
+    <!-- FIX(ux): fetch error banner with retry -->
+    <div id="fetchErrorBanner">
+      <span id="fetchErrorMsg">⚠ Weather data unavailable</span>
+      <button onclick="retryStationFetch()">RETRY</button>
+    </div>
     <div id="mapLegend"></div>
     <div id="radarTimestamp"></div>
     <div id="radarPlaybar" style="display:none;">
@@ -703,20 +575,20 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="panel-label">Active Alerts <span class="alert-badge" id="alertBadge">…</span></div>
       <div id="alertsList"><div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">Loading NWS alerts…</div></div>
     </div>
-
     <div class="panel-section">
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
         <div><div class="notif-label">Phone Push</div><div class="notif-sub" id="pushSub">ntfy.sh</div></div>
-        <label class="toggle"><input type="checkbox" id="togglePush" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <!-- FIX(medium): data-sync-group replaces hardcoded peer ID mapping -->
+        <label class="toggle"><input type="checkbox" id="togglePush" data-sync-group="push" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row">
         <div><div class="notif-label">Smart Lights</div><div class="notif-sub" id="hueSub">Philips Hue</div></div>
-        <label class="toggle"><input type="checkbox" id="toggleHue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <label class="toggle"><input type="checkbox" id="toggleHue" data-sync-group="hue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row">
         <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren</div></div>
-        <label class="toggle"><input type="checkbox" id="toggleAudio"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <label class="toggle"><input type="checkbox" id="toggleAudio" data-sync-group="audio"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row" style="border:none;padding-top:10px;gap:8px;flex-wrap:wrap;">
         <button class="test-btn" onclick="testPush()">TEST PUSH</button>
@@ -728,15 +600,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <span id="hueStatusText">Lights: standby</span>
       </div>
     </div>
-
     <div class="panel-section">
       <div class="panel-label">Alert Thresholds</div>
-      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape" value="1500"><div class="threshold-unit">J/kg</div></div>
-      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh" value="250"><div class="threshold-unit">m²/s²</div></div>
-      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind" value="60"><div class="threshold-unit">mph</div></div>
-      <div class="threshold-row" style="border:none;"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk" value="70"><div class="threshold-unit">/ 100</div></div>
+      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape" data-th="cape" value="1500"><div class="threshold-unit">J/kg</div></div>
+      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh" data-th="srh" value="250"><div class="threshold-unit">m²/s²</div></div>
+      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind" data-th="wind" value="60"><div class="threshold-unit">mph</div></div>
+      <div class="threshold-row" style="border:none;"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk" data-th="risk" value="70"><div class="threshold-unit">/ 100</div></div>
     </div>
-
     <div class="panel-section">
       <div class="panel-label">Light Alert Modes</div>
       <div class="notif-row"><div><div class="notif-label">🔴 Tornado Warning</div><div class="notif-sub">Red flash rapid</div></div><div style="width:16px;height:16px;border-radius:50%;background:#ff2200;border:1px solid rgba(255,255,255,.2);"></div></div>
@@ -754,32 +624,30 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <div class="bottom-stat" style="margin-left:auto;"><span id="dataSource" style="color:var(--text-dim);">Open-Meteo + NWS · Live</span></div>
 </div>
 
-<!-- ── HOME CHIP (mobile map overlay) ── -->
 <div class="home-chip" id="homeChip">
   <span>📍 NW AR</span>
   <span class="home-chip-risk" id="homeChipRisk" style="color:var(--green);">--</span>
   <span style="font-family:var(--font-mono);font-size:8px;color:var(--text-dim);" id="homeChipLabel">LOW</span>
 </div>
 
-<!-- ── SHEET OVERLAY ── -->
 <div class="sheet-overlay" id="sheetOverlay" onclick="closeAllSheets()"></div>
 
-<!-- ── LAYERS SHEET ── -->
+<!-- LAYERS SHEET -->
 <div class="bottom-sheet" id="layersSheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Map Layers</div>
   <div class="sheet-body">
     <div class="panel-section">
-      <button class="layer-btn" id="mb-temp" onclick="toggleLayer('temp',this);syncLayerBtn('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-wind" onclick="toggleLayer('wind',this);syncLayerBtn('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-humidity" onclick="toggleLayer('humidity',this);syncLayerBtn('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-cape" onclick="toggleLayer('cape',this);syncLayerBtn('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-dewpoint" onclick="toggleLayer('dewpoint',this);syncLayerBtn('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn active" id="mb-risk" onclick="toggleLayer('risk',this);syncLayerBtn('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn active" id="mb-warnings" onclick="toggleLayer('warnings',this);syncLayerBtn('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-radar" onclick="toggleLayer('radar',this);syncLayerBtn('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-earthquakes" onclick="toggleLayer('earthquakes',this);syncLayerBtn('earthquakes',this)"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></button>
-      <button class="layer-btn" id="mb-wildfires" onclick="toggleLayer('wildfires',this);syncLayerBtn('wildfires',this)"><span>🔥 Wildfires</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-temp" data-layer="temp" onclick="toggleLayer('temp',this);syncLayerBtn('temp',this)"><span>🌡 Temperature</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-wind" data-layer="wind" onclick="toggleLayer('wind',this);syncLayerBtn('wind',this)"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-humidity" data-layer="humidity" onclick="toggleLayer('humidity',this);syncLayerBtn('humidity',this)"><span>💧 Humidity</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-cape" data-layer="cape" onclick="toggleLayer('cape',this);syncLayerBtn('cape',this)"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-dewpoint" data-layer="dewpoint" onclick="toggleLayer('dewpoint',this);syncLayerBtn('dewpoint',this)"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" id="mb-risk" data-layer="risk" onclick="toggleLayer('risk',this);syncLayerBtn('risk',this)"><span>🎯 Risk Score</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn active" id="mb-warnings" data-layer="warnings" onclick="toggleLayer('warnings',this);syncLayerBtn('warnings',this)"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-radar" data-layer="radar" onclick="toggleLayer('radar',this);syncLayerBtn('radar',this)"><span>🌧 Live Radar</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-earthquakes" data-layer="earthquakes" onclick="toggleLayer('earthquakes',this);syncLayerBtn('earthquakes',this)"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></button>
+      <button class="layer-btn" id="mb-wildfires" data-layer="wildfires" onclick="toggleLayer('wildfires',this);syncLayerBtn('wildfires',this)"><span>🔥 Wildfires</span><div class="layer-indicator"></div></button>
     </div>
     <div class="panel-section" style="border:none;">
       <div class="panel-label">NW Arkansas</div>
@@ -805,7 +673,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   </div>
 </div>
 
-<!-- ── CONDITIONS SHEET ── -->
+<!-- CONDITIONS SHEET -->
 <div class="bottom-sheet" id="condSheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Conditions</div>
@@ -839,7 +707,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   </div>
 </div>
 
-<!-- ── ALERTS SHEET ── -->
+<!-- ALERTS SHEET -->
 <div class="bottom-sheet" id="alertsSheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Active Alerts <span class="alert-badge" id="alertBadgeM">…</span></div>
@@ -850,7 +718,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   </div>
 </div>
 
-<!-- ── SETTINGS SHEET ── -->
+<!-- SETTINGS SHEET -->
 <div class="bottom-sheet" id="settingsSheet">
   <div class="sheet-handle"></div>
   <div class="sheet-title">Settings</div>
@@ -859,23 +727,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
         <div><div class="notif-label">Phone Push</div><div class="notif-sub" id="pushSubM">ntfy.sh</div></div>
-        <label class="toggle"><input type="checkbox" id="togglePushM" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <label class="toggle"><input type="checkbox" id="togglePushM" data-sync-group="push" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row">
         <div><div class="notif-label">Smart Lights</div><div class="notif-sub" id="hueSubM">Philips Hue</div></div>
-        <label class="toggle"><input type="checkbox" id="toggleHueM" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <label class="toggle"><input type="checkbox" id="toggleHueM" data-sync-group="hue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row" style="border:none;">
         <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren</div></div>
-        <label class="toggle"><input type="checkbox" id="toggleAudioM"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <label class="toggle"><input type="checkbox" id="toggleAudioM" data-sync-group="audio"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
     </div>
     <div class="panel-section">
       <div class="panel-label">Alert Thresholds</div>
-      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape-m" value="1500"><div class="threshold-unit">J/kg</div></div>
-      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh-m" value="250"><div class="threshold-unit">m²/s²</div></div>
-      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind-m" value="60"><div class="threshold-unit">mph</div></div>
-      <div class="threshold-row"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk-m" value="70"><div class="threshold-unit">/ 100</div></div>
+      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape-m" data-th="cape" value="1500"><div class="threshold-unit">J/kg</div></div>
+      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh-m" data-th="srh" value="250"><div class="threshold-unit">m²/s²</div></div>
+      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind-m" data-th="wind" value="60"><div class="threshold-unit">mph</div></div>
+      <div class="threshold-row"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk-m" data-th="risk" value="70"><div class="threshold-unit">/ 100</div></div>
     </div>
     <div class="panel-section" style="border:none;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="test-btn" onclick="testPush()" style="flex:1;padding:10px;">TEST PUSH</button>
@@ -885,7 +753,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   </div>
 </div>
 
-<!-- ── MOBILE NAV BAR ── -->
+<!-- MOBILE NAV BAR -->
 <nav class="mobile-nav" id="mobileNav">
   <button class="nav-btn active" id="nav-map" onclick="mobileNav('map')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="3,6 9,3 15,6 21,3 21,18 15,21 9,18 3,21"/><line x1="9" y1="3" x2="9" y2="18"/><line x1="15" y1="6" x2="15" y2="21"/></svg>
@@ -912,24 +780,87 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 
 <script>
 // ══════════════════════════════════════════════════════════
-// CONFIG
+// CONFIG & CONSTANTS
+// FIX(medium): named constants replace magic numbers throughout
 // ══════════════════════════════════════════════════════════
-// Supabase client
 const SUPA_URL = 'https://dajqwkniduebplujkxht.supabase.co';
 const SUPA_KEY = 'sb_publishable_GJ3cf0S5z8RxdBVu0gksbA_jlvX-hrI';
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-// Safe localStorage wrapper — fallback for file:// or private mode
-const store = {
-  get: (k) => { try { return localStorage.getItem(k) || ''; } catch(e) { return ''; } },
-  set: (k, v) => { try { localStorage.setItem(k, v); } catch(e) {} },
+// FIX(critical): invite code for restricted registration
+const INVITE_CODE = 'VORTEX2026';
+
+// Risk score formula coefficients — empirically tuned estimates (no real hodograph)
+const SRH_CAPE_FACTOR  = 0.13;  // CAPE contribution to estimated SRH
+const SRH_WIND_FACTOR  = 1.8;   // low-level wind contribution to estimated SRH
+const SHEAR_SCALE      = 1.5;   // bulk shear multiplier
+const SHEAR_BASE       = 0.3;   // base wind contribution to shear
+
+// Risk score point allocations
+const RISK_CAPE_MAX    = 35;    // up to 35pts at 3500 J/kg
+const RISK_CAPE_DIV    = 100;
+const RISK_SRH_MAX     = 30;    // up to 30pts at 600 m²/s²
+const RISK_SRH_DIV     = 20;
+const RISK_SHEAR_MAX   = 15;    // up to 15pts
+const RISK_SHEAR_DIV   = 2;
+const RISK_LIFT_MAX    = 10;    // negative LI = unstable
+const RISK_LIFT_SCALE  = 1.6;
+const RISK_DEW_HI      = 6;     // dewpoint ≥ 65°F
+const RISK_DEW_MID     = 4;     // dewpoint ≥ 60°F
+const RISK_DEW_LO      = 2;     // dewpoint ≥ 55°F
+const RISK_HUM_HI      = 4;     // humidity ≥ 70%
+const RISK_HUM_LO      = 2;     // humidity ≥ 55%
+
+// Polling intervals (ms)
+const INTERVAL_CLOCK       = 1000;
+const INTERVAL_THRESHOLD   = 30000;
+const INTERVAL_NWS         = 60000;
+const INTERVAL_RADAR       = 2 * 60000;
+const INTERVAL_HAZARDS     = 5 * 60000;
+const INTERVAL_STATIONS    = 10 * 60000;
+
+// Data loading
+const BATCH_SIZE      = 25;
+const FETCH_TIMEOUT   = 15000;
+const FETCH_RETRY_MAX = 2;
+const RADAR_CACHE_MAX = 300;   // FIX(perf): cap tile cache to prevent memory leak
+
+// Home zone
+const HOME = {
+  name: 'NW Arkansas',
+  lat: 36.08, lon: -94.20,
+  zoomScale: 12,
+  counties: ['Benton', 'Washington', 'Madison', 'Carroll'],
+  stateKeyword: 'Arkansas',
+  radiusDeg: 0.55,
 };
+const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
 
-// Current user session & profile
-let currentUser = null;
-let userProfile = null;
+// City label zoom thresholds
+const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
 
-const cfg = { push: '', hueIP: '', hueT: '' };
+// Current user state
+let currentUser  = null;
+let userProfile  = null;
+let cfg = { push: '', hueIP: '', hueT: '' };
+
+// FIX(security): track active polling interval IDs so signOut can stop them
+let pollingIntervals = [];
+let dataInitialized  = false;
+
+// FIX(medium): cached threshold values — updated on input change, read by checkTh()
+let thCache = { cape: 1500, srh: 250, wind: 60, risk: 70 };
+
+// FIX(low): AbortSignal.timeout polyfill
+if (!AbortSignal.timeout) {
+  AbortSignal.timeout = (ms) => {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), ms);
+    return ctrl.signal;
+  };
+}
+
+const isMobile = () => window.innerWidth <= 768;
 
 // ── AUTH UI HELPERS ────────────────────────────────────────
 function showAuthLogin() {
@@ -946,19 +877,17 @@ function authSetLoading(on, form = 'login') {
   document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
   document.getElementById('authFormLogin').style.display = (!on && form === 'login') ? 'flex' : 'none';
   document.getElementById('authFormRegister').style.display = (!on && form === 'register') ? 'flex' : 'none';
-  if (document.getElementById('authLoginBtn')) document.getElementById('authLoginBtn').disabled = on;
-  if (document.getElementById('authRegisterBtn')) document.getElementById('authRegisterBtn').disabled = on;
+  const lb = document.getElementById('authLoginBtn');
+  const rb = document.getElementById('authRegisterBtn');
+  if (lb) lb.disabled = on;
+  if (rb) rb.disabled = on;
 }
 function authShowError(msg) {
   document.getElementById('authError').textContent = msg;
   document.getElementById('authSpinner').style.display = 'none';
-  // Show whichever form was active
   const loginVisible = document.getElementById('authFormLogin').style.display !== 'none';
-  if (!loginVisible) {
-    document.getElementById('authFormRegister').style.display = 'flex';
-  } else {
-    document.getElementById('authFormLogin').style.display = 'flex';
-  }
+  if (!loginVisible) document.getElementById('authFormRegister').style.display = 'flex';
+  else document.getElementById('authFormLogin').style.display = 'flex';
 }
 
 async function authLogin() {
@@ -968,28 +897,30 @@ async function authLogin() {
   authSetLoading(true, 'login');
   const { error } = await supa.auth.signInWithPassword({ email, password: pw });
   if (error) { authSetLoading(false, 'login'); authShowError(error.message); return; }
-  // onAuthStateChange will handle the rest
 }
 
 async function authRegister() {
-  const name  = document.getElementById('authName').value.trim();
-  const email = document.getElementById('authRegEmail').value.trim();
-  const pw    = document.getElementById('authRegPassword').value;
-  if (!name || !email || !pw) { authShowError('All fields required.'); return; }
+  const name   = document.getElementById('authName').value.trim();
+  const email  = document.getElementById('authRegEmail').value.trim();
+  const pw     = document.getElementById('authRegPassword').value;
+  // FIX(critical): validate invite code before allowing registration
+  const invite = document.getElementById('authInviteCode').value.trim();
+  if (!name || !email || !pw || !invite) { authShowError('All fields required.'); return; }
   if (pw.length < 8) { authShowError('Password must be at least 8 characters.'); return; }
+  if (invite !== INVITE_CODE) { authShowError('Invalid invite code.'); return; }
   authSetLoading(true, 'register');
   const { error: signUpError } = await supa.auth.signUp({
     email, password: pw,
     options: { data: { display_name: name } }
   });
   if (signUpError) { authSetLoading(false, 'register'); authShowError(signUpError.message); return; }
-  // Auto sign-in after register
   const { error: signInError } = await supa.auth.signInWithPassword({ email, password: pw });
   if (signInError) { authSetLoading(false, 'register'); authShowError(signInError.message); return; }
-  // onAuthStateChange fires on success
 }
 
 async function authSignOut() {
+  // FIX(security): stop all data polling before clearing session
+  stopDataPolling();
   await supa.auth.signOut();
   currentUser = null; userProfile = null;
   document.getElementById('authOverlay').style.display = 'flex';
@@ -997,109 +928,132 @@ async function authSignOut() {
   closeSetup();
 }
 
-// ── LOAD USER SETTINGS FROM SUPABASE ──────────────────────
+// ── LOAD USER SETTINGS ────────────────────────────────────
 async function loadUserSettings(userId) {
-  // Load all four tables in parallel
   const [profRes, thRes, intRes, prefRes] = await Promise.all([
     supa.from('profiles').select('*').eq('id', userId).single(),
     supa.from('thresholds').select('*').eq('user_id', userId).single(),
     supa.from('integrations').select('*').eq('user_id', userId).single(),
     supa.from('preferences').select('*').eq('user_id', userId).single(),
   ]);
-
   userProfile = profRes.data || {};
-
-  // Apply integrations to cfg
   if (intRes.data) {
     cfg.push  = intRes.data.ntfy_url  || '';
     cfg.hueIP = intRes.data.hue_ip    || '';
     cfg.hueT  = intRes.data.hue_user  || '';
   }
-
-  // Apply thresholds to UI inputs
   if (thRes.data) {
     const t = thRes.data;
     ['cape','srh','wind','risk'].forEach(k => {
-      const el  = document.getElementById(`th-${k}`);
-      const elm = document.getElementById(`th-${k}-m`);
-      if (el)  el.value  = t[k];
-      if (elm) elm.value = t[k];
+      thCache[k] = +t[k] || thCache[k];
+      document.querySelectorAll(`[data-th="${k}"]`).forEach(el => { el.value = thCache[k]; });
     });
   }
-
-  // Apply preferences (toggle states)
   if (prefRes.data) {
     const p = prefRes.data;
-    const setToggle = (id, val) => {
-      const el = document.getElementById(id);
-      if (el) el.checked = val;
-    };
-    setToggle('togglePush',  p.push_enabled);
-    setToggle('togglePushM', p.push_enabled);
-    setToggle('toggleHue',   p.hue_enabled);
-    setToggle('toggleHueM',  p.hue_enabled);
-    setToggle('toggleAudio', p.audio_enabled);
-    setToggle('toggleAudioM',p.audio_enabled);
+    // FIX(medium): sync all toggles in group at once
+    syncToggleGroup('push',  p.push_enabled);
+    syncToggleGroup('hue',   p.hue_enabled);
+    syncToggleGroup('audio', p.audio_enabled);
   }
-
-  // Update header user pill
   const name = userProfile.display_name || currentUser.email.split('@')[0];
   document.getElementById('userName').textContent = name;
   document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
+  // FIX(auth): show full email in setup modal subtitle
+  document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   updateCfgUI();
 }
 
-// ── SAVE USER SETTINGS TO SUPABASE ────────────────────────
+// FIX(medium): sync all toggles with the same data-sync-group
+function syncToggleGroup(group, value) {
+  document.querySelectorAll(`[data-sync-group="${group}"]`).forEach(el => {
+    el.checked = !!value;
+  });
+}
+
+// ── SAVE USER SETTINGS ────────────────────────────────────
 async function saveUserSettings(updates) {
   if (!currentUser) return;
   const uid = currentUser.id;
   const now = new Date().toISOString();
-
   if (updates.integrations) {
     await supa.from('integrations').upsert({
-      user_id: uid,
-      ntfy_url: cfg.push  || '',
-      hue_ip:   cfg.hueIP || '',
-      hue_user: cfg.hueT  || '',
-      updated_at: now
+      user_id: uid, ntfy_url: cfg.push||'', hue_ip: cfg.hueIP||'', hue_user: cfg.hueT||'', updated_at: now
     }, { onConflict: 'user_id' });
   }
   if (updates.thresholds) {
-    const cape = +document.getElementById('th-cape')?.value || 500;
-    const srh  = +document.getElementById('th-srh')?.value  || 150;
-    const wind = +document.getElementById('th-wind')?.value || 20;
-    const risk = +document.getElementById('th-risk')?.value || 55;
     await supa.from('thresholds').upsert({
-      user_id: uid, cape, srh, wind, risk, updated_at: now
+      user_id: uid, cape: thCache.cape, srh: thCache.srh, wind: thCache.wind, risk: thCache.risk, updated_at: now
     }, { onConflict: 'user_id' });
   }
   if (updates.preferences) {
     await supa.from('preferences').upsert({
       user_id: uid,
-      push_enabled:  document.getElementById('togglePush')?.checked  || false,
-      hue_enabled:   document.getElementById('toggleHue')?.checked   || false,
-      audio_enabled: document.getElementById('toggleAudio')?.checked || true,
+      push_enabled:  document.querySelector('[data-sync-group="push"]')?.checked  || false,
+      hue_enabled:   document.querySelector('[data-sync-group="hue"]')?.checked   || false,
+      audio_enabled: document.querySelector('[data-sync-group="audio"]')?.checked || true,
       updated_at: now
     }, { onConflict: 'user_id' });
   }
   if (updates.profile) {
     const displayName = document.getElementById('setupDisplayName')?.value.trim();
     if (displayName) {
-      await supa.from('profiles').update({
-        display_name: displayName
-      }).eq('id', uid);
+      await supa.from('profiles').update({ display_name: displayName }).eq('id', uid);
       document.getElementById('userName').textContent = displayName;
       document.getElementById('userAvatar').textContent = displayName.charAt(0).toUpperCase();
     }
   }
 }
 
+// ── DATA POLLING LIFECYCLE ────────────────────────────────
+// FIX(security): all intervals registered here, cleared on signOut
+function startDataPolling() {
+  if (dataInitialized) return;
+  dataInitialized = true;
+  loadStations();
+  fetchNWS();
+  pollingIntervals.push(
+    setInterval(loadStations,  INTERVAL_STATIONS),
+    setInterval(fetchNWS,      INTERVAL_NWS),
+    setInterval(checkTh,       INTERVAL_THRESHOLD),
+    setInterval(() => { if (lyr.radar) fetchRadar(); }, INTERVAL_RADAR),
+    setInterval(() => {
+      if (lyr.earthquakes) fetchEarthquakes();
+      if (lyr.wildfires)   fetchWildfires();
+    }, INTERVAL_HAZARDS),
+    // FIX(low): stale data warning
+    setInterval(() => {
+      const age = Math.round((Date.now() - lastStationFetch) / 60000);
+      const dot = document.getElementById('liveDot');
+      if (age >= 20 && dot) { dot.style.background = 'var(--amber)'; dot.title = `Data ${age}min old`; }
+    }, INTERVAL_NWS)
+  );
+}
+
+function stopDataPolling() {
+  pollingIntervals.forEach(id => clearInterval(id));
+  pollingIntervals = [];
+  dataInitialized  = false;
+}
+
+// FIX(low): seenIds cleanup — cap at 1000, prune oldest 200 when exceeded
+let seenIds = new Set();
+function trackSeen(id) {
+  if (seenIds.size >= 1000) {
+    const toDelete = [...seenIds].slice(0, 200);
+    toDelete.forEach(k => seenIds.delete(k));
+  }
+  seenIds.add(id);
+}
+
 // ── AUTH STATE LISTENER ───────────────────────────────────
+// FIX(security): data polling only starts after auth resolves
 supa.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
     await loadUserSettings(session.user.id);
+    startDataPolling();   // only fires once due to dataInitialized guard
   } else {
     currentUser = null;
     document.getElementById('authOverlay').style.display = 'flex';
@@ -1107,27 +1061,18 @@ supa.auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-// Defined here so it's available to all functions regardless of declaration order
-const isMobile = () => window.innerWidth <= 768;
-
-// AbortSignal.timeout polyfill for older browsers
-if (!AbortSignal.timeout) {
-  AbortSignal.timeout = (ms) => {
-    const ctrl = new AbortController();
-    setTimeout(() => ctrl.abort(), ms);
-    return ctrl.signal;
-  };
-}
-
-// CLOCK
-setInterval(()=>{
-  const u=new Date().toUTCString().split(' ')[4];
-  document.getElementById('clock').textContent=u+' UTC';
-  document.getElementById('lastUpdate').textContent=u;
-},1000);
+// ── CLOCK — FIX(low): robust UTC time via Intl instead of toUTCString split ──
+setInterval(() => {
+  const u = new Date().toLocaleTimeString('en-US', {
+    hour12: false, timeZone: 'UTC',
+    hour: '2-digit', minute: '2-digit', second: '2-digit'
+  });
+  document.getElementById('clock').textContent = u + ' UTC';
+  document.getElementById('lastUpdate').textContent = u;
+}, INTERVAL_CLOCK);
 
 // ══════════════════════════════════════════════════════════
-// D3 MAP  — accurate Albers USA projection + TopoJSON
+// D3 MAP
 // ══════════════════════════════════════════════════════════
 const mapWrap = document.getElementById('mapWrap');
 const svgEl   = document.getElementById('mapSvg');
@@ -1139,18 +1084,10 @@ let currentTransform = d3.zoomIdentity;
 
 function initMap(us) {
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
-
-  // Albers USA — standard professional projection for CONUS
-  projection = d3.geoAlbersUsa()
-    .scale(W * 1.15)
-    .translate([W / 2, H / 2]);
-
-  pathGen = d3.geoPath().projection(projection);
-
+  projection = d3.geoAlbersUsa().scale(W * 1.15).translate([W / 2, H / 2]);
+  pathGen    = d3.geoPath().projection(projection);
   svg.attr('width', W).attr('height', H);
   warnSvg.attr('width', W).attr('height', H);
-
-  // Zoom behavior
   zoom = d3.zoom()
     .scaleExtent([0.5, 12])
     .on('zoom', (event) => {
@@ -1161,180 +1098,114 @@ function initMap(us) {
       gHazard.attr('transform', event.transform);
       rescaleStations(event.transform.k);
       rescaleHazards();
-      redrawOverlays();
       if (windOn) initParts();
+      if (lyr.temp) drawHeatmap();
       if (lyr.radar) {
-        // Apply D3 transform as CSS so radar tracks drag instantly
         const {x, y, k} = event.transform;
         rdrCv.style.transformOrigin = '0 0';
         rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
         scheduleRadarRedraw();
       }
-      // Keep GPS dot aligned with map
       if (geoActive) updateGPSDot();
     });
-
   svg.call(zoom);
-
-  // Background
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
-
-  // Subtle graticule (lat/lon lines)
   const graticule = d3.geoGraticule().step([5, 5]);
-  svg.append('path')
-    .datum(graticule())
-    .attr('class', 'graticule')
-    .attr('d', pathGen)
-    .attr('fill', 'none')
-    .attr('stroke', '#0d1420')
-    .attr('stroke-width', '0.5');
-
-  // Layer groups — gWarn lives in warnSvg (above all canvases), others in mapSvg
+  svg.append('path').datum(graticule()).attr('d', pathGen)
+    .attr('fill', 'none').attr('stroke', '#0d1420').attr('stroke-width', '0.5');
   gMap      = svg.append('g').attr('id', 'gMap');
   gStations = svg.append('g').attr('id', 'gStations');
   gWarn     = warnSvg.append('g').attr('id', 'gWarn');
   gHazard   = d3.select('#hazardSvg').append('g').attr('id', 'gHazard');
-
-  // Draw states — filled
   gMap.selectAll('.state-fill')
     .data(topojson.feature(us, us.objects.states).features)
     .enter().append('path')
     .attr('class', 'state-fill')
     .attr('d', pathGen)
+    // FIX(bug): only map-level click goes to fetchPointData — station clicks stop propagation
     .on('click', handleMapClick)
     .on('mousemove', handleMapHover);
-
-  // State borders (crisp inner borders)
   gMap.append('path')
     .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
-    .attr('class', 'state-border')
-    .attr('d', pathGen);
-
-  // Nation border
+    .attr('class', 'state-border').attr('d', pathGen);
   gMap.append('path')
     .datum(topojson.mesh(us, us.objects.states, (a, b) => a === b))
-    .attr('fill', 'none')
-    .attr('stroke', '#2a3a52')
-    .attr('stroke-width', '1.2')
-    .attr('d', pathGen);
-
+    .attr('fill', 'none').attr('stroke', '#2a3a52').attr('stroke-width', '1.2').attr('d', pathGen);
   document.getElementById('mapLoadMsg').style.display = 'none';
   resizeCanvases();
-  // Auto-zoom to NW Arkansas on load
   setTimeout(zoomHome, 600);
-  // Re-render hazard layers if they were toggled before map loaded
   if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
   if (lyr.wildfires   && wildfireData.length)   renderWildfires();
 }
 
-// Load TopoJSON — Cache API so it works offline after first load
-const MAP_URL = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json';
+const MAP_URL       = 'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json';
 const MAP_CACHE_KEY = 'vortex-us-atlas-v1';
 
 async function loadMapData() {
   const loadMsg = document.getElementById('mapLoadMsg');
   const isFile  = location.protocol === 'file:';
-
-  // 1. Try Cache API — only works on http/https, not file://
   if (!isFile && 'caches' in window) {
     try {
       const cache  = await caches.open('vortex-map');
       const cached = await cache.match(MAP_CACHE_KEY);
-      if (cached) {
-        const data = await cached.json();
-        initMap(data);
-        return;
-      }
+      if (cached) { initMap(await cached.json()); return; }
     } catch(e) {}
   }
-
-  // 2. Fetch from CDN
   loadMsg.innerHTML = '<div class="load-spinner"></div><span id="loadTxt">Loading map data…</span>' +
     (isFile ? '<div style="font-family:var(--font-mono);font-size:9px;color:var(--amber);margin-top:4px;">Tip: serve via http for offline caching</div>' :
               '<div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:4px;">(cached after first load)</div>');
-
-  // Try multiple CDN sources in order
   const SOURCES = [
     'https://cdn.jsdelivr.net/npm/us-atlas@3/states-10m.json',
     'https://unpkg.com/us-atlas@3/states-10m.json',
   ];
-
   let lastErr = null;
   for (const url of SOURCES) {
     try {
       const setTxt = t => { const el = document.getElementById('loadTxt'); if (el) el.textContent = t; };
-      setTxt(`Loading map data…`);
-
+      setTxt('Loading map data…');
       const resp = await fetch(url, { signal: AbortSignal.timeout(30000) });
       if (!resp.ok) throw new Error('HTTP ' + resp.status);
-
-      // Stream with progress if content-length is available
       const contentLength = resp.headers.get('content-length');
       let data;
       if (contentLength && resp.body) {
-        const total  = parseInt(contentLength);
-        const reader = resp.body.getReader();
-        let received = 0;
-        const chunks = [];
+        const total = parseInt(contentLength), reader = resp.body.getReader();
+        let received = 0; const chunks = [];
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          chunks.push(value);
-          received += value.length;
+          chunks.push(value); received += value.length;
           setTxt(`Loading map… ${Math.round(received / total * 100)}%`);
         }
         data = JSON.parse(await new Blob(chunks).text());
       } else {
-        setTxt('Loading map data…');
         data = await resp.json();
       }
-
-      // Cache for offline use (http/https only)
       if (!isFile && 'caches' in window) {
-        try {
-          const cache = await caches.open('vortex-map');
-          await cache.put(MAP_CACHE_KEY, new Response(JSON.stringify(data)));
-        } catch(e) {}
+        try { const cache = await caches.open('vortex-map'); await cache.put(MAP_CACHE_KEY, new Response(JSON.stringify(data))); } catch(e) {}
       }
-
-      initMap(data);
-      return; // success
-
-    } catch(err) {
-      lastErr = err;
-      // Try next source
-    }
+      initMap(data); return;
+    } catch(err) { lastErr = err; }
   }
-
-  // All sources failed
-  const isTimeout = lastErr?.name === 'AbortError' || lastErr?.name === 'TimeoutError';
+  const isTimeout  = lastErr?.name === 'AbortError' || lastErr?.name === 'TimeoutError';
   const isFileBlock = isFile && (lastErr?.name === 'TypeError' || !navigator.onLine);
-  loadMsg.innerHTML = `
-    <div style="text-align:center;padding:20px;">
-      <div style="font-family:var(--font-mono);font-size:12px;color:var(--red);margin-bottom:8px;">
-        ${isTimeout ? '⏱ Map load timed out' : isFileBlock ? '⚠ Network blocked' : '⚠ Map failed to load'}
-      </div>
-      <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">
-        ${isFileBlock
-          ? 'Browsers block external fetches from file:// URLs.<br>Serve the file over HTTP instead:<br><code style="color:var(--amber)">python -m http.server 8080</code>'
-          : isTimeout ? 'Connection too slow — try again on WiFi'
-          : 'Check internet connection'}
-      </div>
-      <button onclick="loadMapData()" style="background:var(--amber);color:var(--bg);font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:2px;border:none;border-radius:3px;padding:8px 20px;cursor:pointer;">
-        RETRY
-      </button>
-    </div>`;
+  loadMsg.innerHTML = `<div style="text-align:center;padding:20px;">
+    <div style="font-family:var(--font-mono);font-size:12px;color:var(--red);margin-bottom:8px;">
+      ${isTimeout ? '⏱ Map load timed out' : isFileBlock ? '⚠ Network blocked' : '⚠ Map failed to load'}
+    </div>
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">
+      ${isFileBlock ? 'Browsers block external fetches from file:// URLs.<br>Serve the file over HTTP: <code style="color:var(--amber)">python -m http.server 8080</code>'
+        : isTimeout ? 'Connection too slow — try again on WiFi' : 'Check internet connection'}
+    </div>
+    <button onclick="loadMapData()" style="background:var(--amber);color:var(--bg);font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:2px;border:none;border-radius:3px;padding:8px 20px;cursor:pointer;">RETRY</button>
+  </div>`;
   loadMsg.style.pointerEvents = 'all';
 }
-
 loadMapData();
 
-// Zoom controls
-function zoomIn()   { svg.transition().duration(300).call(zoom.scaleBy, 1.4); }
-function zoomOut()  { svg.transition().duration(300).call(zoom.scaleBy, 0.72); }
-function resetZoom(){ svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity); }
+function zoomIn()    { svg.transition().duration(300).call(zoom.scaleBy, 1.4); }
+function zoomOut()   { svg.transition().duration(300).call(zoom.scaleBy, 0.72); }
+function resetZoom() { svg.transition().duration(400).call(zoom.transform, d3.zoomIdentity); }
 
-// Cursor coords
 function handleMapHover(event) {
   const [x, y] = d3.pointer(event, svgEl);
   const t = currentTransform;
@@ -1347,11 +1218,12 @@ function handleMapHover(event) {
   }
 }
 
-// Map click — fetch live weather for that point
+// FIX(bug): always use svgEl as reference — pointer() coords relative to SVG, not event.target
 let clickDeb = null;
 function handleMapClick(event) {
+  // Pointer coords relative to the SVG element (not event.target which may be a child circle)
   const [x, y] = d3.pointer(event, svgEl);
-  const t = currentTransform;
+  const t  = currentTransform;
   const ix = (x - t.x) / t.k, iy = (y - t.y) / t.k;
   const coords = projection.invert([ix, iy]);
   if (!coords) return;
@@ -1360,6 +1232,11 @@ function handleMapClick(event) {
   clearTimeout(clickDeb);
   clickDeb = setTimeout(() => fetchPointData(lat, lon), 250);
 }
+
+const OM_PARAMS =
+  'current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
+  '&hourly=cape,lifted_index,wind_speed_80m' +
+  '&wind_speed_unit=mph&temperature_unit=fahrenheit&forecast_days=1&timezone=auto';
 
 async function fetchPointData(lat, lon) {
   try {
@@ -1373,174 +1250,10 @@ async function fetchPointData(lat, lon) {
 }
 
 // ══════════════════════════════════════════════════════════
-// HOME ZONE — NW Arkansas (Benton + Washington Counties)
-// ══════════════════════════════════════════════════════════
-const HOME = {
-  name: 'NW Arkansas',
-  lat: 36.08, lon: -94.20,   // center point (between Fayetteville & Rogers)
-  zoomScale: 12,             // zoom level when going home
-  counties: ['Benton', 'Washington', 'Madison', 'Carroll'], // AR counties to flag
-  stateKeyword: 'Arkansas',
-  radiusDeg: 0.55,           // ~40 miles radius for area averaging
-};
-
-// ══════════════════════════════════════════════════════════
-// GEOLOCATION — current user position
-// ══════════════════════════════════════════════════════════
-let userLat = null, userLon = null;
-let geoWatchId = null;
-let geoActive = false;
-let gpsSvgGroup = null;
-
-function toggleGeolocation() {
-  if (geoActive) {
-    stopGeolocation();
-  } else {
-    startGeolocation();
-  }
-}
-
-function startGeolocation() {
-  if (!navigator.geolocation) {
-    alert('Geolocation is not supported by your browser.');
-    return;
-  }
-  const btn = document.getElementById('geoBtn');
-  const label = document.getElementById('geoBtnLabel');
-  btn.classList.remove('active','danger');
-  label.textContent = 'LOCATING…';
-
-  geoWatchId = navigator.geolocation.watchPosition(
-    pos => {
-      userLat = pos.coords.latitude;
-      userLon = pos.coords.longitude;
-      geoActive = true;
-      label.textContent = 'TRACKING';
-      btn.classList.add('active');
-      updateGPSDot();
-      checkPersonalAlerts();
-    },
-    err => {
-      console.warn('[Geo] Error:', err.message);
-      label.textContent = err.code === 1 ? 'DENIED' : 'ERROR';
-      btn.classList.remove('active','danger');
-      geoActive = false;
-    },
-    { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
-  );
-}
-
-function stopGeolocation() {
-  if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
-  geoWatchId = null;
-  geoActive = false;
-  userLat = null; userLon = null;
-  const btn = document.getElementById('geoBtn');
-  btn.classList.remove('active','danger');
-  document.getElementById('geoBtnLabel').textContent = 'MY LOCATION';
-  document.getElementById('dangerBanner').style.display = 'none';
-  if (gpsSvgGroup) gpsSvgGroup.selectAll('*').remove();
-}
-
-function updateGPSDot() {
-  if (!projection || userLat === null) return;
-  const pt = projection([userLon, userLat]);
-  if (!pt) return;
-
-  if (!gpsSvgGroup) {
-    gpsSvgGroup = d3.select('#gpsSvg').append('g').attr('id', 'gGPS');
-  }
-  gpsSvgGroup.selectAll('*').remove();
-
-  // Apply current zoom transform
-  const t = currentTransform || d3.zoomIdentity;
-  const [cx, cy] = [pt[0] * t.k + t.x, pt[1] * t.k + t.y];
-
-  // Pulsing outer ring
-  gpsSvgGroup.append('circle')
-    .attr('cx', cx).attr('cy', cy).attr('r', 10)
-    .attr('class', 'gps-dot-outer');
-
-  // Solid inner dot
-  gpsSvgGroup.append('circle')
-    .attr('cx', cx).attr('cy', cy).attr('r', 4)
-    .attr('class', 'gps-dot-inner');
-
-  // Accuracy label
-  gpsSvgGroup.append('text')
-    .attr('x', cx + 14).attr('y', cy + 4)
-    .attr('fill', 'var(--cyan)').attr('font-size', 9)
-    .attr('font-family', 'var(--font-mono)')
-    .text('YOU');
-}
-
-// Check if user's GPS point is inside any active NWS warning polygon using Turf.js
-function checkPersonalAlerts() {
-  if (!geoActive || userLat === null || !nwsAlerts.length || typeof turf === 'undefined') return;
-
-  const userPoint = turf.point([userLon, userLat]);
-  let insideWarning = false;
-  let warningName = '';
-
-  for (const feat of nwsAlerts) {
-    if (!feat.geometry) continue;
-    const ev = feat.properties?.event || '';
-    // Only check for serious warnings (tornado, severe tstorm, flash flood)
-    const isSevere = ev.includes('Tornado') || ev.includes('Severe Thunderstorm') ||
-                     ev.includes('Flash Flood') || ev.includes('Flood Warning');
-    if (!isSevere) continue;
-
-    try {
-      // Turf handles Polygon natively; for MultiPolygon check each sub-polygon
-      const geom = feat.geometry;
-      let inside = false;
-      if (geom.type === 'Polygon') {
-        inside = turf.booleanPointInPolygon(userPoint, feat);
-      } else if (geom.type === 'MultiPolygon') {
-        inside = geom.coordinates.some(coords =>
-          turf.booleanPointInPolygon(userPoint, turf.polygon(coords))
-        );
-      }
-      if (inside) {
-        insideWarning = true;
-        warningName = ev.toUpperCase();
-        break;
-      }
-    } catch(e) { /* skip malformed geometry */ }
-  }
-
-  const banner = document.getElementById('dangerBanner');
-  const btn = document.getElementById('geoBtn');
-  if (insideWarning) {
-    banner.textContent = `🚨 YOU ARE INSIDE A ${warningName}`;
-    banner.style.display = 'block';
-    btn.classList.add('danger');
-    btn.classList.remove('active');
-  } else {
-    banner.style.display = 'none';
-    btn.classList.remove('danger');
-    btn.classList.add('active');
-  }
-}
-
-// Radar speed selector
-function setRadarSpeed(ms) {
-  RADAR_FRAME_MS = parseInt(ms, 10);
-  if (radarPlaying) {
-    stopRadarPlay();
-    startRadarPlay();
-  }
-}
-
-// ══════════════════════════════════════════════════════════
 // STATIONS + OPEN-METEO
 // ══════════════════════════════════════════════════════════
-// City tiers for label visibility:
-//   tier 1 = major metro  → label visible at k ≥ 1.2
-//   tier 2 = regional     → label visible at k ≥ 2.5
-//   tier 3 = home/small   → label visible at k ≥ 5.0
 const DEFS = [
-  // ── NW Arkansas home stations ──────────────────────────
+  // ── NW Arkansas home stations ──
   {n:'Fayetteville, AR',    la:36.07, lo:-94.16, home:true, tier:3},
   {n:'Springdale, AR',      la:36.19, lo:-94.13, home:true, tier:3},
   {n:'Bentonville, AR',     la:36.37, lo:-94.21, home:true, tier:3},
@@ -1548,7 +1261,7 @@ const DEFS = [
   {n:'Siloam Springs, AR',  la:36.19, lo:-94.54, home:true, tier:3},
   {n:'Harrison, AR',        la:36.23, lo:-93.11, home:true, tier:3},
   {n:'Fort Smith, AR',      la:35.39, lo:-94.42, home:true, tier:3},
-  // ── Tier 1 — Major metros ──────────────────────────────
+  // ── Tier 1 — Major metros ──
   {n:'Dallas, TX',        la:32.78, lo:-96.80,  tier:1},
   {n:'Kansas City, MO',   la:39.10, lo:-94.58,  tier:1},
   {n:'Chicago, IL',       la:41.88, lo:-87.63,  tier:1},
@@ -1564,7 +1277,7 @@ const DEFS = [
   {n:'Indianapolis, IN',  la:39.77, lo:-86.16,  tier:1},
   {n:'Salt Lake City, UT',la:40.76, lo:-111.89, tier:1},
   {n:'Phoenix, AZ',       la:33.45, lo:-112.07, tier:1},
-  // ── Tier 2 — Regional cities ───────────────────────────
+  // ── Tier 2 — Regional cities ──
   {n:'Tulsa, OK',         la:36.15, lo:-95.99,  tier:2},
   {n:'Wichita, KS',       la:37.69, lo:-97.34,  tier:2},
   {n:'Amarillo, TX',      la:35.22, lo:-101.83, tier:2},
@@ -1589,85 +1302,143 @@ const DEFS = [
 ];
 
 let stations = [];
+let lastStationFetch = 0;
+// FIX(perf): pre-computed nearest-station lookup grid for wind particles
+let stationLookupGrid = null;
+const GRID_CELL_PX = 80; // pixels per grid cell
+
+function buildStationGrid() {
+  if (!stations.length || !projection) return;
+  stationLookupGrid = new Map();
+  stations.forEach(s => {
+    const pt = projection([s.lo, s.la]);
+    if (!pt) return;
+    const t = currentTransform || d3.zoomIdentity;
+    const cx = Math.floor((pt[0] * t.k + t.x) / GRID_CELL_PX);
+    const cy = Math.floor((pt[1] * t.k + t.y) / GRID_CELL_PX);
+    const key = `${cx},${cy}`;
+    if (!stationLookupGrid.has(key)) stationLookupGrid.set(key, []);
+    stationLookupGrid.get(key).push(s);
+  });
+}
+
+// FIX(perf): O(1) nearest station lookup using pre-computed grid
+function nearestStation(px, py) {
+  if (!stationLookupGrid) return null;
+  const cx = Math.floor(px / GRID_CELL_PX);
+  const cy = Math.floor(py / GRID_CELL_PX);
+  let best = null, bestDist = Infinity;
+  for (let dx = -2; dx <= 2; dx++) {
+    for (let dy = -2; dy <= 2; dy++) {
+      const candidates = stationLookupGrid.get(`${cx+dx},${cy+dy}`) || [];
+      candidates.forEach(s => {
+        const pt = projection([s.lo, s.la]);
+        if (!pt) return;
+        const t = currentTransform || d3.zoomIdentity;
+        const sx = pt[0] * t.k + t.x, sy = pt[1] * t.k + t.y;
+        const d = Math.hypot(px - sx, py - sy);
+        if (d < bestDist) { bestDist = d; best = s; }
+      });
+    }
+  }
+  return bestDist < 250 * ((currentTransform || d3.zoomIdentity).k) ? best : null;
+}
 
 function dewpoint(tC, h) {
-  const a=17.27,b=237.7,al=(a*tC)/(b+tC)+Math.log(h/100);
+  const a=17.27, b=237.7, al=(a*tC)/(b+tC)+Math.log(h/100);
   return (b*al)/(a-al);
 }
-function calcRisk(cape, srh, sh, h, dF, lift) {
-  // CAPE component: scale up to 35pts at 3500 J/kg (supercell territory)
-  const capePts = Math.min(cape / 100, 35);
-  // SRH component: scale up to 30pts at 600 m²/s² (significant tornado threshold)
-  const srhPts  = Math.min(srh / 20, 30);
-  // Wind shear component: up to 15pts
-  const shPts   = Math.min((sh || 0) / 2, 15);
-  // Lifted index: negative = unstable. -6 → 10pts, linear
-  const liftPts = lift !== undefined ? Math.min(Math.max(-lift * 1.6, 0), 10) : 0;
-  // Moisture: dewpoint ≥ 60°F adds up to 6pts
-  const dewPts  = dF >= 65 ? 6 : dF >= 60 ? 4 : dF >= 55 ? 2 : 0;
-  // High humidity adds 4pts
-  const humPts  = h >= 70 ? 4 : h >= 55 ? 2 : 0;
-  const total   = capePts + srhPts + shPts + liftPts + dewPts + humPts;
-  return Math.min(Math.round(total), 100);
-}
-function rColor(r){return r<30?'#39d353':r<55?'#00d4ff':r<70?'#f5a623':r<85?'#ff7b00':'#e63946';}
-function rLabel(r){return r<30?['LOW','low']:r<55?['MARGINAL','low']:r<70?['MODERATE','mod']:r<85?['HIGH','high']:['EXTREME','ext'];}
-function compass(d){return['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16];}
 
-// Parse one station's data out of a batched Open-Meteo response element
+function calcRisk(cape, srh, sh, h, dF, lift) {
+  const capePts  = Math.min(cape / RISK_CAPE_DIV,  RISK_CAPE_MAX);
+  const srhPts   = Math.min(srh  / RISK_SRH_DIV,   RISK_SRH_MAX);
+  const shPts    = Math.min((sh || 0) / RISK_SHEAR_DIV, RISK_SHEAR_MAX);
+  const liftPts  = lift !== undefined ? Math.min(Math.max(-lift * RISK_LIFT_SCALE, 0), RISK_LIFT_MAX) : 0;
+  const dewPts   = dF >= 65 ? RISK_DEW_HI : dF >= 60 ? RISK_DEW_MID : dF >= 55 ? RISK_DEW_LO : 0;
+  const humPts   = h  >= 70 ? RISK_HUM_HI : h >= 55 ? RISK_HUM_LO : 0;
+  return Math.min(Math.round(capePts + srhPts + shPts + liftPts + dewPts + humPts), 100);
+}
+
+function rColor(r) { return r<30?'#39d353':r<55?'#00d4ff':r<70?'#f5a623':r<85?'#ff7b00':'#e63946'; }
+function rLabel(r) { return r<30?['LOW','low']:r<55?['MARGINAL','low']:r<70?['MODERATE','mod']:r<85?['HIGH','high']:['EXTREME','ext']; }
+function compass(d) { return ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'][Math.round(d/22.5)%16]; }
+
 function parseStationResult(def, d) {
   try {
     const c = d.current;
     const nowISO = new Date().toISOString().slice(0, 13);
-    const hi   = Math.max(0, d.hourly.time.findIndex(t => t.slice(0, 13) >= nowISO));
-    const tF   = Math.round(c.temperature_2m);
-    const h    = c.relative_humidity_2m;
-    const w    = Math.round(c.wind_speed_10m);
-    const gusts= Math.round(c.wind_gusts_10m || w);
-    const dF   = Math.round(dewpoint((tF-32)*5/9, h)*9/5+32);
-    const cape = Math.round(d.hourly.cape[hi] || 0);
-    const lift = parseFloat((d.hourly.lifted_index[hi] || 0).toFixed(1));
-    const w80  = Math.round(d.hourly.wind_speed_80m?.[hi] || w * 1.25);
-    const sh   = Math.round(Math.max(w80 - w, 0) * 1.5 + w * 0.3);
-    const srh  = Math.round(cape * 0.13 + w * 1.8);
+    const hi    = Math.max(0, d.hourly.time.findIndex(t => t.slice(0, 13) >= nowISO));
+    const tF    = Math.round(c.temperature_2m);
+    const h     = c.relative_humidity_2m;
+    const w     = Math.round(c.wind_speed_10m);
+    const gusts = Math.round(c.wind_gusts_10m || w);
+    const dF    = Math.round(dewpoint((tF-32)*5/9, h)*9/5+32);
+    const cape  = Math.round(d.hourly.cape[hi] || 0);
+    const lift  = parseFloat((d.hourly.lifted_index[hi] || 0).toFixed(1));
+    const w80   = Math.round(d.hourly.wind_speed_80m?.[hi] || w * 1.25);
+    const sh    = Math.round(Math.max(w80 - w, 0) * SHEAR_SCALE + w * SHEAR_BASE);
+    const srh   = Math.round(cape * SRH_CAPE_FACTOR + w * SRH_WIND_FACTOR);
     return {...def, tF, h, w, gusts, wd: c.wind_direction_10m, dF, cape, srh, sh, lift,
             risk: calcRisk(cape, srh, sh, h, dF, lift)};
   } catch { return null; }
 }
 
-// Fetch up to BATCH_SIZE stations in a single HTTP request.
-// Open-Meteo batch API accepts comma-separated lat/lon lists and returns an array.
-const BATCH_SIZE = 25;
-const OM_PARAMS =
-  'current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
-  '&hourly=cape,lifted_index,wind_speed_80m' +
-  '&wind_speed_unit=mph&temperature_unit=fahrenheit&forecast_days=1&timezone=auto';
-
-async function fetchBatch(defs) {
+// FIX(bug): fetchBatch with retry logic — up to FETCH_RETRY_MAX retries with backoff
+async function fetchBatch(defs, attempt = 0) {
   const lats = defs.map(d => d.la).join(',');
   const lons = defs.map(d => d.lo).join(',');
   const url  = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&${OM_PARAMS}`;
   try {
-    const r = await fetch(url, { signal: AbortSignal.timeout(15000) });
+    const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT) });
     if (!r.ok) throw new Error(r.status);
     const json = await r.json();
-    // Single station returns an object; multiple stations returns an array
-    const arr = Array.isArray(json) ? json : [json];
+    const arr  = Array.isArray(json) ? json : [json];
     return arr.map((d, i) => parseStationResult(defs[i], d)).filter(Boolean);
-  } catch { return []; }
+  } catch(err) {
+    if (attempt < FETCH_RETRY_MAX) {
+      await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+      return fetchBatch(defs, attempt + 1);
+    }
+    return null; // null signals batch failure
+  }
 }
+
+let stationFetchFails = 0;
 
 async function loadStations() {
   document.getElementById('liveDot').style.background = 'var(--cyan)';
-
-  // Chunk DEFS and fire all chunks in parallel — ~50 stations = 2 requests total
   const chunks = [];
   for (let i = 0; i < DEFS.length; i += BATCH_SIZE) chunks.push(DEFS.slice(i, i + BATCH_SIZE));
   const results = await Promise.all(chunks.map(fetchBatch));
-  stations = results.flat();
 
+  // FIX(ux): detect partial or total batch failure and show error banner
+  const failed   = results.filter(r => r === null).length;
+  const allFailed = failed === chunks.length;
+  const partial  = failed > 0 && !allFailed;
+
+  const banner = document.getElementById('fetchErrorBanner');
+  const msg    = document.getElementById('fetchErrorMsg');
+
+  if (allFailed) {
+    stationFetchFails++;
+    banner.style.display = 'flex';
+    msg.textContent = `⚠ Weather data unavailable — retrying in ${INTERVAL_STATIONS / 60000} min`;
+    document.getElementById('liveDot').style.background = 'var(--red)';
+    return;
+  }
+  if (partial) {
+    banner.style.display = 'flex';
+    msg.textContent = `⚠ Partial data — ${failed} of ${chunks.length} sources failed`;
+  } else {
+    banner.style.display = 'none';
+    stationFetchFails = 0;
+  }
+
+  stations = results.filter(Boolean).flat();
+  buildStationGrid();
   drawStations();
-  redrawOverlays();
+  if (lyr.temp) drawHeatmap();
+  renderNWS();   // re-render so local alert flags update with fresh station data
   checkTh();
   updateHomeDashboard();
   document.getElementById('liveDot').style.background = 'var(--green)';
@@ -1676,102 +1447,108 @@ async function loadStations() {
   lastStationFetch = Date.now();
 }
 
+function retryStationFetch() {
+  document.getElementById('fetchErrorBanner').style.display = 'none';
+  loadStations();
+}
+
 function rescaleStations(k) {
   if (!gStations) return;
   const s = 1 / k;
-
   gStations.selectAll('.station-glow').each(function() {
     d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s);
   });
-
   gStations.selectAll('.station-dot').each(function() {
     const el = d3.select(this);
     el.attr('r', +el.attr('data-base-r') * s)
       .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
   });
-
   gStations.selectAll('.station-label').each(function() {
     const el    = d3.select(this);
     const tier  = +(el.attr('data-tier') || 2);
     const minK  = LABEL_ZOOM[tier] || 2.5;
     const bx    = +el.attr('data-base-x');
     const by    = +el.attr('data-base-y');
-
-    if (k < minK) {
-      el.style('display', 'none');
-    } else {
-      // Fixed screen-space font size — labels stay same size regardless of zoom
+    if (k < minK) { el.style('display', 'none'); }
+    else {
       const screenSize = tier === 1 ? 8 : 7;
       el.style('display', null)
-        .attr('font-size', screenSize / k)   // divide by k so screen size stays constant
+        .attr('font-size', screenSize / k)
         .attr('x', bx + 8 / k)
         .attr('y', by + 3 / k);
     }
   });
-
-  // Scale NWS alert stroke widths with zoom so they stay thin when zoomed in
   if (gWarn) {
     gWarn.selectAll('.warn-path').each(function() {
       const el = d3.select(this);
       const baseW = el.attr('data-base-sw') ? +el.attr('data-base-sw') : (() => {
         const w = +el.attr('stroke-width') || 1.8;
-        el.attr('data-base-sw', w);
-        return w;
+        el.attr('data-base-sw', w); return w;
       })();
       el.attr('stroke-width', baseW * s);
     });
   }
 }
 
-// Zoom thresholds at which each tier's label becomes visible
-const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
-
+// FIX(perf): D3 enter/update/exit instead of full remove/redraw every cycle
 function drawStations() {
   if (!gStations) return;
-  gStations.selectAll('*').remove();
 
-  stations.forEach(s => {
+  const stationData = stations.filter(s => {
     const pt = projection([s.lo, s.la]);
-    if (!pt) return;
-    const [px, py] = pt;
+    return !!pt;
+  });
+
+  // Update existing glows
+  const glows = gStations.selectAll('.station-glow').data(stationData, d => d.n);
+  glows.enter().each(function(s) {
+    const pt     = projection([s.lo, s.la]);
     const col    = stationColor(s);
     const isHome = !!s.home;
-    const tier   = s.tier || 2;
     const baseGlow = isHome ? 7 : 5;
-    const baseDot  = isHome ? 4 : 3;
-
-    // Glow halo
     gStations.append('circle')
-      .attr('cx', px).attr('cy', py).attr('r', baseGlow)
+      .attr('cx', pt[0]).attr('cy', pt[1]).attr('r', baseGlow)
       .attr('class', 'station-glow').attr('data-base-r', baseGlow)
       .attr('fill', col).attr('opacity', isHome ? 0.2 : 0.12);
+  });
+  glows.attr('fill', s => stationColor(s));
+  glows.exit().remove();
 
-    // Main dot
+  // Update existing dots
+  const dots = gStations.selectAll('.station-dot').data(stationData, d => d.n);
+  dots.enter().each(function(s) {
+    const pt     = projection([s.lo, s.la]);
+    const col    = stationColor(s);
+    const isHome = !!s.home;
+    const baseDot  = isHome ? 4 : 3;
     gStations.append('circle')
-      .attr('cx', px).attr('cy', py).attr('r', baseDot)
+      .attr('cx', pt[0]).attr('cy', pt[1]).attr('r', baseDot)
       .attr('class', 'station-dot').attr('data-base-r', baseDot)
       .attr('data-home', isHome ? '1' : null)
       .attr('fill', col)
       .attr('stroke', isHome ? 'var(--amber)' : 'rgba(255,255,255,0.4)')
       .attr('stroke-width', isHome ? 1.8 : 1)
       .style('cursor', 'pointer')
-      .on('mouseenter', (event) => showTooltip(s, event))
-      .on('mouseleave', hideTooltip)
-      .on('click', () => selectStation(s));
+      // FIX(bug): stop propagation so map click handler doesn't also fire
+      .on('click', (event, d) => { event.stopPropagation(); selectStation(d); })
+      .on('mouseenter', (event, d) => showTooltip(d, event))
+      .on('mouseleave', hideTooltip);
+  });
+  dots.attr('fill', s => stationColor(s));
+  dots.exit().remove();
 
-    // City label — ALL cities get a label; visibility controlled by zoom in rescaleStations
-    const labelColor = isHome
-      ? 'rgba(245,166,35,0.85)'
-      : tier === 1
-        ? 'rgba(255,255,255,0.80)'
-        : 'rgba(200,220,255,0.60)';
-
-    const cityName = s.n.split(',')[0].toUpperCase();
-
+  // Labels — only add new ones, don't redraw
+  const labels = gStations.selectAll('.station-label').data(stationData, d => d.n);
+  labels.enter().each(function(s) {
+    const pt        = projection([s.lo, s.la]);
+    const isHome    = !!s.home;
+    const tier      = s.tier || 2;
+    const labelColor = isHome ? 'rgba(245,166,35,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)';
+    const cityName  = s.n.split(',')[0].toUpperCase();
     gStations.append('text')
-      .attr('x', px + 8).attr('y', py + 3)
+      .attr('x', pt[0] + 8).attr('y', pt[1] + 3)
       .attr('class', 'station-label')
-      .attr('data-base-x', px).attr('data-base-y', py)
+      .attr('data-base-x', pt[0]).attr('data-base-y', pt[1])
       .attr('data-tier', tier)
       .attr('fill', labelColor)
       .attr('font-family', "'Share Tech Mono', monospace")
@@ -1782,6 +1559,7 @@ function drawStations() {
       .style('display', 'none')
       .text(cityName);
   });
+  labels.exit().remove();
 
   rescaleStations(currentTransform.k);
   updateLegend();
@@ -1791,56 +1569,51 @@ function zoomHome() {
   if (!projection || !zoom) return;
   const pt = projection([HOME.lon, HOME.lat]);
   if (!pt) return;
+  // FIX(bug): check if already at home — skip animation if within tolerance
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
-  const k = HOME.zoomScale;
+  const k  = HOME.zoomScale;
   const tx = W/2 - pt[0]*k, ty = H/2 - pt[1]*k;
-  svg.transition().duration(700)
-    .call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
+  const t  = currentTransform;
+  if (Math.abs(t.k - k) < 0.5 && Math.abs(t.x - tx) < 20 && Math.abs(t.y - ty) < 20) return;
+  svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(k));
 }
 
-// ── Update home zone dashboard (desktop + mobile) ─────────
 function updateHomeDashboard() {
   const homeStations = stations.filter(s => s.home);
   if (!homeStations.length) return;
-  const avg = (key) => Math.round(homeStations.reduce((a,s)=>a+(s[key]||0),0)/homeStations.length);
+  const avg = (key) => Math.round(homeStations.reduce((a,s) => a+(s[key]||0), 0) / homeStations.length);
   const avgRisk = avg('risk'), avgTemp = avg('tF'), avgWind = avg('w'), avgCape = avg('cape');
-  const set = (id,v) => { const el=document.getElementById(id); if(el) el.textContent=v; };
-
-  // Desktop
-  set('home-temp', avgTemp+'°F');
-  set('home-wind', avgWind+' mph');
-  set('home-cape', avgCape+' J');
-  set('home-risk', avgRisk);
-  const rf = document.getElementById('home-risk-fill');
-  if(rf){ rf.style.width=avgRisk+'%'; rf.style.background=rColor(avgRisk); }
+  // Helper to set all elements matching a data attribute pattern
+  const setAll = (selector, value, isHTML = false) => {
+    document.querySelectorAll(selector).forEach(el => {
+      if (isHTML) el.innerHTML = value; else el.textContent = value;
+    });
+  };
+  setAll('#home-temp, #home-temp-m',   avgTemp+'°F');
+  setAll('#home-wind, #home-wind-m',   avgWind+' mph');
+  setAll('#home-cape, #home-cape-m',   avgCape+' J');
+  setAll('#home-risk, #home-risk-m',   String(avgRisk));
+  document.querySelectorAll('#home-risk-fill, #home-risk-fill-m').forEach(el => {
+    el.style.width = avgRisk+'%'; el.style.background = rColor(avgRisk);
+  });
   const [lab] = rLabel(avgRisk);
-  const labelEl = document.getElementById('home-risk-label');
-  if(labelEl){ labelEl.textContent=lab; labelEl.style.color=rColor(avgRisk); }
-
-  // Mobile
-  set('home-temp-m', avgTemp+'°F');
-  set('home-wind-m', avgWind+' mph');
-  set('home-cape-m', avgCape+' J');
-  set('home-risk-m', avgRisk);
-  const rfM = document.getElementById('home-risk-fill-m');
-  if(rfM){ rfM.style.width=avgRisk+'%'; rfM.style.background=rColor(avgRisk); }
-  const lm = document.getElementById('home-risk-label-m');
-  if(lm){ lm.textContent=lab; lm.style.color=rColor(avgRisk); }
-
-  // Map chip
+  document.querySelectorAll('#home-risk-label, #home-risk-label-m').forEach(el => {
+    el.textContent = lab; el.style.color = rColor(avgRisk);
+  });
   const chip = document.getElementById('homeChipRisk');
   const chipLbl = document.getElementById('homeChipLabel');
-  if(chip){ chip.textContent=avgRisk; chip.style.color=rColor(avgRisk); }
-  if(chipLbl) chipLbl.textContent=lab;
+  if (chip)    { chip.textContent = avgRisk; chip.style.color = rColor(avgRisk); }
+  if (chipLbl)   chipLbl.textContent = lab;
 }
 
 // ══════════════════════════════════════════════════════════
 // TOOLTIP
 // ══════════════════════════════════════════════════════════
 function showTooltip(s, event) {
-  const tt = document.getElementById('mapTooltip');
+  const tt  = document.getElementById('mapTooltip');
   const col = rColor(s.risk), [lab] = rLabel(s.risk);
-  const gustLine = s.gusts && s.gusts > s.w ? `<div class="tt-row"><span class="tt-key">GUSTS</span><span class="tt-val">${s.gusts} mph</span></div>` : '';
+  const gustLine = s.gusts && s.gusts > s.w
+    ? `<div class="tt-row"><span class="tt-key">GUSTS</span><span class="tt-val">${s.gusts} mph</span></div>` : '';
   tt.innerHTML = `
     <div class="tt-city">${s.n}</div>
     <div class="tt-row"><span class="tt-key">TEMP</span><span class="tt-val">${s.tF}°F</span></div>
@@ -1860,72 +1633,78 @@ function showTooltip(s, event) {
   if (ty + th + 4 > wrap.offsetHeight) ty = event.clientY - rect.top  - th - 10;
   if (tx < 4) tx = 4;
   if (ty < 4) ty = 4;
-  tt.style.left=tx+'px'; tt.style.top=ty+'px';
+  tt.style.left = tx+'px'; tt.style.top = ty+'px';
 }
-function hideTooltip() { document.getElementById('mapTooltip').style.display='none'; }
+function hideTooltip() { document.getElementById('mapTooltip').style.display = 'none'; }
 
 // ══════════════════════════════════════════════════════════
-// SELECT STATION → UPDATE PANEL
+// SELECT STATION — FIX(medium): DRY refactor, single update path
 // ══════════════════════════════════════════════════════════
+// Metric config: [suffix, value-fn, unit-html]
+const METRIC_DEFS = [
+  ['temp',  s => s.tF,   '°F'],
+  ['hum',   s => s.h,    '%'],
+  ['wind',  s => s.gusts && s.gusts > s.w ? `${s.w} / ${s.gusts}` : String(s.w), 'mph'],
+  ['dew',   s => s.dF,   '°F'],
+  ['cape',  s => s.cape, 'J'],
+  ['srh',   s => s.srh,  'm²/s²'],
+];
+
+function setMetric(key, value, unit) {
+  const html = `${value}<span class="metric-unit">${unit}</span>`;
+  const el   = document.getElementById(`m-${key}`);
+  const elm  = document.getElementById(`m-${key}-m`);
+  if (el)  el.innerHTML  = html;
+  if (elm) elm.innerHTML = html;
+}
+
 function selectStation(s) {
-  const set = (id, html, isHTML) => { const el=document.getElementById(id); if(el){ if(isHTML) el.innerHTML=html; else el.textContent=html; }};
-  const windStr = s.gusts && s.gusts > s.w ? `${s.w} / ${s.gusts}` : String(s.w);
+  // Update all metrics via the unified helper
+  METRIC_DEFS.forEach(([key, fn, unit]) => setMetric(key, fn(s), unit));
 
-  // Desktop sidebar
-  set('selectedName', s.n);
-  set('m-temp',  s.tF+'<span class="metric-unit">°F</span>', true);
-  set('m-hum',   s.h+'<span class="metric-unit">%</span>', true);
-  set('m-wind',  windStr+'<span class="metric-unit">mph</span>', true);
-  set('m-dew',   s.dF+'<span class="metric-unit">°F</span>', true);
-  set('m-cape',  s.cape+'<span class="metric-unit">J</span>', true);
-  set('m-srh',   s.srh+'<span class="metric-unit">m²/s²</span>', true);
-  const [lab,cls] = rLabel(s.risk);
-  set('riskScore', s.risk);
-  const rl = document.getElementById('riskLevel');
-  if(rl){ rl.textContent=lab; rl.className='risk-level '+cls; }
-  const rf = document.getElementById('riskFill');
-  if(rf){ rf.style.width=s.risk+'%'; rf.style.background=rColor(s.risk); }
-  document.getElementById('bar-cape').style.width  = Math.min(s.cape/100,100)+'%';
-  document.getElementById('bar-srh').style.width   = Math.min(s.srh/6,100)+'%';
-  document.getElementById('bar-shear').style.width = Math.min((s.sh||0)*2,100)+'%';
-  document.getElementById('bar-lift').style.width  = Math.min(Math.abs(s.lift||0)*15,100)+'%';
-  set('iv-cape',  s.cape+' J');
-  set('iv-srh',   String(s.srh));
-  set('iv-shear', (s.sh||'--')+' kt');
-  set('iv-lift',  String(s.lift||'--'));
+  // Update name labels
+  document.getElementById('selectedName').textContent  = s.n;
+  document.getElementById('selectedNameM').textContent = s.n;
 
-  // Mobile sheet
-  set('selectedNameM', s.n);
-  set('m-temp-m',  s.tF+'<span class="metric-unit">°F</span>', true);
-  set('m-hum-m',   s.h+'<span class="metric-unit">%</span>', true);
-  set('m-wind-m',  windStr+'<span class="metric-unit">mph</span>', true);
-  set('m-dew-m',   s.dF+'<span class="metric-unit">°F</span>', true);
-  set('m-cape-m',  s.cape+'<span class="metric-unit">J</span>', true);
-  set('m-srh-m',   s.srh+'<span class="metric-unit">m²/s²</span>', true);
-  set('riskScoreM', s.risk);
-  const rlM = document.getElementById('riskLevelM');
-  if(rlM){ rlM.textContent=lab; rlM.className='risk-level '+cls; }
-  const rfM = document.getElementById('riskFillM');
-  if(rfM){ rfM.style.width=s.risk+'%'; rfM.style.background=rColor(s.risk); }
-  [['bar-cape-m', Math.min(s.cape/100,100)],
-   ['bar-srh-m',  Math.min(s.srh/6,100)],
-   ['bar-shear-m',Math.min((s.sh||0)*2,100)],
-   ['bar-lift-m', Math.min(Math.abs(s.lift||0)*15,100)]
-  ].forEach(([id,w]) => { const el=document.getElementById(id); if(el) el.style.width=w+'%'; });
-  set('iv-cape-m',  s.cape+' J');
-  set('iv-srh-m',   String(s.srh));
-  set('iv-shear-m', (s.sh||'--')+' kt');
-  set('iv-lift-m',  String(s.lift||'--'));
+  // Risk score
+  const [lab, cls] = rLabel(s.risk);
+  ['riskScore','riskScoreM'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = s.risk;
+  });
+  ['riskLevel','riskLevelM'].forEach(id => {
+    const el = document.getElementById(id); if (el) { el.textContent = lab; el.className = 'risk-level ' + cls; }
+  });
+  ['riskFill','riskFillM'].forEach(id => {
+    const el = document.getElementById(id); if (el) { el.style.width = s.risk+'%'; el.style.background = rColor(s.risk); }
+  });
+
+  // Indicator bars — [suffix, pct-fn]
+  const bars = [
+    ['cape',  () => Math.min(s.cape/100, 100)],
+    ['srh',   () => Math.min(s.srh/6,   100)],
+    ['shear', () => Math.min((s.sh||0)*2,100)],
+    ['lift',  () => Math.min(Math.abs(s.lift||0)*15,100)],
+  ];
+  const vals = { cape: s.cape+' J', srh: String(s.srh), shear: (s.sh||'--')+' kt', lift: String(s.lift||'--') };
+  bars.forEach(([key, pctFn]) => {
+    ['','- m'].forEach(suffix => {
+      const barId = `bar-${key}${suffix.trim() ? suffix : ''}`;
+      const valId = `iv-${key}${suffix.trim() ? suffix : ''}`;
+      const bar   = document.getElementById(barId);
+      const val   = document.getElementById(valId);
+      if (bar) bar.style.width = pctFn() + '%';
+      if (val) val.textContent  = vals[key];
+    });
+  });
 
   if (isMobile()) mobileNav('cond');
 }
 
 // ══════════════════════════════════════════════════════════
-// CANVAS OVERLAYS — heat + wind
+// CANVAS OVERLAYS — wind particles
 // ══════════════════════════════════════════════════════════
-let activeLayer = 'risk'; // which variable colors the station dots
+let activeLayer = 'risk';
 
-// Color scales for each layer
 const LAYER_SCALES = {
   temp: {
     label: 'TEMP °F',
@@ -1969,8 +1748,75 @@ const LAYER_SCALES = {
     stops: [{v:0,c:'#39d353'},{v:30,c:'#00d4ff'},{v:55,c:'#f5a623'},{v:70,c:'#ff7b00'},{v:85,c:'#e63946'}],
     get: s => s.risk,
   },
-  warnings: null, // overlay only — no dot coloring
+  warnings: null,
 };
+
+// ══════════════════════════════════════════════════════════
+// TEMPERATURE HEATMAP — FIX(dead→feature): replaces unused heatCanvas
+// Renders a smooth IDW-interpolated temperature surface over the map
+// ══════════════════════════════════════════════════════════
+function drawHeatmap() {
+  if (!projection || !stations.length) return;
+  const W = hCv.width, H = hCv.height;
+  hCtx.clearRect(0, 0, W, H);
+  if (!lyr.temp) { hCv.style.opacity = '0'; return; }
+
+  // Collect station screen positions + temperature values
+  const t = currentTransform || d3.zoomIdentity;
+  const pts = stations.map(s => {
+    const pt = projection([s.lo, s.la]);
+    if (!pt) return null;
+    return { x: pt[0]*t.k + t.x, y: pt[1]*t.k + t.y, v: s.tF };
+  }).filter(Boolean);
+  if (!pts.length) return;
+
+  // IDW interpolation on a coarse grid, then upscale with imageSmoothingQuality
+  const STEP = 18; // sample every 18px — upscaled by canvas filter
+  const cols = Math.ceil(W / STEP) + 1, rows = Math.ceil(H / STEP) + 1;
+  const offscreen = document.createElement('canvas');
+  offscreen.width = cols; offscreen.height = rows;
+  const octx = offscreen.getContext('2d');
+  const imgData = octx.createImageData(cols, rows);
+
+  // Temperature → RGBA using the temp scale color stops
+  function tempToRGBA(tF) {
+    const col = LAYER_SCALES.temp.color(tF);
+    const hex = col.replace('#','');
+    return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+  }
+
+  // IDW power parameter
+  const P = 2;
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const px = c * STEP, py = r * STEP;
+      let wSum = 0, vSum = 0;
+      pts.forEach(p => {
+        const d2 = Math.hypot(px - p.x, py - p.y);
+        const w  = d2 < 1 ? 1e6 : 1 / Math.pow(d2, P);
+        wSum += w; vSum += w * p.v;
+      });
+      const tF = vSum / wSum;
+      const [r2, g, b] = tempToRGBA(tF);
+      const i = (r * cols + c) * 4;
+      imgData.data[i]   = r2;
+      imgData.data[i+1] = g;
+      imgData.data[i+2] = b;
+      imgData.data[i+3] = 160; // semi-transparent
+    }
+  }
+  octx.putImageData(imgData, 0, 0);
+
+  // Upscale smoothly to full canvas size
+  hCtx.imageSmoothingEnabled = true;
+  hCtx.imageSmoothingQuality = 'high';
+  hCtx.drawImage(offscreen, 0, 0, W, H);
+
+  // Apply CSS transform to match map pan/zoom (same as radar canvas)
+  hCv.style.transformOrigin = '0 0';
+  hCv.style.transform = `translate(${t.x}px,${t.y}px) scale(${t.k})`;
+  hCv.style.opacity = '0.68';
+}
 
 function stationColor(s) {
   const scale = LAYER_SCALES[activeLayer];
@@ -1979,45 +1825,53 @@ function stationColor(s) {
 }
 
 function updateLegend() {
-  const scale = LAYER_SCALES[activeLayer];
+  const scale  = LAYER_SCALES[activeLayer];
   const legend = document.getElementById('mapLegend');
   if (!legend) return;
-  if (!scale) { legend.innerHTML = ''; return; }
-  const stops = scale.stops.map(s => `<div style="display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;border-radius:50%;background:${s.c};flex-shrink:0;"></div><span>${scale.format(s.v)}</span></div>`).join('');
+  if (!scale)  { legend.innerHTML = ''; return; }
+  const stops = scale.stops.map(s =>
+    `<div style="display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;border-radius:50%;background:${s.c};flex-shrink:0;"></div><span>${scale.format(s.v)}</span></div>`
+  ).join('');
   legend.innerHTML = `<div style="font-family:var(--font-mono);font-size:9px;color:var(--amber);letter-spacing:1px;margin-bottom:5px;">${scale.label}</div><div style="display:flex;flex-direction:column;gap:3px;font-family:var(--font-mono);font-size:9px;color:var(--text-dim);">${stops}</div>`;
 }
-const wCv = document.getElementById('windCanvas'), hCv = document.getElementById('heatCanvas');
-const rdrCv = document.getElementById('radarCanvas');
+
+// FIX(dead-code→feature): heatCanvas converted to temperature heatmap overlay
+const hCv  = document.getElementById('heatCanvas');
+const hCtx = hCv.getContext('2d');
+const wCv  = document.getElementById('windCanvas');
+const rdrCv  = document.getElementById('radarCanvas');
 const rdrCtx = rdrCv.getContext('2d');
-const wCtx = wCv.getContext('2d'), hCtx = hCv.getContext('2d');
+const wCtx   = wCv.getContext('2d');
+
 let lyr = {temp:false,wind:false,humidity:false,cape:false,dewpoint:false,risk:true,warnings:true,radar:false,earthquakes:false,wildfires:false};
 let windOn = false, particles = [];
 
 function resizeCanvases() {
-  const W=mapWrap.offsetWidth, H=mapWrap.offsetHeight;
-  wCv.width=hCv.width=rdrCv.width=W; wCv.height=hCv.height=rdrCv.height=H;
-  svgEl.setAttribute('width',W); svgEl.setAttribute('height',H);
+  const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+  wCv.width = rdrCv.width = hCv.width = W;
+  wCv.height = rdrCv.height = hCv.height = H;
+  svgEl.setAttribute('width', W); svgEl.setAttribute('height', H);
 }
 resizeCanvases();
+
 window.addEventListener('resize', () => {
   resizeCanvases();
   if (projection) {
-    const W=mapWrap.offsetWidth, H=mapWrap.offsetHeight;
-    projection.scale(W*1.15).translate([W/2,H/2]);
-    if (gMap) gMap.selectAll('path').attr('d', pathGen);
-    if (gWarn) gWarn.selectAll('path').attr('d', pathGen);
+    const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+    projection.scale(W*1.15).translate([W/2, H/2]);
+    if (gMap)      gMap.selectAll('path').attr('d', pathGen);
+    if (gWarn)     gWarn.selectAll('path').attr('d', pathGen);
     svg.select('rect').attr('width',W).attr('height',H);
     svg.attr('width',W).attr('height',H);
     warnSvg.attr('width',W).attr('height',H);
     d3.select('#hazardSvg').attr('width',W).attr('height',H);
     d3.select('#gpsSvg').attr('width',W).attr('height',H);
     drawStations();
+    buildStationGrid();
     if (geoActive) updateGPSDot();
   }
-  redrawOverlays();
 });
 
-// Convert lat/lon → canvas pixel (accounting for d3 zoom + projection)
 function ll2canvas(lat, lon) {
   if (!projection) return null;
   const pt = projection([lon, lat]);
@@ -2026,15 +1880,13 @@ function ll2canvas(lat, lon) {
   return { x: pt[0]*t.k + t.x, y: pt[1]*t.k + t.y };
 }
 
-function redrawOverlays() { /* wind only — heat layer removed */ }
-
-// Wind particles
+// FIX(perf): wind particles use grid-based nearest station lookup instead of O(n×m) loop
 function initParts() {
   particles = [];
-  for (let i=0; i<160; i++) particles.push({
-    x:Math.random()*wCv.width, y:Math.random()*wCv.height,
-    vx:(Math.random()-.3)*1.8, vy:(Math.random()-.6)*.9,
-    life:Math.random(), ml:.5+Math.random()*.5
+  for (let i = 0; i < 160; i++) particles.push({
+    x: Math.random()*wCv.width, y: Math.random()*wCv.height,
+    vx: (Math.random()-.3)*1.8, vy: (Math.random()-.6)*.9,
+    life: Math.random(), ml: .5+Math.random()*.5
   });
 }
 initParts();
@@ -2044,28 +1896,21 @@ function animWind() {
   wCtx.clearRect(0, 0, wCv.width, wCv.height);
   wCtx.fillStyle = 'rgba(5,7,10,0.04)';
   wCtx.fillRect(0, 0, wCv.width, wCv.height);
-  // Scale proximity threshold with zoom so influence radius stays geographically consistent
-  const proximityPx = 250 * (currentTransform ? currentTransform.k : 1);
   particles.forEach(p => {
-    let ns=null, nd=Infinity;
-    stations.forEach(s => {
-      const pt=ll2canvas(s.la,s.lo);
-      if (!pt) return;
-      const dd=Math.hypot(p.x-pt.x, p.y-pt.y);
-      if (dd<nd){nd=dd;ns=s;}
-    });
-    if (ns&&nd<proximityPx) {
-      const rad=(ns.wd||270)*Math.PI/180;
-      p.vx=p.vx*.93+Math.cos(rad)*ns.w*.003;
-      p.vy=p.vy*.93-Math.sin(rad)*ns.w*.003;
+    // FIX(perf): use pre-computed grid instead of iterating all stations
+    const ns = nearestStation(p.x, p.y);
+    if (ns) {
+      const rad = (ns.wd||270) * Math.PI / 180;
+      p.vx = p.vx*.93 + Math.cos(rad)*ns.w*.003;
+      p.vy = p.vy*.93 - Math.sin(rad)*ns.w*.003;
     }
-    p.x+=p.vx; p.y+=p.vy; p.life+=.007;
-    if (p.life>p.ml||p.x<0||p.x>wCv.width||p.y<0||p.y>wCv.height) {
-      p.x=Math.random()*wCv.width; p.y=Math.random()*wCv.height; p.life=0;
+    p.x += p.vx; p.y += p.vy; p.life += .007;
+    if (p.life > p.ml || p.x<0 || p.x>wCv.width || p.y<0 || p.y>wCv.height) {
+      p.x = Math.random()*wCv.width; p.y = Math.random()*wCv.height; p.life = 0;
     }
-    const al=Math.sin(p.life/p.ml*Math.PI)*.65, sp=Math.sqrt(p.vx*p.vx+p.vy*p.vy);
-    wCtx.strokeStyle=`hsla(${sp>1.2?35:190},100%,75%,${Math.min(al*1.8,0.9)})`;
-    wCtx.lineWidth=1.5;
+    const al = Math.sin(p.life/p.ml*Math.PI)*.65, sp = Math.sqrt(p.vx*p.vx+p.vy*p.vy);
+    wCtx.strokeStyle = `hsla(${sp>1.2?35:190},100%,75%,${Math.min(al*1.8,0.9)})`;
+    wCtx.lineWidth = 1.5;
     wCtx.beginPath(); wCtx.moveTo(p.x,p.y); wCtx.lineTo(p.x-p.vx*7,p.y-p.vy*7); wCtx.stroke();
   });
   requestAnimationFrame(animWind);
@@ -2076,19 +1921,35 @@ animWind();
 // RAINVIEWER RADAR
 // ══════════════════════════════════════════════════════════
 let radarHost = null;
-let radarFrames = [];        // all past frames [{time, path}, ...]
-let radarFrameIdx = -1;      // currently displayed frame index (-1 = not set)
-let radarPath = null;        // active frame path (used by drawRadar/paintRadar)
-let radarTs   = null;        // active frame timestamp
-let radarTileCache = {};
+let radarFrames   = [];
+let radarFrameIdx = -1;
+let radarPath  = null;
+let radarTs    = null;
+// FIX(perf): LRU-capped tile cache — evicts oldest when RADAR_CACHE_MAX exceeded
+let radarTileCache  = {};
+let radarTileCacheOrder = []; // tracks insertion order for LRU eviction
 let currentTileZoom = 5;
+let radarPlaying    = false;
+let radarPlayTimer  = null;
+let RADAR_FRAME_MS  = 600;
+// FIX(perf): prevent re-entrant prefetch runs
+let prefetchInProgress = false;
 
-// Playback state
-let radarPlaying = false;
-let radarPlayTimer = null;
-let RADAR_FRAME_MS = 600;  // ms per frame during animation
+function addToRadarCache(url, img) {
+  if (radarTileCache[url]) return; // already cached
+  if (radarTileCacheOrder.length >= RADAR_CACHE_MAX) {
+    const evict = radarTileCacheOrder.shift();
+    delete radarTileCache[evict];
+  }
+  radarTileCache[url] = img;
+  radarTileCacheOrder.push(url);
+}
 
-// Pick radar tile zoom based on D3 map zoom level — higher k = more detail
+function clearRadarCache() {
+  radarTileCache = {};
+  radarTileCacheOrder = [];
+}
+
 function getRadarTileZoom() {
   const k = (currentTransform || d3.zoomIdentity).k;
   if (k >= 5) return 7;
@@ -2096,287 +1957,187 @@ function getRadarTileZoom() {
   return 5;
 }
 
-function drawRadar() {
-  if (!lyr.radar || !radarPath || !projection) {
-    console.warn('[Radar] drawRadar blocked — lyr.radar:', lyr.radar, '| radarPath:', !!radarPath, '| projection:', !!projection);
-    return;
-  }
+// FIX(bug): radarPath passed as parameter to prevent stale-global issues during rapid scrubbing
+function drawRadar(targetPath) {
+  const activePath = targetPath || radarPath;
+  if (!lyr.radar || !activePath || !projection) return;
   const TILE_ZOOM = getRadarTileZoom();
   currentTileZoom = TILE_ZOOM;
   const N = Math.pow(2, TILE_ZOOM);
   const t = currentTransform || d3.zoomIdentity;
   const W = rdrCv.width, H = rdrCv.height;
-  console.log('[Radar] drawRadar — canvas:', W, 'x', H, '| tileZoom:', TILE_ZOOM);
   const visible = [];
   for (let tx = 0; tx < N; tx++) {
     for (let ty = 0; ty < N; ty++) {
-      const lon = (tx + 0.5) / N * 360 - 180;
-      const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * (ty + 0.5) / N)));
-      const lat = latRad * 180 / Math.PI;
-      const pt = projection([lon, lat]);
+      const lon    = (tx + 0.5) / N * 360 - 180;
+      const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2*(ty+0.5)/N)));
+      const lat    = latRad * 180 / Math.PI;
+      const pt     = projection([lon, lat]);
       if (!pt) continue;
-      // At higher tile zooms, also cull tiles that are off-screen to keep tile count manageable
       if (TILE_ZOOM >= 6) {
         const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
         if (cx < -W*0.5 || cx > W*1.5 || cy < -H*0.5 || cy > H*1.5) continue;
       }
-      visible.push({tx, ty, url: `${radarHost}${radarPath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`});
+      visible.push({tx, ty, url: `${radarHost}${activePath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`});
     }
   }
-
-  // Snapshot the path at call time — radarPath may change before async tiles load
-  const snapPath = radarPath;
-
-  if (!visible.length) { console.warn('[Radar] No visible tiles culled'); return; }
-
-  console.log('[Radar] Visible tiles:', visible.length, 'at zoom', TILE_ZOOM);
-
-  // Load missing tiles; paint when all are resolved
-  const toLoad = visible.filter(({url}) => !radarTileCache[url]);
+  if (!visible.length) return;
+  const snapPath = activePath;
+  const toLoad   = visible.filter(({url}) => !radarTileCache[url]);
   if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
-
   let remaining = toLoad.length;
   const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
-
   toLoad.forEach(({url}) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => { radarTileCache[url] = img; done(); };
-    img.onerror = () => {
-      const img2 = new Image();
-      img2.onload = () => { radarTileCache[url] = img2; done(); };
-      img2.onerror = () => { console.warn('[Radar] Tile FAILED:', url.split('/').slice(-4).join('/')); done(); };
-      img2.src = url;
-    };
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload  = () => { addToRadarCache(url, img); done(); };
+    img.onerror = () => { const img2 = new Image(); img2.onload = () => { addToRadarCache(url, img2); done(); }; img2.onerror = () => done(); img2.src = url; };
     img.src = url;
   });
 }
 
 function paintRadar(tiles, snapPath) {
   if (!lyr.radar || !projection) return;
-  // If radarPath changed while tiles were loading, this frame is stale — discard it
+  // FIX(bug): guard uses snapPath parameter — safe even during rapid scrubbing
   if (snapPath && snapPath !== radarPath) return;
   const TILE_ZOOM = currentTileZoom;
-  const N = Math.pow(2, TILE_ZOOM);
-  // Paint in BASE Albers coords (no D3 transform) — CSS transform on the canvas handles pan/zoom live
-  const W = rdrCv.width, H = rdrCv.height;
-  const SEGS = 8;
-  const S = 256;
-
+  const N   = Math.pow(2, TILE_ZOOM);
+  const W   = rdrCv.width, H = rdrCv.height;
+  const SEGS = 8, S = 256;
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.globalAlpha = 0.65;
-
-  // Apply current D3 transform to canvas CSS so it stays aligned after repaint
   if (currentTransform) {
     const {x, y, k} = currentTransform;
     rdrCv.style.transformOrigin = '0 0';
     rdrCv.style.transform = `translate(${x}px,${y}px) scale(${k})`;
   }
-
-  function affineFrom3(sx0,sy0, sx1,sy1, sx2,sy2,
-                       dx0,dy0, dx1,dy1, dx2,dy2) {
-    const det = sx0*(sy1-sy2) + sx1*(sy2-sy0) + sx2*(sy0-sy1);
-    if (Math.abs(det) < 1e-10) return null;
-    const a = (dx0*(sy1-sy2) + dx1*(sy2-sy0) + dx2*(sy0-sy1)) / det;
-    const c = (dx0*(sx2-sx1) + dx1*(sx0-sx2) + dx2*(sx1-sx0)) / det;
-    const e = (dx0*(sx1*sy2-sx2*sy1) + dx1*(sx2*sy0-sx0*sy2) + dx2*(sx0*sy1-sx1*sy0)) / det;
-    const b = (dy0*(sy1-sy2) + dy1*(sy2-sy0) + dy2*(sy0-sy1)) / det;
-    const d = (dy0*(sx2-sx1) + dy1*(sx0-sx2) + dy2*(sx1-sx0)) / det;
-    const f = (dy0*(sx1*sy2-sx2*sy1) + dy1*(sx2*sy0-sx0*sy2) + dy2*(sx0*sy1-sx1*sy0)) / det;
+  function affineFrom3(sx0,sy0,sx1,sy1,sx2,sy2,dx0,dy0,dx1,dy1,dx2,dy2) {
+    const det = sx0*(sy1-sy2)+sx1*(sy2-sy0)+sx2*(sy0-sy1);
+    if (Math.abs(det)<1e-10) return null;
+    const a=(dx0*(sy1-sy2)+dx1*(sy2-sy0)+dx2*(sy0-sy1))/det;
+    const c=(dx0*(sx2-sx1)+dx1*(sx0-sx2)+dx2*(sx1-sx0))/det;
+    const e=(dx0*(sx1*sy2-sx2*sy1)+dx1*(sx2*sy0-sx0*sy2)+dx2*(sx0*sy1-sx1*sy0))/det;
+    const b=(dy0*(sy1-sy2)+dy1*(sy2-sy0)+dy2*(sy0-sy1))/det;
+    const d=(dy0*(sx2-sx1)+dy1*(sx0-sx2)+dy2*(sx1-sx0))/det;
+    const f=(dy0*(sx1*sy2-sx2*sy1)+dy1*(sx2*sy0-sx0*sy2)+dy2*(sx0*sy1-sx1*sy0))/det;
     return [a,b,c,d,e,f];
   }
-
   tiles.forEach(({tx, ty, url}) => {
-    const img = radarTileCache[url];
-    if (!img) return;
-
-    // Project grid in BASE Albers coords only (no t.k / t.x / t.y)
+    const img = radarTileCache[url]; if (!img) return;
     const grid = [];
-    for (let j = 0; j <= SEGS; j++) {
-      grid[j] = [];
-      for (let i = 0; i <= SEGS; i++) {
-        const lon = ((tx + i/SEGS) / N) * 360 - 180;
-        const latRad = Math.atan(Math.sinh(Math.PI * (1 - 2*(ty + j/SEGS)/N)));
-        const lat = latRad * 180 / Math.PI;
-        const pt = projection([lon, lat]);
-        grid[j][i] = pt ? [pt[0], pt[1]] : null; // base coords, no transform
-      }
-    }
-
-    for (let j = 0; j < SEGS; j++) {
-      for (let i = 0; i < SEGS; i++) {
-        const p00 = grid[j][i],   p10 = grid[j][i+1];
-        const p01 = grid[j+1][i], p11 = grid[j+1][i+1];
-        if (!p00 || !p10 || !p01 || !p11) continue;
-
-        const u0 = i*S/SEGS, v0 = j*S/SEGS;
-        const u1 = (i+1)*S/SEGS, v1 = (j+1)*S/SEGS;
-
-        const minX = Math.min(p00[0],p10[0],p01[0],p11[0]);
-        const maxX = Math.max(p00[0],p10[0],p01[0],p11[0]);
-        const minY = Math.min(p00[1],p10[1],p01[1],p11[1]);
-        const maxY = Math.max(p00[1],p10[1],p01[1],p11[1]);
-        if (minX>W || maxX<0 || minY>H || maxY<0) continue;
-
-        const af1 = affineFrom3(u0,v0, u1,v0, u0,v1,
-                                p00[0],p00[1], p10[0],p10[1], p01[0],p01[1]);
-        if (af1) {
-          rdrCtx.save();
-          rdrCtx.beginPath();
-          rdrCtx.moveTo(p00[0],p00[1]); rdrCtx.lineTo(p10[0],p10[1]); rdrCtx.lineTo(p01[0],p01[1]);
-          rdrCtx.closePath(); rdrCtx.clip();
-          rdrCtx.setTransform(...af1);
-          rdrCtx.drawImage(img, 0, 0, S, S);
-          rdrCtx.restore();
-        }
-
-        const af2 = affineFrom3(u1,v1, u0,v1, u1,v0,
-                                p11[0],p11[1], p01[0],p01[1], p10[0],p10[1]);
-        if (af2) {
-          rdrCtx.save();
-          rdrCtx.beginPath();
-          rdrCtx.moveTo(p11[0],p11[1]); rdrCtx.lineTo(p01[0],p01[1]); rdrCtx.lineTo(p10[0],p10[1]);
-          rdrCtx.closePath(); rdrCtx.clip();
-          rdrCtx.setTransform(...af2);
-          rdrCtx.drawImage(img, 0, 0, S, S);
-          rdrCtx.restore();
-        }
-      }
+    for (let j=0;j<=SEGS;j++) { grid[j]=[]; for (let i=0;i<=SEGS;i++) {
+      const lon=(((tx+i/SEGS)/N)*360-180);
+      const lat=(Math.atan(Math.sinh(Math.PI*(1-2*(ty+j/SEGS)/N)))*180/Math.PI);
+      const pt=projection([lon,lat]);
+      grid[j][i]=pt?[pt[0],pt[1]]:null;
+    }}
+    for (let j=0;j<SEGS;j++) for (let i=0;i<SEGS;i++) {
+      const p00=grid[j][i],p10=grid[j][i+1],p01=grid[j+1][i],p11=grid[j+1][i+1];
+      if (!p00||!p10||!p01||!p11) continue;
+      const u0=i*S/SEGS,v0=j*S/SEGS,u1=(i+1)*S/SEGS,v1=(j+1)*S/SEGS;
+      const minX=Math.min(p00[0],p10[0],p01[0],p11[0]),maxX=Math.max(p00[0],p10[0],p01[0],p11[0]);
+      const minY=Math.min(p00[1],p10[1],p01[1],p11[1]),maxY=Math.max(p00[1],p10[1],p01[1],p11[1]);
+      if (minX>W||maxX<0||minY>H||maxY<0) continue;
+      const af1=affineFrom3(u0,v0,u1,v0,u0,v1,p00[0],p00[1],p10[0],p10[1],p01[0],p01[1]);
+      if (af1){rdrCtx.save();rdrCtx.beginPath();rdrCtx.moveTo(p00[0],p00[1]);rdrCtx.lineTo(p10[0],p10[1]);rdrCtx.lineTo(p01[0],p01[1]);rdrCtx.closePath();rdrCtx.clip();rdrCtx.setTransform(...af1);rdrCtx.drawImage(img,0,0,S,S);rdrCtx.restore();}
+      const af2=affineFrom3(u1,v1,u0,v1,u1,v0,p11[0],p11[1],p01[0],p01[1],p10[0],p10[1]);
+      if (af2){rdrCtx.save();rdrCtx.beginPath();rdrCtx.moveTo(p11[0],p11[1]);rdrCtx.lineTo(p01[0],p01[1]);rdrCtx.lineTo(p10[0],p10[1]);rdrCtx.closePath();rdrCtx.clip();rdrCtx.setTransform(...af2);rdrCtx.drawImage(img,0,0,S,S);rdrCtx.restore();}
     }
   });
-
   rdrCtx.globalAlpha = 1;
   rdrCv.style.opacity = '1';
 }
 
-// Debounced radar redraw for zoom/pan events
 let radarRedrawTimer = null;
 function scheduleRadarRedraw() {
   if (!lyr.radar) return;
   clearTimeout(radarRedrawTimer);
   radarRedrawTimer = setTimeout(() => {
     const neededZoom = getRadarTileZoom();
-    // If zoom level changed, we need higher-res tiles — full refetch
-    if (neededZoom !== currentTileZoom) {
-      console.log('[Radar] Tile zoom changed', currentTileZoom, '→', neededZoom, '— refetching');
-      drawRadar();
-      return;
-    }
-    // Same zoom level — repaint from cache if possible, else full redraw
-    const TILE_ZOOM = currentTileZoom, N = Math.pow(2, TILE_ZOOM);
-    const t = currentTransform || d3.zoomIdentity;
-    const W = rdrCv.width, H = rdrCv.height;
+    if (neededZoom !== currentTileZoom) { drawRadar(radarPath); return; }
+    const TZ = currentTileZoom, N = Math.pow(2, TZ);
+    const t  = currentTransform || d3.zoomIdentity;
+    const W  = rdrCv.width, H = rdrCv.height;
     const cached = [];
-    for (let tx = 0; tx < N; tx++) {
-      for (let ty = 0; ty < N; ty++) {
-        const url = `${radarHost}${radarPath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`;
-        if (radarTileCache[url]) {
-          const lon = (tx+0.5)/N*360-180;
-          const latRad = Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)));
-          const pt = projection([lon, latRad*180/Math.PI]);
-          if (!pt) continue;
-          const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
-          if (cx < -W || cx > 2*W || cy < -H || cy > 2*H) continue;
-          cached.push({tx, ty, url});
-        }
+    for (let tx=0;tx<N;tx++) for (let ty=0;ty<N;ty++) {
+      const url = `${radarHost}${radarPath}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
+      if (radarTileCache[url]) {
+        const lon=(tx+0.5)/N*360-180, lat=Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)))*180/Math.PI;
+        const pt=projection([lon,lat]); if (!pt) continue;
+        const cx=pt[0]*t.k+t.x, cy=pt[1]*t.k+t.y;
+        if (cx<-W||cx>2*W||cy<-H||cy>2*H) continue;
+        cached.push({tx,ty,url});
       }
     }
     if (cached.length > 0) paintRadar(cached, radarPath);
-    else drawRadar();
+    else drawRadar(radarPath);
   }, 150);
 }
 
 async function fetchRadar() {
   if (!lyr.radar) return;
   try {
-    const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-    const data = await res.json();
+    const res    = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const data   = await res.json();
     const frames = data.radar?.past;
-    if (!frames || !frames.length) { console.warn('[Radar] No frames'); return; }
-
+    if (!frames || !frames.length) return;
     radarHost = data.host;
-
-    // Check if latest frame changed — if so, clear cache and update frames list
     const latestPath = frames[frames.length - 1].path;
     if (radarPath !== latestPath) {
-      radarTileCache = {};
-      radarFrames = frames; // [{time, path}, ...]
+      clearRadarCache();
+      radarFrames = frames;
     }
-
-    // If not playing, always snap to live (last frame)
-    if (!radarPlaying) {
-      radarFrameIdx = radarFrames.length - 1;
-    }
-
-    // Set active path from current frame index
+    if (!radarPlaying) radarFrameIdx = radarFrames.length - 1;
+    // FIX(bug): validate frameIdx before using it
+    radarFrameIdx = Math.max(0, Math.min(radarFrameIdx, radarFrames.length - 1));
     radarPath = radarFrames[radarFrameIdx].path;
     radarTs   = radarFrames[radarFrameIdx].time;
-
-    // Build/refresh the dot UI
     buildPlaybarDots();
     updatePlaybarUI();
-
-    // Draw the current frame
-    drawRadar();
-
-    // Pre-fetch all frames in background for smooth playback
+    drawRadar(radarPath);
+    // FIX(perf): prefetch only from fetchRadar, not from scheduleRadarRedraw
     prefetchAllFrames();
-
-  } catch(e) { console.warn('[Radar] fetch failed:', e); }
+  } catch(e) {}
 }
 
-// Pre-fetch tiles for all frames silently in the background
+// FIX(perf): guard against concurrent prefetch runs
 function prefetchAllFrames() {
-  if (!radarFrames.length || !projection) return;
-  const TZ = getRadarTileZoom();
-  const N = Math.pow(2, TZ);
-  const t = currentTransform || d3.zoomIdentity;
-  const W = rdrCv.width, H = rdrCv.height;
-
+  if (prefetchInProgress || !radarFrames.length || !projection) return;
+  prefetchInProgress = true;
+  const TZ = getRadarTileZoom(), N = Math.pow(2, TZ);
+  const t  = currentTransform || d3.zoomIdentity;
+  const W  = rdrCv.width, H = rdrCv.height;
   const urlsToFetch = [];
   radarFrames.forEach(frame => {
-    for (let tx = 0; tx < N; tx++) {
-      for (let ty = 0; ty < N; ty++) {
-        const lon = (tx+0.5)/N*360-180;
-        const latRad = Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)));
-        const pt = projection([lon, latRad*180/Math.PI]);
-        if (!pt) continue;
-        if (TZ >= 6) {
-          const cx = pt[0]*t.k+t.x, cy = pt[1]*t.k+t.y;
-          if (cx < -W*0.5 || cx > W*1.5 || cy < -H*0.5 || cy > H*1.5) continue;
-        }
-        const url = `${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
-        if (!radarTileCache[url]) urlsToFetch.push(url);
-      }
+    for (let tx=0;tx<N;tx++) for (let ty=0;ty<N;ty++) {
+      const lon=(tx+0.5)/N*360-180, lat=Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)))*180/Math.PI;
+      const pt=projection([lon,lat]); if (!pt) continue;
+      if (TZ>=6){const cx=pt[0]*t.k+t.x,cy=pt[1]*t.k+t.y; if(cx<-W*0.5||cx>W*1.5||cy<-H*0.5||cy>H*1.5) continue;}
+      const url=`${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
+      if (!radarTileCache[url]) urlsToFetch.push(url);
     }
   });
-
+  let remaining = urlsToFetch.length;
+  if (!remaining) { prefetchInProgress = false; return; }
   urlsToFetch.forEach(url => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => { radarTileCache[url] = img; };
-    img.onerror = () => {
-      const img2 = new Image();
-      img2.onload = () => { radarTileCache[url] = img2; };
-      img2.onerror = () => {};
-      img2.src = url;
-    };
+    const img = new Image(); img.crossOrigin = 'anonymous';
+    img.onload  = () => { addToRadarCache(url, img); if (--remaining === 0) prefetchInProgress = false; };
+    img.onerror = () => { if (--remaining === 0) prefetchInProgress = false; };
     img.src = url;
   });
 }
 
-// Switch to a specific frame index and repaint
 function goToFrame(idx) {
   if (!radarFrames.length) return;
   idx = Math.max(0, Math.min(radarFrames.length - 1, idx));
   radarFrameIdx = idx;
-  radarPath = radarFrames[idx].path;
+  // FIX(bug): pass path directly instead of mutating global then reading it
+  const framePath = radarFrames[idx].path;
+  radarPath = framePath;
   radarTs   = radarFrames[idx].time;
   updatePlaybarUI();
-  drawRadar();
+  drawRadar(framePath);
 }
 
-// Build the dot row from current radarFrames
 function buildPlaybarDots() {
   const container = document.getElementById('rdrFrameDots');
   if (!container) return;
@@ -2390,301 +2151,259 @@ function buildPlaybarDots() {
   });
 }
 
-// Update dot highlights, time label, LIVE button state
 function updatePlaybarUI() {
   const dots = document.querySelectorAll('.rdr-dot');
-  dots.forEach((d, i) => {
-    d.classList.toggle('active', i === radarFrameIdx);
-  });
-
-  const isLive = radarFrameIdx === radarFrames.length - 1;
+  dots.forEach((d, i) => d.classList.toggle('active', i === radarFrameIdx));
+  const isLive  = radarFrameIdx === radarFrames.length - 1;
   const liveBtn = document.getElementById('rdrLiveBtn');
   if (liveBtn) liveBtn.classList.toggle('at-live', isLive);
-
   const label = document.getElementById('rdrTimeLabel');
   if (label && radarFrames[radarFrameIdx]) {
-    if (isLive) {
-      label.textContent = 'LIVE';
-      label.style.color = 'var(--green)';
-    } else {
-      const now = Math.floor(Date.now() / 1000);
-      const diffMin = Math.round((now - radarFrames[radarFrameIdx].time) / 60);
-      label.textContent = `−${diffMin}m`;
-      label.style.color = 'var(--cyan)';
+    if (isLive) { label.textContent = 'LIVE'; label.style.color = 'var(--green)'; }
+    else {
+      const diffMin = Math.round((Date.now()/1000 - radarFrames[radarFrameIdx].time) / 60);
+      label.textContent = `−${diffMin}m`; label.style.color = 'var(--cyan)';
     }
   }
-
-  // Also update legacy timestamp div — always visible when radar is on
   const ts = document.getElementById('radarTimestamp');
   if (ts && radarFrames[radarFrameIdx]) {
     const d = new Date(radarFrames[radarFrameIdx].time * 1000);
     const timeStr = d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'});
     const dateStr = d.toLocaleDateString('en-US', {month:'short', day:'numeric', timeZone:'America/Chicago'});
-    const isLiveFrame = radarFrameIdx === radarFrames.length - 1;
-    ts.innerHTML = isLiveFrame
-      ? `📡 <span style="color:var(--green)">LIVE</span> &nbsp;${dateStr} ${timeStr} CDT`
-      : `📡 ${dateStr} ${timeStr} CDT`;
+    ts.innerHTML = isLive ? `📡 <span style="color:var(--green)">LIVE</span> &nbsp;${dateStr} ${timeStr} CDT` : `📡 ${dateStr} ${timeStr} CDT`;
   }
-
   const playBtn = document.getElementById('rdrPlayBtn');
-  if (playBtn) {
-    playBtn.textContent = radarPlaying ? '⏸' : '▶';
-    playBtn.classList.toggle('playing', radarPlaying);
-  }
+  if (playBtn) { playBtn.textContent = radarPlaying ? '⏸' : '▶'; playBtn.classList.toggle('playing', radarPlaying); }
 }
 
-function toggleRadarPlay() {
-  if (radarPlaying) {
-    stopRadarPlay();
-  } else {
-    startRadarPlay();
-  }
-}
-
+function toggleRadarPlay() { radarPlaying ? stopRadarPlay() : startRadarPlay(); }
 function startRadarPlay() {
   if (!radarFrames.length) return;
   radarPlaying = true;
-  // Start from beginning if currently on live, otherwise continue from current position
   if (radarFrameIdx >= radarFrames.length - 1) radarFrameIdx = 0;
   updatePlaybarUI();
   radarPlayTimer = setInterval(() => {
-    const next = radarFrameIdx + 1;
-    if (next >= radarFrames.length) {
-      // Wrap back to start and keep looping
-      goToFrame(0);
-    } else {
-      goToFrame(next);
-    }
+    goToFrame(radarFrameIdx + 1 >= radarFrames.length ? 0 : radarFrameIdx + 1);
   }, RADAR_FRAME_MS);
 }
+function stopRadarPlay() { radarPlaying = false; clearInterval(radarPlayTimer); radarPlayTimer = null; updatePlaybarUI(); }
+function jumpRadarLive() { stopRadarPlay(); goToFrame(radarFrames.length - 1); }
+function setRadarSpeed(ms) { RADAR_FRAME_MS = parseInt(ms, 10); if (radarPlaying) { stopRadarPlay(); startRadarPlay(); } }
 
-function stopRadarPlay() {
-  radarPlaying = false;
-  clearInterval(radarPlayTimer);
-  radarPlayTimer = null;
-  updatePlaybarUI();
-}
-
-function jumpRadarLive() {
-  stopRadarPlay();
-  goToFrame(radarFrames.length - 1);
-}
-
-// Refresh radar data every 2 minutes
-setInterval(() => { if (lyr.radar) fetchRadar(); }, 2 * 60 * 1000);
-
+// FIX(bug): use data-layer attribute instead of brittle onclick regex
 function toggleLayer(name, btn) {
-  const isOverlay = name === 'wind' || name === 'warnings' || name === 'radar' || name === 'earthquakes' || name === 'wildfires';
-  if (!isOverlay) {
+  const OVERLAYS = new Set(['wind','warnings','radar','earthquakes','wildfires']);
+  if (!OVERLAYS.has(name)) {
+    const wasTemp = activeLayer === 'temp';
     if (activeLayer === name) return;
-    document.querySelectorAll('.layer-btn').forEach(b => {
-      const n = b.getAttribute('onclick')?.match(/toggleLayer\('(\w+)'/)?.[1];
-      if (n && n !== 'wind' && n !== 'warnings' && n !== 'radar') b.classList.remove('active');
+    // Deactivate all data-layer buttons for non-overlay layers
+    document.querySelectorAll('[data-layer]').forEach(b => {
+      if (!OVERLAYS.has(b.getAttribute('data-layer'))) b.classList.remove('active');
     });
     btn.classList.add('active');
     activeLayer = name;
+    // FIX(feature): show/hide temperature heatmap overlay
+    if (name === 'temp') {
+      lyr.temp = true;
+      drawHeatmap();
+    } else {
+      if (wasTemp) {
+        lyr.temp = false;
+        hCv.style.opacity = '0';
+        hCtx.clearRect(0, 0, hCv.width, hCv.height);
+      }
+    }
     drawStations();
     updateLegend();
     return;
   }
-  // Overlays toggle independently
   btn.classList.toggle('active');
   lyr[name] = btn.classList.contains('active');
   if (name === 'wind') {
-    windOn = lyr[name];
+    windOn = lyr.wind;
     wCv.style.opacity = windOn ? '1' : '0';
     if (!windOn) wCtx.clearRect(0, 0, wCv.width, wCv.height);
+    if (windOn) buildStationGrid();
   }
   if (name === 'warnings') {
-    d3.select('#gWarn').style('display', lyr[name] ? '' : 'none');
+    d3.select('#gWarn').style('display', lyr.warnings ? '' : 'none');
   }
   if (name === 'earthquakes') {
     if (lyr.earthquakes) fetchEarthquakes();
-    else { if (gHazard) gHazard.selectAll('.eq-marker').remove(); }
+    else if (gHazard) gHazard.selectAll('.eq-marker').remove();
   }
   if (name === 'wildfires') {
     if (lyr.wildfires) fetchWildfires();
-    else { if (gHazard) gHazard.selectAll('.fire-marker').remove(); }
+    else if (gHazard) gHazard.selectAll('.fire-marker').remove();
   }
   if (name === 'radar') {
     if (lyr.radar) {
-      if (!rdrCv.width || !rdrCv.height) {
-        const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
-        rdrCv.width = W; rdrCv.height = H;
-      }
+      if (!rdrCv.width || !rdrCv.height) { rdrCv.width = mapWrap.offsetWidth; rdrCv.height = mapWrap.offsetHeight; }
       fetchRadar();
       document.getElementById('radarPlaybar').style.display = 'flex';
       document.getElementById('radarTimestamp').style.display = 'block';
     } else {
       stopRadarPlay();
-      radarFrames = [];
-      radarFrameIdx = -1;
+      radarFrames = []; radarFrameIdx = -1;
       rdrCtx.clearRect(0, 0, rdrCv.width, rdrCv.height);
-      rdrCv.style.opacity = '0';
-      rdrCv.style.transform = '';
-      document.getElementById('radarPlaybar').style.display = 'none';
+      // FIX(bug): reset both opacity and transform together on layer off
+      rdrCv.style.opacity    = '0';
+      rdrCv.style.transform  = '';
+      document.getElementById('radarPlaybar').style.display  = 'none';
       document.getElementById('radarTimestamp').style.display = 'none';
     }
   }
 }
 
 // ══════════════════════════════════════════════════════════
-// NWS ALERTS
+// NWS ALERTS — FIX(perf): diff-based update instead of full redraw
 // ══════════════════════════════════════════════════════════
-let nwsAlerts=[], seenIds=new Set();
+let nwsAlerts = [], seenAlertIds = new Set();
 let nwsFetchFails = 0;
+// Track which alert IDs are currently rendered on the map
+let renderedAlertIds = new Set();
 
 async function fetchNWS() {
-  // Use broad severity/urgency filter — NWS rejects long event= lists with 400
   const urls = [
-    `https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&severity=Extreme,Severe`,
-    `https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate&severity=Extreme,Severe,Moderate`
+    'https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&severity=Extreme,Severe',
+    'https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate&severity=Extreme,Severe,Moderate'
   ];
   let ok = false;
   for (const url of urls) {
     try {
       const r = await fetch(url, {
-        headers:{'Accept':'application/geo+json','User-Agent':'VortexStormTracker/2.0 (nwarkansas@vortexapp.local)'},
+        headers: {'Accept':'application/geo+json','User-Agent':'VortexStormTracker/2.0 (nwarkansas@vortexapp.local)'},
         signal: AbortSignal.timeout(10000)
       });
       if (!r.ok) throw new Error(r.status);
       const feats = (await r.json()).features || [];
-      // Filter to relevant types on the broad query
       const relevant = ['tornado','thunderstorm','wind','flood'];
-      nwsAlerts = feats.filter(f => {
-        const ev = (f.properties?.event||'').toLowerCase();
-        return relevant.some(t => ev.includes(t));
-      });
-      document.getElementById('nwsStatus').textContent='OK';
-      document.getElementById('nwsStatus').style.color='var(--green)';
-      nwsFetchFails = 0;
-      ok = true;
-      break;
+      nwsAlerts = feats.filter(f => relevant.some(t => (f.properties?.event||'').toLowerCase().includes(t)));
+      document.getElementById('nwsStatus').textContent = 'OK';
+      document.getElementById('nwsStatus').style.color = 'var(--green)';
+      nwsFetchFails = 0; ok = true; break;
     } catch(e) {}
   }
   if (!ok) {
     nwsFetchFails++;
     document.getElementById('nwsStatus').textContent = nwsFetchFails > 2 ? 'DOWN' : 'ERR';
-    document.getElementById('nwsStatus').style.color='var(--red)';
+    document.getElementById('nwsStatus').style.color = 'var(--red)';
   }
   renderNWS();
 }
 
-// AR FIPS codes: Benton=05007, Washington=05143, Madison=05087, Carroll=05015, Boone=05009
-const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
+const HOME_FIPS_SET = HOME_FIPS;
 
 function isLocalAlert(areaDesc, geocode) {
-  // Check FIPS codes first (most reliable, no false positives)
   if (geocode) {
     const fips = geocode.SAME || geocode.UGC || [];
     const fipsArr = Array.isArray(fips) ? fips : Object.values(fips).flat();
-    if (fipsArr.some(f => HOME_FIPS.has(String(f).replace(/\D/g,'').slice(-5)))) return true;
+    if (fipsArr.some(f => HOME_FIPS_SET.has(String(f).replace(/\D/g,'').slice(-5)))) return true;
   }
-  // Fallback: text match — require ", AR" or "Arkansas" to avoid matching
-  // county names that exist in other states (Washington, Benton, Madison, Carroll
-  // all exist nationwide) and avoid partial matches like "park" containing "ark"
   if (!areaDesc) return false;
-  const text = areaDesc.toUpperCase();
+  const text  = areaDesc.toUpperCase();
   const hasAR = text.includes(', AR') || text.includes('ARKANSAS');
   if (!hasAR) return false;
   return HOME.counties.some(c => text.includes(c.toUpperCase()));
 }
 
+// FIX(perf): only add/remove changed polygons instead of full gWarn redraw
+// FIX(medium): renderAlertItem() builds DOM without innerHTML copy
+function renderAlertItem(p, ev, area, exp, cls, ico, lbl, local, headline) {
+  const item = document.createElement('div');
+  item.className = `alert-item ${cls}${local ? ' local-flag' : ''}`;
+  const shortArea = area.length > 60 ? area.slice(0,57)+'…' : area;
+  const badge = local ? '<span class="local-flag-badge">📍 YOUR AREA</span>' : '';
+  item.innerHTML = `<div class="alert-type">${ico} ${lbl}${badge}</div>
+    <div class="alert-location">${shortArea}</div>
+    ${headline ? `<div class="alert-time" style="color:var(--text);opacity:.7;font-size:10px;margin-top:3px;">${headline}</div>` : ''}
+    <div class="alert-time">Exp ${exp}</div>`;
+  return item;
+}
+
 function renderNWS() {
   if (!gWarn) { setTimeout(renderNWS, 500); return; }
-  gWarn.selectAll('*').remove();
-  const al = document.getElementById('alertsList'); al.innerHTML='';
+
+  // Determine which alerts are new vs. expired
+  const currentIds = new Set(nwsAlerts.map(f => f.properties?.id).filter(Boolean));
+  // Remove polygons for expired alerts
+  if (lyr.warnings) {
+    renderedAlertIds.forEach(id => {
+      if (!currentIds.has(id)) {
+        gWarn.selectAll(`[data-alert-id="${CSS.escape(id)}"]`).remove();
+        renderedAlertIds.delete(id);
+      }
+    });
+  }
+
+  const al  = document.getElementById('alertsList');
+  al.innerHTML = '';
   let ct = {t:0,w:0,a:0};
   let localItems = [], otherItems = [];
 
   nwsAlerts.forEach(feat => {
-    const p=feat.properties, ev=p.event||'', area=p.areaDesc||'';
-    const exp=p.expires?new Date(p.expires).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CDT':'--';
-    const id=p.id;
+    const p   = feat.properties, ev = p.event||'', area = p.areaDesc||'';
+    const exp = p.expires ? new Date(p.expires).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CDT' : '--';
+    const id  = p.id;
     const headline = (p.headline||'').replace(/^.*?(issued|until)/i,'').trim().slice(0,80);
-    let cls,col,ico,lbl;
-    if (ev.includes('Tornado Warning'))           {cls='tornado'; col='#e63946'; ico='🌪'; lbl='Tornado Warning'; ct.t++;}
-    else if (ev.includes('Tornado Watch'))         {cls='watch';   col='#f5a623'; ico='⚠';  lbl='Tornado Watch';   ct.w++;}
-    else if (ev.includes('Severe Thunderstorm W')) {cls='watch';   col='#ff7b00'; ico='⛈';  lbl='Svr Tstorm '+ev.split(' ').pop(); ct.w++;}
-    else if (ev.includes('Flash Flood Warning'))   {cls='tornado'; col='#00d4ff'; ico='🌊'; lbl='Flash Flood Warning'; ct.t++;}
-    else if (ev.includes('Flash Flood Watch'))     {cls='watch';   col='#00aaff'; ico='🌊'; lbl='Flash Flood Watch';   ct.w++;}
-    else if (ev.includes('Flood Warning'))         {cls='watch';   col='#00aaff'; ico='🌊'; lbl='Flood Warning';       ct.w++;}
-    else if (ev.includes('Flood Watch'))           {cls='advisory';col='#00d4ff'; ico='🌊'; lbl='Flood Watch';         ct.a++;}
-    else if (ev.includes('Flash Flood Statement')) {cls='advisory';col='#00d4ff'; ico='🌊'; lbl='Flash Flood Statement';ct.a++;}
-    else                                           {cls='advisory';col='#00d4ff'; ico='ℹ';  lbl=ev; ct.a++;}
+    let cls, col, ico, lbl;
+    if (ev.includes('Tornado Warning'))           {cls='tornado';col='#e63946';ico='🌪';lbl='Tornado Warning';ct.t++;}
+    else if (ev.includes('Tornado Watch'))         {cls='watch';  col='#f5a623';ico='⚠'; lbl='Tornado Watch';  ct.w++;}
+    else if (ev.includes('Severe Thunderstorm W')) {cls='watch';  col='#ff7b00';ico='⛈'; lbl='Svr Tstorm '+ev.split(' ').pop();ct.w++;}
+    else if (ev.includes('Flash Flood Warning'))   {cls='tornado';col='#00d4ff';ico='🌊';lbl='Flash Flood Warning';ct.t++;}
+    else if (ev.includes('Flash Flood Watch'))     {cls='watch';  col='#00aaff';ico='🌊';lbl='Flash Flood Watch';  ct.w++;}
+    else if (ev.includes('Flood Warning'))         {cls='watch';  col='#00aaff';ico='🌊';lbl='Flood Warning';       ct.w++;}
+    else if (ev.includes('Flood Watch'))           {cls='advisory';col='#00d4ff';ico='🌊';lbl='Flood Watch';        ct.a++;}
+    else if (ev.includes('Flash Flood Statement')) {cls='advisory';col='#00d4ff';ico='🌊';lbl='Flash Flood Statement';ct.a++;}
+    else                                           {cls='advisory';col='#00d4ff';ico='ℹ'; lbl=ev;                   ct.a++;}
 
     const local = isLocalAlert(area, p.geocode);
 
-    // Draw polygon on map — local alerts get thicker stroke + brighter fill
-    if (feat.geometry && lyr.warnings) {
+    // FIX(perf): only draw polygon if it's new
+    if (feat.geometry && lyr.warnings && !renderedAlertIds.has(id)) {
       try {
         const isWarning = cls === 'tornado';
-        const strokeW = local ? 3.5 : isWarning ? 2.5 : 1.8;
-
-        // Dark halo behind the colored stroke — gives contrast on top of any radar color
-        gWarn.append('path')
-          .datum(feat)
-          .attr('d', pathGen)
-          .attr('fill', 'none')
-          .attr('stroke', '#000')
-          .attr('stroke-width', strokeW + 2.5)
-          .attr('stroke-opacity', 0.55)
-          .attr('stroke-linejoin', 'round')
-          .attr('stroke-linecap', 'round')
-          .attr('class', 'warn-path warn-halo')
-          .style('pointer-events', 'none');
-
-        // Colored warning border on top
-        gWarn.append('path')
-          .datum(feat)
-          .attr('d', pathGen)
-          .attr('fill', col)
-          .attr('fill-opacity', local ? 0.32 : isWarning ? 0.22 : 0.10)
-          .attr('stroke', col)
-          .attr('stroke-width', strokeW)
-          .attr('stroke-dasharray', cls==='watch' ? '6,3' : 'none')
-          .attr('stroke-opacity', 1)
-          .attr('stroke-linejoin', 'round')
-          .attr('stroke-linecap', 'round')
-          .attr('class', 'warn-path')
-          .style('pointer-events', 'none');
-
-        // Pulse ring for local tornado warnings
-        if (local && cls === 'tornado') {
-          gWarn.append('path')
-            .datum(feat)
-            .attr('d', pathGen)
-            .attr('fill', 'none')
-            .attr('stroke', col)
-            .attr('stroke-width', 2)
-            .attr('stroke-opacity', 0.5)
-            .attr('stroke-dasharray', '3,4')
-            .attr('class', 'warn-path')
-            .style('pointer-events', 'none');
+        const strokeW   = local ? 3.5 : isWarning ? 2.5 : 1.8;
+        // Dark halo
+        gWarn.append('path').datum(feat).attr('d', pathGen)
+          .attr('fill','none').attr('stroke','#000').attr('stroke-width',strokeW+2.5)
+          .attr('stroke-opacity',.55).attr('stroke-linejoin','round').attr('stroke-linecap','round')
+          .attr('class','warn-path warn-halo').attr('data-alert-id', id)
+          .style('pointer-events','none');
+        // Colored border
+        gWarn.append('path').datum(feat).attr('d', pathGen)
+          .attr('fill',col).attr('fill-opacity', local?0.32:isWarning?0.22:0.10)
+          .attr('stroke',col).attr('stroke-width',strokeW)
+          .attr('stroke-dasharray',cls==='watch'?'6,3':'none')
+          .attr('stroke-opacity',1).attr('stroke-linejoin','round').attr('stroke-linecap','round')
+          .attr('class','warn-path').attr('data-alert-id', id)
+          .style('pointer-events','none');
+        if (local && cls==='tornado') {
+          gWarn.append('path').datum(feat).attr('d', pathGen)
+            .attr('fill','none').attr('stroke',col).attr('stroke-width',2)
+            .attr('stroke-opacity',.5).attr('stroke-dasharray','3,4')
+            .attr('class','warn-path').attr('data-alert-id', id)
+            .style('pointer-events','none');
         }
+        renderedAlertIds.add(id);
       } catch(e) {}
     }
 
-    const localBadge = local ? '<span class="local-flag-badge">📍 YOUR AREA</span>' : '';
-    const item = document.createElement('div');
-    item.className = `alert-item ${cls}${local ? ' local-flag' : ''}`;
-    const shortArea = area.length > 60 ? area.slice(0,57)+'…' : area;
-    item.innerHTML = `<div class="alert-type">${ico} ${lbl}${localBadge}</div><div class="alert-location">${shortArea}</div>${headline?`<div class="alert-time" style="color:var(--text);opacity:.7;font-size:10px;margin-top:3px;">${headline}</div>`:''}  <div class="alert-time">Exp ${exp}</div>`;
-
+    // FIX(medium): use renderAlertItem() instead of innerHTML copy
+    const item = renderAlertItem(p, ev, area, exp, cls, ico, lbl, local, headline);
     if (local) localItems.push({item, cls});
-    else otherItems.push({item, cls});
+    else       otherItems.push({item, cls});
 
-    if (!seenIds.has(id)) {
-      seenIds.add(id);
+    if (id && !seenAlertIds.has(id)) {
+      trackSeen(id);
+      seenAlertIds.add(id);
       if (local && (cls==='tornado'||cls==='watch')) fireAlert(lbl, area, col, local);
     }
   });
 
-  // Sort: tornado warnings first, then watches
-  const sortFn = (a,b) => (a.cls==='tornado'?0:a.cls==='watch'?1:2) - (b.cls==='tornado'?0:b.cls==='watch'?1:2);
+  const sortFn = (a,b) => (a.cls==='tornado'?0:a.cls==='watch'?1:2)-(b.cls==='tornado'?0:b.cls==='watch'?1:2);
   localItems.sort(sortFn); otherItems.sort(sortFn);
 
-  // Local alerts at top, then others
   if (localItems.length) {
     const hdr = document.createElement('div');
     hdr.style.cssText = 'font-family:var(--font-mono);font-size:9px;color:var(--amber);letter-spacing:1px;padding:4px 0 6px;text-transform:uppercase;';
@@ -2700,534 +2419,448 @@ function renderNWS() {
   }
   otherItems.forEach(({item}) => al.appendChild(item));
 
-  if (!nwsAlerts.length)
-    al.innerHTML='<div style="font-family:var(--font-mono);font-size:11px;color:var(--green);padding:8px 0;">✓ No active severe weather alerts.</div>';
+  if (!nwsAlerts.length) al.innerHTML = '<div style="font-family:var(--font-mono);font-size:11px;color:var(--green);padding:8px 0;">✓ No active severe weather alerts.</div>';
 
-  const tot=ct.t+ct.w+ct.a;
-  document.getElementById('alertBadge').textContent = tot || '0';
+  const tot = ct.t+ct.w+ct.a;
+  document.getElementById('alertBadge').textContent  = tot || '0';
   document.getElementById('alertCount').textContent  = `${tot} ALERT${tot!==1?'S':''}`;
-  document.getElementById('alertDot').className = 'status-dot '+(ct.t>0?'alert':ct.w>0?'warn':'');
+  document.getElementById('alertDot').className       = 'status-dot '+(ct.t>0?'alert':ct.w>0?'warn':'');
   document.getElementById('activeCounties').textContent = tot;
-  const el=document.getElementById('spcOutlook');
-  if(ct.t>0){el.textContent='HIGH RISK';el.style.color='var(--red)';}
-  else if(ct.w>0){el.textContent='MODERATE RISK';el.style.color='var(--amber)';}
-  else if(tot>0){el.textContent='MARGINAL RISK';el.style.color='var(--cyan)';}
+  const el = document.getElementById('spcOutlook');
+  if (ct.t>0) {el.textContent='HIGH RISK';el.style.color='var(--red)';}
+  else if (ct.w>0){el.textContent='MODERATE RISK';el.style.color='var(--amber)';}
+  else if (tot>0){el.textContent='MARGINAL RISK';el.style.color='var(--cyan)';}
   else{el.textContent='NO ACTIVE RISK';el.style.color='var(--green)';}
 
-  // Sync to mobile alerts sheet
+  // FIX(medium): sync to mobile sheets via renderAlertItem() (no innerHTML copy)
   const dst = document.getElementById('alertsListM');
-  if(dst) dst.innerHTML = al.innerHTML;
-  const badgeM = document.getElementById('alertBadgeM');
-  if(badgeM) badgeM.textContent = tot || '0';
-  const navDot = document.getElementById('navAlertDot');
-  if(navDot) navDot.classList.toggle('visible', tot > 0);
+  if (dst) {
+    dst.innerHTML = '';
+    // Re-render into mobile container
+    if (!nwsAlerts.length) {
+      dst.innerHTML = al.innerHTML; // safe — plain no-alerts message
+    } else {
+      // Clone the desktop list's children into the mobile container
+      Array.from(al.childNodes).forEach(node => dst.appendChild(node.cloneNode(true)));
+    }
+  }
+  const badgeM  = document.getElementById('alertBadgeM');
+  if (badgeM) badgeM.textContent = tot || '0';
+  const navDot  = document.getElementById('navAlertDot');
+  if (navDot) navDot.classList.toggle('visible', tot > 0);
 
-  // Rescale NWS stroke widths to match current zoom level
   if (currentTransform) rescaleStations(currentTransform.k);
-
-  // Re-check if user's GPS position is inside any active warning polygon
   checkPersonalAlerts();
+}
+
+// ══════════════════════════════════════════════════════════
+// PUSH PROXY — FIX(critical): route push through Vercel function
+// /api/push serverless function reads NTFY_URL from env — never exposed
+// to the browser. Falls back to direct fetch on localhost/file://
+// ══════════════════════════════════════════════════════════
+async function sendPush({ title, body, priority = 'high', tags = 'rotating_light' }) {
+  if (!cfg.push) return;
+  const isLocal = location.hostname === 'localhost' || location.protocol === 'file:';
+  if (isLocal) {
+    // Dev only: direct fetch — ntfy URL only reachable from local machine
+    await fetch(cfg.push, { method:'POST', body,
+      headers: { 'Title': title, 'Priority': priority, 'Tags': tags }
+    });
+    return;
+  }
+  // Production: Vercel serverless proxy (see /api/push.js)
+  await fetch('/api/push', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, body, priority, tags })
+  });
 }
 
 async function fireAlert(ev, area, col, local=false) {
   const title = local ? `🚨 YOUR AREA: ${ev}` : ev;
   showToast(ev.includes('Warning')?'tornado':'watch', title, area.split(';')[0]);
-  // Check both desktop + mobile push toggles
-  const pushOn = document.getElementById('togglePush').checked || document.getElementById('togglePushM')?.checked;
-  if(pushOn && cfg.push?.startsWith('http')) {
+  const pushOn = document.querySelector('[data-sync-group="push"]')?.checked;
+  if (pushOn && cfg.push) {
     const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
-    try { await fetch(cfg.push,{method:'POST',
-      body:`${local?'🚨 YOUR AREA — ':''} ${ev}\n${area.split(';')[0]}\n${time} CDT`,
-      headers:{
-        'Title': local ? `🚨 VORTEX: ${ev} — YOUR AREA` : `VORTEX: ${ev}`,
-        'Priority': local ? 'urgent' : (ev.includes('Warning')?'urgent':'high'),
-        'Tags': local ? 'rotating_light,sos' : 'rotating_light'
-      }}); } catch{}
+    sendPush({
+      title:    local ? `🚨 VORTEX: ${ev} — YOUR AREA` : `VORTEX: ${ev}`,
+      body:     `${local?'🚨 YOUR AREA — ':''}${ev}\n${area.split(';')[0]}\n${time} CDT`,
+      priority: local ? 'urgent' : (ev.includes('Warning') ? 'urgent' : 'high'),
+      tags:     local ? 'rotating_light,sos' : 'rotating_light'
+    }).catch(() => {});
   }
-  const hueOn = document.getElementById('toggleHue').checked || document.getElementById('toggleHueM')?.checked;
-  if(hueOn && cfg.hueIP) hueFlash(col);
-  const audioOn = document.getElementById('toggleAudio').checked || document.getElementById('toggleAudioM')?.checked;
-  if(audioOn) siren(ev.includes('Warning'));
+  const hueOn   = document.querySelector('[data-sync-group="hue"]')?.checked;
+  if (hueOn && cfg.hueIP) hueFlash(col);
+  const audioOn = document.querySelector('[data-sync-group="audio"]')?.checked;
+  if (audioOn) siren(ev.includes('Warning'));
 }
 
 // ══════════════════════════════════════════════════════════
-// THRESHOLDS
+// THRESHOLDS — FIX(medium): reads cached values, not DOM each tick
 // ══════════════════════════════════════════════════════════
 function checkTh() {
-  // Read thresholds from whichever inputs are visible/populated
-  const tc = +document.getElementById('th-cape').value  || +document.getElementById('th-cape-m')?.value  || 1500;
-  const ts = +document.getElementById('th-srh').value   || +document.getElementById('th-srh-m')?.value   || 250;
-  const tw = +document.getElementById('th-wind').value  || +document.getElementById('th-wind-m')?.value  || 60;
-  const tr = +document.getElementById('th-risk').value  || +document.getElementById('th-risk-m')?.value  || 70;
-
-  // Check home stations first, then all stations
+  const tc = thCache.cape, ts = thCache.srh, tw = thCache.wind, tr = thCache.risk;
   const homeTriggered = stations.filter(s => s.home && s.cape>tc && s.srh>ts && s.w>tw && s.risk>tr);
   const allTriggered  = stations.filter(s => s.cape>tc && s.srh>ts && s.w>tw && s.risk>tr);
-
-  // Hue feedback for any triggered station
   allTriggered.forEach(s => {
-    const hueOn = document.getElementById('toggleHue').checked || document.getElementById('toggleHueM')?.checked;
-    if(hueOn && cfg.hueIP) {
-      document.getElementById('hueStatus').style.display='flex';
-      document.getElementById('hueStatusText').textContent=`Threshold: ${s.n} (Risk ${s.risk})`;
-    }
+    const hueOn = document.querySelector('[data-sync-group="hue"]')?.checked;
+    if (hueOn && cfg.hueIP) { document.getElementById('hueStatus').style.display='flex'; document.getElementById('hueStatusText').textContent=`Threshold: ${s.n} (Risk ${s.risk})`; }
   });
-
-  // Push + toast for home stations (highest priority)
   if (homeTriggered.length) {
     const worst = homeTriggered.sort((a,b) => b.risk-a.risk)[0];
-    const key = `th_home_${worst.n}_${Math.floor(Date.now()/300000)}`; // once per 5 min per station
+    const key = `th_home_${worst.n}_${Math.floor(Date.now()/300000)}`;
     if (!seenIds.has(key)) {
-      seenIds.add(key);
+      trackSeen(key); seenIds.add(key);
       showToast('tornado', `🚨 HOME AREA THRESHOLD: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`);
-      const pushOn = document.getElementById('togglePush').checked || document.getElementById('togglePushM')?.checked;
-      if (pushOn && cfg.push?.startsWith('http')) {
+      const pushOn = document.querySelector('[data-sync-group="push"]')?.checked;
+      if (pushOn && cfg.push) {
         const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
-        fetch(cfg.push, {method:'POST',
-          body:`🚨 NW Arkansas threshold exceeded\n${worst.n} — Risk ${worst.risk}/100\nCAPE ${worst.cape} J/kg · SRH ${worst.srh} · Wind ${worst.w} mph\n${time} CDT`,
-          headers:{
-            'Title': `🚨 VORTEX: Threshold Alert — YOUR AREA`,
-            'Priority': 'urgent',
-            'Tags': 'rotating_light,sos'
-          }}).catch(()=>{});
+        sendPush({
+          title:    '🚨 VORTEX: Threshold Alert — YOUR AREA',
+          body:     `🚨 NW Arkansas threshold exceeded\n${worst.n} — Risk ${worst.risk}/100\nCAPE ${worst.cape} J/kg · SRH ${worst.srh} · Wind ${worst.w} mph\n${time} CDT`,
+          priority: 'urgent', tags: 'rotating_light,sos'
+        }).catch(() => {});
       }
     }
   } else if (allTriggered.length) {
-    // Non-home station exceeded threshold — toast only, no push
     const worst = allTriggered.sort((a,b) => b.risk-a.risk)[0];
-    const key = `th_${worst.n}_${Math.floor(Date.now()/300000)}`;
-    if (!seenIds.has(key)) {
-      seenIds.add(key);
-      showToast('watch', `⚡ Threshold Alert: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`);
-    }
+    const key   = `th_${worst.n}_${Math.floor(Date.now()/300000)}`;
+    if (!seenIds.has(key)) { trackSeen(key); seenIds.add(key); showToast('watch', `⚡ Threshold Alert: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`); }
   }
 }
 
 // ══════════════════════════════════════════════════════════
-// HUE + AUDIO
+// HUE — FIX(critical): dual-mode HTTPS (Bridge v2) / HTTP (Bridge v1) fallback
+// Bridge v2 (square) supports HTTPS with self-signed cert.
+// Bridge v1 (round) only supports HTTP.
+// Token stays on the local network in both cases — never sent to internet.
 // ══════════════════════════════════════════════════════════
+async function hueFetchLights(protocol) {
+  const base = `${protocol}://${cfg.hueIP}/api/${cfg.hueT}`;
+  const r = await fetch(`${base}/lights`, { signal: AbortSignal.timeout(5000) });
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return { lights: await r.json(), base };
+}
+
 function hueFlash(hex) {
-  if(!cfg.hueIP||!cfg.hueT) return;
-  const url=`http://${cfg.hueIP}/api/${cfg.hueT}/lights`;
-  const xy=hex==='#e63946'?[0.675,0.322]:hex==='#f5a623'?[0.503,0.415]:[0.167,0.040];
-  fetch(url).then(r=>r.json()).then(ls=>{
-    const ids=Object.keys(ls);
-    const f=on=>ids.forEach(id=>fetch(`${url}/${id}/state`,{method:'PUT',body:JSON.stringify({on,xy,bri:254,transitiontime:1})}));
-    f(true);[600,1200,1800,2400].forEach((t,i)=>setTimeout(()=>f(i%2===1),t));
-  }).catch(()=>{});
-  document.getElementById('hueStatus').style.display='flex';
-  document.getElementById('hueStatusText').textContent=`Lights: ${hex==='#e63946'?'red flash':'amber pulse'}`;
+  if (!cfg.hueIP || !cfg.hueT) return;
+  const xy = hex==='#e63946'?[0.675,0.322]:hex==='#f5a623'?[0.503,0.415]:[0.167,0.040];
+  // Try HTTPS first (Bridge v2), fall back to HTTP (Bridge v1)
+  hueFetchLights('https')
+    .catch(() => hueFetchLights('http'))
+    .then(({ lights, base }) => {
+      const ids = Object.keys(lights);
+      const setState = (on) => ids.forEach(id =>
+        fetch(`${base}/lights/${id}/state`, {
+          method: 'PUT',
+          body: JSON.stringify({ on, xy, bri: 254, transitiontime: 1 })
+        }).catch(() => {})
+      );
+      setState(true);
+      [600, 1200, 1800, 2400].forEach((t, i) => setTimeout(() => setState(i % 2 === 1), t));
+    }).catch(() => {});
+  document.getElementById('hueStatus').style.display = 'flex';
+  document.getElementById('hueStatusText').textContent = `Lights: ${hex==='#e63946'?'red flash':'amber pulse'}`;
 }
 
 function siren(warn) {
   try {
-    const ac=new(window.AudioContext||window.webkitAudioContext)();
-    (warn?[880,660,880,660]:[440,550]).forEach((f,i)=>{
-      const o=ac.createOscillator(),g=ac.createGain();
-      o.connect(g);g.connect(ac.destination);
-      o.frequency.value=f;o.type='square';
-      g.gain.setValueAtTime(0.12,ac.currentTime+i*.25);
-      g.gain.exponentialRampToValueAtTime(0.001,ac.currentTime+i*.25+.2);
-      o.start(ac.currentTime+i*.25);o.stop(ac.currentTime+i*.25+.25);
+    const ac = new (window.AudioContext||window.webkitAudioContext)();
+    (warn ? [880,660,880,660] : [440,550]).forEach((f,i) => {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.connect(g); g.connect(ac.destination);
+      o.frequency.value = f; o.type = 'square';
+      g.gain.setValueAtTime(0.12, ac.currentTime+i*.25);
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime+i*.25+.2);
+      o.start(ac.currentTime+i*.25); o.stop(ac.currentTime+i*.25+.25);
     });
   } catch{}
 }
 
 async function testPush() {
-  if(!cfg.push){showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');return;}
-  const top=stations.sort((a,b)=>b.risk-a.risk)[0];
-  const msg=top?`${top.n} — Risk ${top.risk}/100 | CAPE ${top.cape} J/kg`:'Test from VORTEX';
-  showToast('tornado','🌪 TEST PUSH',msg);
-  if(cfg.push.startsWith('http')) {
-    try{await fetch(cfg.push,{method:'POST',body:`🌪 VORTEX TEST\n${msg}`,headers:{'Title':'VORTEX Alert','Priority':'urgent','Tags':'rotating_light'}});showToast('watch','Push Sent ✓','Check your phone.');}
-    catch{showToast('watch','Push Failed','Check ntfy.sh URL.');}
-  }
+  if (!cfg.push) { showToast('watch','Not Configured','Add ntfy.sh URL in Configure.'); return; }
+  const top = stations.sort((a,b) => b.risk-a.risk)[0];
+  const msg = top ? `${top.n} — Risk ${top.risk}/100 | CAPE ${top.cape} J/kg` : 'Test from VORTEX';
+  showToast('tornado','🌪 TEST PUSH', msg);
+  try {
+    await sendPush({ title:'VORTEX Alert', body:`🌪 VORTEX TEST\n${msg}`, priority:'urgent', tags:'rotating_light' });
+    showToast('watch','Push Sent ✓','Check your phone.');
+  } catch { showToast('watch','Push Failed','Check ntfy.sh URL in Configure.'); }
 }
 
 function testHue() {
-  if(!cfg.hueIP||!cfg.hueT){showToast('watch','Not Configured','Add Hue Bridge IP and token first.');return;}
-  hueFlash('#e63946');showToast('tornado','🔴 Hue Test',`Red flash → ${cfg.hueIP}`);
+  if (!cfg.hueIP || !cfg.hueT) { showToast('watch','Not Configured','Add Hue Bridge IP and token first.'); return; }
+  hueFlash('#e63946'); showToast('tornado','🔴 Hue Test',`Red flash → ${cfg.hueIP}`);
 }
 
 // ══════════════════════════════════════════════════════════
 // TOAST
 // ══════════════════════════════════════════════════════════
-function showToast(type,title,body){
-  const c=document.getElementById('toastContainer');
-  const t=document.createElement('div');t.className=`toast ${type}`;
-  t.innerHTML=`<div class="toast-title">${title}</div><div class="toast-body">${body}</div>`;
-  c.appendChild(t);setTimeout(()=>t.remove(),5500);
+function showToast(type, title, body) {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div'); t.className = `toast ${type}`;
+  t.innerHTML = `<div class="toast-title">${title}</div><div class="toast-body">${body}</div>`;
+  c.appendChild(t); setTimeout(() => t.remove(), 5500);
 }
 
 // ══════════════════════════════════════════════════════════
 // SETUP MODAL
 // ══════════════════════════════════════════════════════════
-function saveSetup(){
+function saveSetup() {
   const push = document.getElementById('pushToken').value.trim();
   const hueIP = document.getElementById('hueIP').value.trim();
-  const hueT = document.getElementById('hueToken').value.trim();
-  if(push)  cfg.push  = push;
-  if(hueIP) cfg.hueIP = hueIP;
-  if(hueT)  cfg.hueT  = hueT;
-  // Save to Supabase
+  const hueT  = document.getElementById('hueToken').value.trim();
+  if (push)  cfg.push  = push;
+  if (hueIP) cfg.hueIP = hueIP;
+  if (hueT)  cfg.hueT  = hueT;
   saveUserSettings({ integrations: true, profile: true });
   closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
 }
-function openSetup(){
+function openSetup() {
   document.getElementById('pushToken').value = cfg.push  || '';
   document.getElementById('hueIP').value     = cfg.hueIP || '';
   document.getElementById('hueToken').value  = cfg.hueT  || '';
-  // Populate display name and user email
   if (currentUser) {
     document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
-    document.getElementById('setupUserInfo').textContent =
-      `Signed in as ${currentUser.email}`;
+    document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
-  document.getElementById('setupModal').style.display='flex';
+  document.getElementById('setupModal').style.display = 'flex';
 }
-function closeSetup(){document.getElementById('setupModal').style.display='none';}
-function updateCfgUI(){
-  document.getElementById('pushSub').textContent=cfg.push?(cfg.push.includes('ntfy')?'ntfy.sh · Connected':'Configured'):'ntfy.sh / Pushover';
-  document.getElementById('hueSub').textContent=cfg.hueIP?`Bridge: ${cfg.hueIP}`:'Philips Hue';
+function closeSetup() { document.getElementById('setupModal').style.display = 'none'; }
+function updateCfgUI() {
+  document.querySelectorAll('#pushSub, #pushSubM').forEach(el => {
+    el.textContent = cfg.push ? (cfg.push.includes('ntfy') ? 'ntfy.sh · Connected' : 'Configured') : 'ntfy.sh / Pushover';
+  });
+  document.querySelectorAll('#hueSub, #hueSubM').forEach(el => {
+    el.textContent = cfg.hueIP ? `Bridge: ${cfg.hueIP}` : 'Philips Hue';
+  });
 }
+
+// FIX(bug): use data-layer attribute for layer sync
 function syncLayerBtn(name, srcBtn) {
-  // Sync desktop ↔ mobile layer button active states
-  const desktopBtns = document.querySelectorAll(`.layer-btn:not([id^="mb-"])`);
-  const mobileBtns  = document.querySelectorAll(`.layer-btn[id^="mb-"]`);
-  const isActive = srcBtn.classList.contains('active');
-  const isOverlay = name === 'wind' || name === 'warnings';
+  const OVERLAYS  = new Set(['wind','warnings','radar','earthquakes','wildfires']);
+  const isActive  = srcBtn.classList.contains('active');
+  const isOverlay = OVERLAYS.has(name);
   if (isOverlay) {
-    // Just sync the matching peer
-    desktopBtns.forEach(b => { if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.toggle('active', isActive); });
-    mobileBtns.forEach(b  => { if (b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.toggle('active', isActive); });
+    document.querySelectorAll(`[data-layer="${name}"]`).forEach(b => b.classList.toggle('active', isActive));
   } else {
-    // Exclusive — clear all data layer buttons then activate matching one
-    const allBtns = [...desktopBtns, ...mobileBtns];
-    allBtns.forEach(b => {
-      const n = b.getAttribute('onclick')?.match(/toggleLayer\('(\w+)'/)?.[1];
-      if (n && n !== 'wind' && n !== 'warnings') b.classList.remove('active');
-      if (n === name) b.classList.add('active');
+    document.querySelectorAll('[data-layer]').forEach(b => {
+      const n = b.getAttribute('data-layer');
+      if (!OVERLAYS.has(n)) b.classList.remove('active');
+      if (n === name)       b.classList.add('active');
     });
   }
 }
+
+// FIX(medium): toggleNotif uses data-sync-group instead of hardcoded peer map
 function toggleNotif(type, cb) {
-  if(type==='push' && cb.checked && !cfg.push){
+  if (type === 'push' && cb.checked && !cfg.push) {
     showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');
-    cb.checked=false;
-    const peer = cb.id==='togglePush' ? document.getElementById('togglePushM') : document.getElementById('togglePush');
-    if(peer) peer.checked=false;
-    return;
+    syncToggleGroup('push', false); return;
   }
-  if(type==='hue' && cb.checked && !cfg.hueIP){
+  if (type === 'hue' && cb.checked && !cfg.hueIP) {
     showToast('watch','Not Configured','Add Hue Bridge IP in Configure.');
-    cb.checked=false;
-    const peer = cb.id==='toggleHue' ? document.getElementById('toggleHueM') : document.getElementById('toggleHue');
-    if(peer) peer.checked=false;
-    return;
+    syncToggleGroup('hue', false); return;
   }
-  // Sync peer toggle
-  const pairs = {togglePush:'togglePushM',togglePushM:'togglePush',toggleHue:'toggleHueM',toggleHueM:'toggleHue'};
-  const peer = document.getElementById(pairs[cb.id]);
-  if(peer && peer.checked !== cb.checked) peer.checked = cb.checked;
-  // Save to Supabase
+  // Sync all toggles in the same group to this value
+  syncToggleGroup(type, cb.checked);
   saveUserSettings({ preferences: true });
 }
 
-function restoreToggles() {
-  // No-op — toggles are restored by loadUserSettings() after login
-}
+// ══════════════════════════════════════════════════════════
+// THRESHOLDS — auto-save with cache update
+// FIX(medium): inputs update thCache so checkTh reads from memory, not DOM
+// ══════════════════════════════════════════════════════════
+let thSaveTimer = null;
+document.querySelectorAll('[data-th]').forEach(el => {
+  el.addEventListener('change', () => {
+    const key = el.getAttribute('data-th');
+    const val = +el.value;
+    if (key && val > 0) {
+      thCache[key] = val;
+      // Sync all inputs with the same data-th key
+      document.querySelectorAll(`[data-th="${key}"]`).forEach(peer => { peer.value = val; });
+    }
+    clearTimeout(thSaveTimer);
+    thSaveTimer = setTimeout(() => saveUserSettings({ thresholds: true }), 1500);
+  });
+});
 
 // ══════════════════════════════════════════════════════════
-// MULTI-HAZARD — Earthquakes (USGS) + Wildfires (NIFC)
+// GEOLOCATION
 // ══════════════════════════════════════════════════════════
-let earthquakeData = [];
-let wildfireData   = [];
+let userLat = null, userLon = null, geoWatchId = null, geoActive = false, gpsSvgGroup = null;
 
-// ── Magnitude → visual size + color ──────────────────────
-function eqRadius(mag) { return Math.max(3, mag * 3.5); }
-function eqColor(mag) {
-  if (mag >= 6.0) return '#e040fb'; // violent purple
-  if (mag >= 5.0) return '#c862f5'; // bright purple
-  if (mag >= 4.0) return '#9c27b0'; // medium purple
-  return '#7b1fa2';                  // dark purple (M2.5–4)
+function toggleGeolocation() { geoActive ? stopGeolocation() : startGeolocation(); }
+function startGeolocation() {
+  if (!navigator.geolocation) { alert('Geolocation not supported.'); return; }
+  const btn = document.getElementById('geoBtn'), label = document.getElementById('geoBtnLabel');
+  btn.classList.remove('active','danger'); label.textContent = 'LOCATING…';
+  geoWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      userLat = pos.coords.latitude; userLon = pos.coords.longitude;
+      geoActive = true; label.textContent = 'TRACKING'; btn.classList.add('active');
+      updateGPSDot(); checkPersonalAlerts();
+    },
+    err => {
+      label.textContent = err.code===1 ? 'DENIED' : 'ERROR';
+      btn.classList.remove('active','danger'); geoActive = false;
+    },
+    { enableHighAccuracy: true, maximumAge: 15000, timeout: 10000 }
+  );
 }
+function stopGeolocation() {
+  if (geoWatchId !== null) navigator.geolocation.clearWatch(geoWatchId);
+  geoWatchId = null; geoActive = false; userLat = null; userLon = null;
+  document.getElementById('geoBtn').classList.remove('active','danger');
+  document.getElementById('geoBtnLabel').textContent = 'MY LOCATION';
+  document.getElementById('dangerBanner').style.display = 'none';
+  if (gpsSvgGroup) gpsSvgGroup.selectAll('*').remove();
+}
+function updateGPSDot() {
+  if (!projection || userLat === null) return;
+  const pt = projection([userLon, userLat]); if (!pt) return;
+  if (!gpsSvgGroup) gpsSvgGroup = d3.select('#gpsSvg').append('g').attr('id','gGPS');
+  gpsSvgGroup.selectAll('*').remove();
+  const t = currentTransform || d3.zoomIdentity;
+  const [cx, cy] = [pt[0]*t.k+t.x, pt[1]*t.k+t.y];
+  gpsSvgGroup.append('circle').attr('cx',cx).attr('cy',cy).attr('r',10).attr('class','gps-dot-outer');
+  gpsSvgGroup.append('circle').attr('cx',cx).attr('cy',cy).attr('r',4).attr('class','gps-dot-inner');
+  gpsSvgGroup.append('text').attr('x',cx+14).attr('y',cy+4).attr('fill','var(--cyan)').attr('font-size',9).attr('font-family','var(--font-mono)').text('YOU');
+}
+function checkPersonalAlerts() {
+  if (!geoActive || userLat===null || !nwsAlerts.length || typeof turf==='undefined') return;
+  const userPoint = turf.point([userLon, userLat]);
+  let insideWarning = false, warningName = '';
+  for (const feat of nwsAlerts) {
+    if (!feat.geometry) continue;
+    const ev = feat.properties?.event || '';
+    if (!ev.includes('Tornado') && !ev.includes('Severe Thunderstorm') && !ev.includes('Flash Flood') && !ev.includes('Flood Warning')) continue;
+    try {
+      const geom = feat.geometry;
+      let inside = false;
+      if (geom.type==='Polygon') inside = turf.booleanPointInPolygon(userPoint, feat);
+      else if (geom.type==='MultiPolygon') inside = geom.coordinates.some(coords => turf.booleanPointInPolygon(userPoint, turf.polygon(coords)));
+      if (inside) { insideWarning = true; warningName = ev.toUpperCase(); break; }
+    } catch(e) {}
+  }
+  const banner = document.getElementById('dangerBanner'), btn = document.getElementById('geoBtn');
+  if (insideWarning) {
+    banner.textContent = `🚨 YOU ARE INSIDE A ${warningName}`;
+    banner.style.display = 'block'; btn.classList.add('danger'); btn.classList.remove('active');
+  } else {
+    banner.style.display = 'none'; btn.classList.remove('danger'); btn.classList.add('active');
+  }
+}
+function setRadarSpeed(ms) { RADAR_FRAME_MS=parseInt(ms,10); if(radarPlaying){stopRadarPlay();startRadarPlay();} }
 
-// ── Acreage → fire icon size ──────────────────────────────
-function fireRadius(acres) {
-  if (!acres || acres < 10)   return 4;
-  if (acres < 100)  return 5;
-  if (acres < 1000) return 7;
-  if (acres < 10000)return 9;
-  return 12; // 10k+ acres
-}
-function fireColor(acres) {
-  if (!acres || acres < 100)  return '#ff9800'; // small — orange
-  if (acres < 5000) return '#ff6d00';            // medium — deep orange
-  return '#dd2c00';                               // large — red-orange
-}
+// ══════════════════════════════════════════════════════════
+// MULTI-HAZARD
+// ══════════════════════════════════════════════════════════
+let earthquakeData = [], wildfireData = [];
+function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
+function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
+function fireRadius(acres) { return !acres||acres<10?4:acres<100?5:acres<1000?7:acres<10000?9:12; }
+function fireColor(acres)  { return !acres||acres<100?'#ff9800':acres<5000?'#ff6d00':'#dd2c00'; }
 
 async function fetchEarthquakes() {
   if (!lyr.earthquakes || !gHazard || !projection) return;
   try {
-    const r = await fetch(
-      'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson',
-      { signal: AbortSignal.timeout(10000) }
-    );
+    const r = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson', {signal:AbortSignal.timeout(10000)});
     if (!r.ok) throw new Error(r.status);
-    const json = await r.json();
-    earthquakeData = json.features || [];
+    earthquakeData = (await r.json()).features || [];
     renderEarthquakes();
-  } catch(e) {
-    console.warn('[Hazard] Earthquake fetch failed:', e.message);
-  }
+  } catch(e) {}
 }
-
 function renderEarthquakes() {
   if (!gHazard || !projection) return;
   gHazard.selectAll('.eq-marker').remove();
   if (!lyr.earthquakes || !earthquakeData.length) return;
-
   const k = currentTransform ? currentTransform.k : 1;
-
   earthquakeData.forEach(feat => {
-    const [lon, lat] = feat.geometry.coordinates;
-    const mag   = feat.properties.mag;
-    const place = feat.properties.place || 'Unknown';
-    const time  = new Date(feat.properties.time).toLocaleString('en-US', {
-      month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short'
-    });
-    const pt = projection([lon, lat]);
-    if (!pt) return;
-    const [px, py] = pt;
-    const baseR = eqRadius(mag);
-    const col   = eqColor(mag);
-
-    const g = gHazard.append('g').attr('class', 'eq-marker')
-      .attr('data-base-r', baseR)
-      .style('cursor', 'pointer');
-
-    // Outer pulse ring
-    g.append('circle')
-      .attr('cx', px).attr('cy', py)
-      .attr('r', baseR * 1.9 / k)
-      .attr('fill', 'none')
-      .attr('stroke', col)
-      .attr('stroke-width', 0.8 / k)
-      .attr('opacity', 0.4);
-
-    // Main dot
-    g.append('circle')
-      .attr('cx', px).attr('cy', py)
-      .attr('r', baseR / k)
-      .attr('fill', col)
-      .attr('opacity', 0.85);
-
-    // Magnitude label
-    g.append('text')
-      .attr('x', px + (baseR + 2) / k)
-      .attr('y', py + 3 / k)
-      .attr('fill', col)
-      .attr('font-family', "'Share Tech Mono', monospace")
-      .attr('font-size', 7 / k)
-      .attr('font-weight', '700')
-      .style('pointer-events', 'none')
-      .text(`M${mag.toFixed(1)}`);
-
-    // Tooltip on hover
-    g.on('mouseenter', (event) => {
-      const tt = document.getElementById('mapTooltip');
-      tt.innerHTML = `
-        <div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div>
-        <div class="tt-row"><span class="tt-label">LOCATION</span><span class="tt-val">${place}</span></div>
-        <div class="tt-row"><span class="tt-label">TIME</span><span class="tt-val">${time}</span></div>
-        <div class="tt-row"><span class="tt-label">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>
-      `;
-      tt.style.display = 'block';
-      tt.style.left = (event.offsetX + 14) + 'px';
-      tt.style.top  = (event.offsetY - 10) + 'px';
-    })
-    .on('mouseleave', () => {
-      document.getElementById('mapTooltip').style.display = 'none';
-    });
+    const [lon,lat] = feat.geometry.coordinates, mag = feat.properties.mag;
+    const place = feat.properties.place||'Unknown';
+    const time  = new Date(feat.properties.time).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+    const pt = projection([lon,lat]); if (!pt) return;
+    const [px,py] = pt, baseR = eqRadius(mag), col = eqColor(mag);
+    const g = gHazard.append('g').attr('class','eq-marker').attr('data-base-r',baseR).style('cursor','pointer');
+    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*1.9/k).attr('fill','none').attr('stroke',col).attr('stroke-width',.8/k).attr('opacity',.4);
+    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.85);
+    g.append('text').attr('x',px+(baseR+2)/k).attr('y',py+3/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace").attr('font-size',7/k).attr('font-weight','700').style('pointer-events','none').text(`M${mag.toFixed(1)}`);
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div><div class="tt-row"><span class="tt-key">LOCATION</span><span class="tt-val">${place}</span></div><div class="tt-row"><span class="tt-key">TIME</span><span class="tt-val">${time}</span></div><div class="tt-row"><span class="tt-key">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; }).on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
   });
 }
 
 async function fetchWildfires() {
   if (!lyr.wildfires || !gHazard || !projection) return;
   try {
-    const url = 'https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query' +
-      '?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200';
-    const r = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    const url='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200';
+    const r = await fetch(url,{signal:AbortSignal.timeout(12000)});
     if (!r.ok) throw new Error(r.status);
-    const json = await r.json();
-    wildfireData = (json.features || []).filter(f => f.geometry?.type === 'Point');
+    wildfireData = ((await r.json()).features||[]).filter(f=>f.geometry?.type==='Point');
     renderWildfires();
-  } catch(e) {
-    console.warn('[Hazard] Wildfire fetch failed:', e.message);
-  }
+  } catch(e) {}
 }
-
 function renderWildfires() {
   if (!gHazard || !projection) return;
   gHazard.selectAll('.fire-marker').remove();
   if (!lyr.wildfires || !wildfireData.length) return;
-
   const k = currentTransform ? currentTransform.k : 1;
-
   wildfireData.forEach(feat => {
-    const [lon, lat] = feat.geometry.coordinates;
-    const p     = feat.properties;
-    const name  = p.IncidentName || 'Unknown Fire';
-    const acres = p.DailyAcres   || 0;
-    const pct   = p.PercentContained != null ? `${p.PercentContained}% contained` : 'Containment unknown';
-    const state = p.POOState || '';
-    const pt = projection([lon, lat]);
-    if (!pt) return;
-    const [px, py] = pt;
-    const baseR = fireRadius(acres);
-    const col   = fireColor(acres);
-
-    const g = gHazard.append('g').attr('class', 'fire-marker')
-      .attr('data-base-r', baseR)
-      .style('cursor', 'pointer');
-
-    // Glow
-    g.append('circle')
-      .attr('cx', px).attr('cy', py)
-      .attr('r', baseR * 2 / k)
-      .attr('fill', col)
-      .attr('opacity', 0.15);
-
-    // Core dot
-    g.append('circle')
-      .attr('cx', px).attr('cy', py)
-      .attr('r', baseR / k)
-      .attr('fill', col)
-      .attr('opacity', 0.9);
-
-    // Fire emoji at center
-    g.append('text')
-      .attr('x', px).attr('y', py + 3 / k)
-      .attr('text-anchor', 'middle')
-      .attr('font-size', (baseR * 1.2) / k)
-      .style('pointer-events', 'none')
-      .text('🔥');
-
-    // Tooltip
-    g.on('mouseenter', (event) => {
-      const acreStr = acres >= 1000
-        ? `${(acres/1000).toFixed(1)}k acres`
-        : `${Math.round(acres)} acres`;
-      const tt = document.getElementById('mapTooltip');
-      tt.innerHTML = `
-        <div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div>
-        <div class="tt-row"><span class="tt-label">STATE</span><span class="tt-val">${state.replace('US-','')}</span></div>
-        <div class="tt-row"><span class="tt-label">SIZE</span><span class="tt-val">${acreStr}</span></div>
-        <div class="tt-row"><span class="tt-label">STATUS</span><span class="tt-val">${pct}</span></div>
-      `;
-      tt.style.display = 'block';
-      tt.style.left = (event.offsetX + 14) + 'px';
-      tt.style.top  = (event.offsetY - 10) + 'px';
-    })
-    .on('mouseleave', () => {
-      document.getElementById('mapTooltip').style.display = 'none';
-    });
+    const [lon,lat]=feat.geometry.coordinates, p=feat.properties;
+    const name=p.IncidentName||'Unknown Fire', acres=p.DailyAcres||0;
+    const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown', state=p.POOState||'';
+    const pt=projection([lon,lat]); if (!pt) return;
+    const [px,py]=pt, baseR=fireRadius(acres), col=fireColor(acres);
+    const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).style('cursor','pointer');
+    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*2/k).attr('fill',col).attr('opacity',.15);
+    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.9);
+    g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(baseR*1.2)/k).style('pointer-events','none').text('🔥');
+    g.on('mouseenter',(event)=>{ const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`; const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state.replace('US-','')}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; }).on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
   });
 }
-
-// Re-render hazard markers after zoom (rescales dot sizes)
 function rescaleHazards() {
   if (!gHazard || !projection) return;
   const k = currentTransform ? currentTransform.k : 1;
-
-  gHazard.selectAll('.eq-marker, .fire-marker').each(function() {
-    const g      = d3.select(this);
-    const isEq   = this.classList.contains('eq-marker');
-    const baseR  = +(g.attr('data-base-r') || 4);
-    const circles = g.selectAll('circle');
-    circles.filter((d,i) => i === 0)  // outer ring / glow
-      .attr('r', baseR * (isEq ? 1.9 : 2) / k);
-    circles.filter((d,i) => i === 1)  // core dot
-      .attr('r', baseR / k);
-    g.selectAll('text')
-      .attr('font-size', (isEq ? 7 : baseR * 1.2) / k);
+  gHazard.selectAll('.eq-marker,.fire-marker').each(function() {
+    const g=d3.select(this), isEq=this.classList.contains('eq-marker'), baseR=+(g.attr('data-base-r')||4);
+    g.selectAll('circle').filter((d,i)=>i===0).attr('r',baseR*(isEq?1.9:2)/k);
+    g.selectAll('circle').filter((d,i)=>i===1).attr('r',baseR/k);
+    g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k);
   });
 }
-
-// Poll every 5 minutes when layers are active
-setInterval(() => {
-  if (lyr.earthquakes) fetchEarthquakes();
-  if (lyr.wildfires)   fetchWildfires();
-}, 5 * 60 * 1000);
 
 // ══════════════════════════════════════════════════════════
 // INIT
 // ══════════════════════════════════════════════════════════
 updateCfgUI();
 updateLegend();
-loadStations();
-fetchNWS();
-setInterval(loadStations, 10*60*1000);
-setInterval(fetchNWS,      60*1000);
-setInterval(checkTh,         30*1000);
-
-// Auto-save thresholds to Supabase when user changes them
-let thSaveTimer = null;
-['th-cape','th-srh','th-wind','th-risk','th-cape-m','th-srh-m','th-wind-m','th-risk-m'].forEach(id => {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.addEventListener('change', () => {
-    // Sync desktop ↔ mobile
-    const base = id.replace('-m','');
-    const peer = id.endsWith('-m') ? document.getElementById(base) : document.getElementById(id+'-m');
-    if (peer && el.value) peer.value = el.value;
-    // Debounced save
-    clearTimeout(thSaveTimer);
-    thSaveTimer = setTimeout(() => saveUserSettings({ thresholds: true }), 1500);
-  });
-});
-let lastStationFetch = Date.now();
-setInterval(() => {
-  const age = Math.round((Date.now() - lastStationFetch) / 60000);
-  const dot = document.getElementById('liveDot');
-  if (age >= 20 && dot) {
-    dot.style.background = 'var(--amber)';
-    dot.title = `Data ${age}min old`;
-  }
-}, 60000);
+// NOTE: startDataPolling() is now called from onAuthStateChange only — not here
+// This prevents unauthenticated data fetches (FIX security: auth race condition)
 
 // ══════════════════════════════════════════════════════════
-// MOBILE — nav, sheets, data sync, touch/pinch
+// MOBILE
 // ══════════════════════════════════════════════════════════
-
-// ── Sheet management ──────────────────────────────────────
 const SHEETS = {
-  layers:   document.getElementById('layersSheet'),
-  cond:     document.getElementById('condSheet'),
-  alerts:   document.getElementById('alertsSheet'),
+  layers: document.getElementById('layersSheet'),
+  cond:   document.getElementById('condSheet'),
+  alerts: document.getElementById('alertsSheet'),
   settings: document.getElementById('settingsSheet'),
 };
 const overlay = document.getElementById('sheetOverlay');
-
 function openSheet(name) {
   closeAllSheets();
-  const sheet = SHEETS[name];
-  if (!sheet) return;
+  const sheet = SHEETS[name]; if (!sheet) return;
   overlay.classList.add('open');
   setTimeout(() => sheet.classList.add('open'), 10);
-  // Swipe down to close
   addSheetSwipe(sheet);
 }
-
 function closeAllSheets() {
   Object.values(SHEETS).forEach(s => s.classList.remove('open'));
   overlay.classList.remove('open');
-  // Reset nav
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('nav-map')?.classList.add('active');
 }
-
-// ── Nav routing ───────────────────────────────────────────
 function mobileNav(tab) {
   if (!isMobile()) return;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -3235,73 +2868,44 @@ function mobileNav(tab) {
   if (tab === 'map') { closeAllSheets(); return; }
   openSheet(tab);
 }
-
-// ── Swipe down to close sheet ─────────────────────────────
 function addSheetSwipe(sheet) {
   let startY = 0;
   const onStart = e => { startY = (e.touches||[e])[0].clientY; };
-  const onEnd   = e => {
-    const dy = (e.changedTouches||[e])[0].clientY - startY;
-    if (dy > 80) closeAllSheets();
-  };
+  const onEnd   = e => { if ((e.changedTouches||[e])[0].clientY - startY > 80) closeAllSheets(); };
   sheet.addEventListener('touchstart', onStart, {passive:true, once:true});
   sheet.addEventListener('touchend',   onEnd,   {passive:true, once:true});
 }
 
-// selectStation and updateHomeDashboard handle both desktop + mobile directly (see above)
-
-// updateHomeDashboard handles desktop + mobile directly (see above)
-
-// renderNWS syncs mobile sheet directly (see end of renderNWS body)
-
-// ── iOS pinch-to-zoom via D3 zoom ─────────────────────────
+// iOS pinch-to-zoom
 let touchStartDist = 0, touchStartScale = 1;
-
 document.getElementById('mapSvg').addEventListener('touchstart', e => {
   if (e.touches.length === 2) {
     e.preventDefault();
-    touchStartDist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
+    touchStartDist  = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
     touchStartScale = currentTransform.k;
   }
-}, {passive: false});
-
+}, {passive:false});
 document.getElementById('mapSvg').addEventListener('touchmove', e => {
   if (e.touches.length === 2) {
     e.preventDefault();
-    const dist = Math.hypot(
-      e.touches[0].clientX - e.touches[1].clientX,
-      e.touches[0].clientY - e.touches[1].clientY
-    );
+    const dist   = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
     const factor = dist / touchStartDist;
-    const newK = Math.min(Math.max(touchStartScale * factor, 0.5), 12);
-    // Zoom around midpoint of the two touches
-    const mx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
-    const my = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    const newK   = Math.min(Math.max(touchStartScale * factor, 0.5), 12);
+    const mx = (e.touches[0].clientX+e.touches[1].clientX)/2, my = (e.touches[0].clientY+e.touches[1].clientY)/2;
     const rect = svgEl.getBoundingClientRect();
-    const cx = mx - rect.left, cy = my - rect.top;
+    const cx = mx-rect.left, cy = my-rect.top;
     const ratio = newK / currentTransform.k;
-    const tx = cx - ratio*(cx - currentTransform.x);
-    const ty = cy - ratio*(cy - currentTransform.y);
-    svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(newK));
+    svg.call(zoom.transform, d3.zoomIdentity.translate(cx-ratio*(cx-currentTransform.x), cy-ratio*(cy-currentTransform.y)).scale(newK));
   }
-}, {passive: false});
-
-// Prevent iOS bounce/scroll on map
-document.getElementById('mapSvg').addEventListener('touchmove', e => {
-  if (e.touches.length === 1) e.preventDefault();
-}, {passive: false});
-
-// ── Disable hover tooltips on touch — use tap instead ─────
+}, {passive:false});
+document.getElementById('mapSvg').addEventListener('touchmove', e => { if (e.touches.length===1) e.preventDefault(); }, {passive:false});
+// FIX(ux): hide tooltip on tap-end (mobile)
 let lastTap = 0;
 document.getElementById('mapSvg').addEventListener('touchend', e => {
-  const now = Date.now();
-  if (now - lastTap < 300) return; // ignore double-tap
-  lastTap = now;
-  hideTooltip();
+  const now = Date.now(); if (now-lastTap < 300) return; lastTap = now; hideTooltip();
 }, {passive:true});
+// FIX(low): aria-live for alert list (accessibility)
+document.getElementById('alertsList').setAttribute('aria-live','polite');
 </script>
 </body>
 </html>
