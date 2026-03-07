@@ -1685,17 +1685,16 @@ function rescaleStations(k) {
     const minK  = LABEL_ZOOM[tier] || 2.5;
     const bx    = +el.attr('data-base-x');
     const by    = +el.attr('data-base-y');
-    const bfs   = +(el.attr('data-base-fs') || 7.5);
 
     if (k < minK) {
       el.style('display', 'none');
     } else {
+      // Fixed screen-space font size — labels stay same size regardless of zoom
+      const screenSize = tier === 1 ? 8 : 7;
       el.style('display', null)
-        // Keep labels a constant screen size by scaling inversely with zoom,
-        // but clamp so they don't get too tiny or huge
-        .attr('font-size', Math.max(bfs * s, tier === 1 ? 6 : 5))
-        .attr('x', bx + 9 * s)
-        .attr('y', by + 4 * s);
+        .attr('font-size', screenSize / k)   // divide by k so screen size stays constant
+        .attr('x', bx + 8 / k)
+        .attr('y', by + 3 / k);
     }
   });
 
@@ -1751,27 +1750,25 @@ function drawStations() {
 
     // City label — ALL cities get a label; visibility controlled by zoom in rescaleStations
     const labelColor = isHome
-      ? 'rgba(245,166,35,0.85)'   // amber for home
+      ? 'rgba(245,166,35,0.85)'
       : tier === 1
-        ? 'rgba(255,255,255,0.80)' // bright white for major metros
-        : 'rgba(200,220,255,0.60)';// dim blue-white for regional
+        ? 'rgba(255,255,255,0.80)'
+        : 'rgba(200,220,255,0.60)';
 
-    const baseFontSize = tier === 1 ? 7 : 6;
     const cityName = s.n.split(',')[0].toUpperCase();
 
     gStations.append('text')
-      .attr('x', px + 9).attr('y', py + 4)
+      .attr('x', px + 8).attr('y', py + 3)
       .attr('class', 'station-label')
       .attr('data-base-x', px).attr('data-base-y', py)
       .attr('data-tier', tier)
-      .attr('data-base-fs', baseFontSize)
       .attr('fill', labelColor)
       .attr('font-family', "'Share Tech Mono', monospace")
-      .attr('font-size', baseFontSize)
+      .attr('font-size', tier === 1 ? 8 : 7)
       .attr('font-weight', tier === 1 ? '700' : '400')
-      .attr('letter-spacing', tier === 1 ? '0.8' : '0.5')
+      .attr('letter-spacing', tier === 1 ? '0.5' : '0.3')
       .style('pointer-events', 'none')
-      .style('display', 'none') // hidden until rescaleStations evaluates zoom
+      .style('display', 'none')
       .text(cityName);
   });
 
