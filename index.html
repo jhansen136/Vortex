@@ -2170,14 +2170,17 @@ function drawRadar(targetPath) {
     url: `${radarHost}${activePath}/256/${TILE_ZOOM}/${tx}/${ty}/6/1_1.png`
   }));
 
+  // Snapshot both path AND tile zoom — if either changes before tiles finish
+  // loading, the paint is stale and should be discarded
   const snapPath = activePath;
+  const snapZoom = TILE_ZOOM;
   const toLoad   = visible.filter(({ url }) => !radarTileCache[url]);
-  if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
+  if (toLoad.length === 0) { paintRadar(visible, snapPath, snapZoom); return; }
   // Paint whatever is already cached immediately so canvas isn't blank during fetch
   const alreadyCached = visible.filter(({ url }) => radarTileCache[url]);
-  if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath);
+  if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath, snapZoom);
   let remaining = toLoad.length;
-  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
+  const done = () => { if (--remaining === 0) paintRadar(visible, snapPath, snapZoom); };
   toLoad.forEach(({url}) => {
     const img = new Image(); img.crossOrigin = 'anonymous';
     img.onload  = () => { addToRadarCache(url, img); done(); };
@@ -2186,12 +2189,16 @@ function drawRadar(targetPath) {
   });
 }
 
-function paintRadar(tiles, snapPath) {
+function paintRadar(tiles, snapPath, snapZoom) {
   if (!lyr.radar || !projection) return;
   if (snapPath && snapPath !== radarPath) {
-    // radarPath changed while tiles were loading (fetchRadar fired mid-fetch)
-    // Trigger a fresh draw with the current path so canvas doesn't stay blank
+    // radarPath changed while tiles were loading — redraw with current path
     drawRadar(radarPath);
+    return;
+  }
+  if (snapZoom !== undefined && snapZoom !== currentTileZoom) {
+    // Zoom level changed while tiles were loading — discard stale paint,
+    // drawRadar already running for new zoom level
     return;
   }
   const TILE_ZOOM = currentTileZoom;
@@ -2276,7 +2283,7 @@ function scheduleRadarRepaint() {
         return radarTileCache[url] ? { tx, ty, url } : null;
       })
       .filter(Boolean);
-    if (cached.length > 0) paintRadar(cached, radarPath);
+    if (cached.length > 0) paintRadar(cached, radarPath, currentTileZoom);
     else drawRadar(radarPath);
   }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
 }
@@ -2307,31 +2314,53 @@ async function fetchRadar() {
   } catch(e) {}
 }
 
-// FIX(perf): guard against concurrent prefetch runs
+// FIX(perf): staggered prefetch — current frame tiles load first, other frames follow
+// in batches so we don't flood the browser's connection pool (max 6 per origin).
 function prefetchAllFrames() {
   if (prefetchInProgress || !radarFrames.length || !projection) return;
   prefetchInProgress = true;
-  const TZ = getRadarTileZoom(), N = Math.pow(2, TZ);
-  const t  = currentTransform || d3.zoomIdentity;
-  const W  = rdrCv.width, H = rdrCv.height;
-  const urlsToFetch = [];
-  radarFrames.forEach(frame => {
-    for (let tx=0;tx<N;tx++) for (let ty=0;ty<N;ty++) {
-      const lon=(tx+0.5)/N*360-180, lat=Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)))*180/Math.PI;
-      const pt=projection([lon,lat]); if (!pt) continue;
-      if (TZ>=6){const cx=pt[0]*t.k+t.x,cy=pt[1]*t.k+t.y; if(cx<-W*0.5||cx>W*1.5||cy<-H*0.5||cy>H*1.5) continue;}
-      const url=`${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
-      if (!radarTileCache[url]) urlsToFetch.push(url);
+
+  const TZ        = getRadarTileZoom();
+  const visible   = getVisibleTiles(TZ); // reuse the same bbox logic as drawRadar
+  const frames    = radarFrames;
+  const curPath   = radarPath;
+
+  // Build per-frame URL lists, current frame first, then others in order
+  const frameOrder = [
+    ...frames.filter(f => f.path === curPath),
+    ...frames.filter(f => f.path !== curPath),
+  ];
+
+  const BATCH = 6; // match browser's per-origin connection limit
+  let frameIdx = 0;
+
+  function loadNextFrame() {
+    if (frameIdx >= frameOrder.length) { prefetchInProgress = false; return; }
+    const frame = frameOrder[frameIdx++];
+    const urls = visible
+      .map(({tx, ty}) => `${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`)
+      .filter(url => !radarTileCache[url]);
+
+    if (!urls.length) { loadNextFrame(); return; } // already cached — next frame immediately
+
+    let remaining = urls.length;
+    const done = () => { if (--remaining === 0) setTimeout(loadNextFrame, 50); };
+
+    // Load in batches of BATCH to avoid saturating the connection pool
+    function loadBatch(start) {
+      const end = Math.min(start + BATCH, urls.length);
+      for (let i = start; i < end; i++) {
+        const img = new Image(); img.crossOrigin = 'anonymous';
+        img.onload  = () => { addToRadarCache(urls[i], img); done(); };
+        img.onerror = () => done();
+        img.src = urls[i];
+      }
+      if (end < urls.length) setTimeout(() => loadBatch(end), 30);
     }
-  });
-  let remaining = urlsToFetch.length;
-  if (!remaining) { prefetchInProgress = false; return; }
-  urlsToFetch.forEach(url => {
-    const img = new Image(); img.crossOrigin = 'anonymous';
-    img.onload  = () => { addToRadarCache(url, img); if (--remaining === 0) prefetchInProgress = false; };
-    img.onerror = () => { if (--remaining === 0) prefetchInProgress = false; };
-    img.src = url;
-  });
+    loadBatch(0);
+  }
+
+  loadNextFrame();
 }
 
 function goToFrame(idx) {
