@@ -930,38 +930,43 @@ async function authSignOut() {
 
 // ── LOAD USER SETTINGS ────────────────────────────────────
 async function loadUserSettings(userId) {
-  const [profRes, thRes, intRes, prefRes] = await Promise.all([
-    supa.from('profiles').select('*').eq('id', userId).single(),
-    supa.from('thresholds').select('*').eq('user_id', userId).single(),
-    supa.from('integrations').select('*').eq('user_id', userId).single(),
-    supa.from('preferences').select('*').eq('user_id', userId).single(),
-  ]);
-  userProfile = profRes.data || {};
-  if (intRes.data) {
-    cfg.push  = intRes.data.ntfy_url  || '';
-    cfg.hueIP = intRes.data.hue_ip    || '';
-    cfg.hueT  = intRes.data.hue_user  || '';
+  // FIX: use maybeSingle() — .single() throws if row doesn't exist (new user)
+  // FIX: wrap entire function — any Supabase error must not prevent auth from completing
+  try {
+    const [profRes, thRes, intRes, prefRes] = await Promise.all([
+      supa.from('profiles').select('*').eq('id', userId).maybeSingle(),
+      supa.from('thresholds').select('*').eq('user_id', userId).maybeSingle(),
+      supa.from('integrations').select('*').eq('user_id', userId).maybeSingle(),
+      supa.from('preferences').select('*').eq('user_id', userId).maybeSingle(),
+    ]);
+    userProfile = profRes.data || {};
+    if (intRes.data) {
+      cfg.push  = intRes.data.ntfy_url  || '';
+      cfg.hueIP = intRes.data.hue_ip    || '';
+      cfg.hueT  = intRes.data.hue_user  || '';
+    }
+    if (thRes.data) {
+      const t = thRes.data;
+      ['cape','srh','wind','risk'].forEach(k => {
+        thCache[k] = +t[k] || thCache[k];
+        document.querySelectorAll(`[data-th="${k}"]`).forEach(el => { el.value = thCache[k]; });
+      });
+    }
+    if (prefRes.data) {
+      const p = prefRes.data;
+      syncToggleGroup('push',  p.push_enabled);
+      syncToggleGroup('hue',   p.hue_enabled);
+      syncToggleGroup('audio', p.audio_enabled);
+    }
+    const name = userProfile.display_name || currentUser?.email?.split('@')[0] || 'User';
+    document.getElementById('userName').textContent = name;
+    document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
+    document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser?.email || ''}`;
+    updateCfgUI();
+  } catch (err) {
+    // Settings failed to load — log it but don't block data polling
+    console.warn('[VORTEX] loadUserSettings error (non-fatal):', err);
   }
-  if (thRes.data) {
-    const t = thRes.data;
-    ['cape','srh','wind','risk'].forEach(k => {
-      thCache[k] = +t[k] || thCache[k];
-      document.querySelectorAll(`[data-th="${k}"]`).forEach(el => { el.value = thCache[k]; });
-    });
-  }
-  if (prefRes.data) {
-    const p = prefRes.data;
-    // FIX(medium): sync all toggles in group at once
-    syncToggleGroup('push',  p.push_enabled);
-    syncToggleGroup('hue',   p.hue_enabled);
-    syncToggleGroup('audio', p.audio_enabled);
-  }
-  const name = userProfile.display_name || currentUser.email.split('@')[0];
-  document.getElementById('userName').textContent = name;
-  document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
-  // FIX(auth): show full email in setup modal subtitle
-  document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
-  updateCfgUI();
 }
 
 // FIX(medium): sync all toggles with the same data-sync-group
@@ -1061,9 +1066,15 @@ supa.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
-    await loadUserSettings(session.user.id);
-    authReady = true;
-    checkReadyToLoad();
+    try {
+      await loadUserSettings(session.user.id);
+    } catch (err) {
+      console.warn('[VORTEX] onAuthStateChange loadUserSettings failed:', err);
+    } finally {
+      // Always mark auth ready — settings failure must not block data loading
+      authReady = true;
+      checkReadyToLoad();
+    }
   } else {
     currentUser = null;
     authReady = false;
