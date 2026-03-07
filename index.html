@@ -2174,6 +2174,9 @@ function drawRadar(targetPath) {
   const snapPath = activePath;
   const toLoad   = visible.filter(({ url }) => !radarTileCache[url]);
   if (toLoad.length === 0) { paintRadar(visible, snapPath); return; }
+  // Paint whatever is already cached immediately so canvas isn't blank during fetch
+  const alreadyCached = visible.filter(({ url }) => radarTileCache[url]);
+  if (alreadyCached.length > 0) paintRadar(alreadyCached, snapPath);
   let remaining = toLoad.length;
   const done = () => { if (--remaining === 0) paintRadar(visible, snapPath); };
   toLoad.forEach(({url}) => {
@@ -2186,7 +2189,12 @@ function drawRadar(targetPath) {
 
 function paintRadar(tiles, snapPath) {
   if (!lyr.radar || !projection) return;
-  if (snapPath && snapPath !== radarPath) return;
+  if (snapPath && snapPath !== radarPath) {
+    // radarPath changed while tiles were loading (fetchRadar fired mid-fetch)
+    // Trigger a fresh draw with the current path so canvas doesn't stay blank
+    drawRadar(radarPath);
+    return;
+  }
   const TILE_ZOOM = currentTileZoom;
   const N    = Math.pow(2, TILE_ZOOM);
   const W    = rdrCv.width, H = rdrCv.height;
@@ -2258,9 +2266,7 @@ function scheduleRadarRepaint() {
   radarRepaintTimer = setTimeout(() => {
     const neededZoom = getRadarTileZoom();
     if (neededZoom !== currentTileZoom) {
-      // Zoom level changed — update currentTileZoom immediately so subsequent
-      // scheduleRadarRepaint calls don't keep re-triggering drawRadar redundantly
-      currentTileZoom = neededZoom;
+      // Zoom level changed — fetch new tiles; old canvas stays visible via CSS transform
       drawRadar(radarPath);
       return;
     }
@@ -2271,16 +2277,8 @@ function scheduleRadarRepaint() {
         return radarTileCache[url] ? { tx, ty, url } : null;
       })
       .filter(Boolean);
-    if (cached.length === visibleTiles.length && cached.length > 0) {
-      // Full coverage in cache — paint immediately, no fetch needed
-      paintRadar(cached, radarPath);
-    } else if (cached.length > 0) {
-      // Partial cache — paint what we have for immediate feedback, then fetch missing
-      paintRadar(cached, radarPath);
-      drawRadar(radarPath);
-    } else {
-      drawRadar(radarPath);
-    }
+    if (cached.length > 0) paintRadar(cached, radarPath);
+    else drawRadar(radarPath);
   }, 120); // repaint after motion settles — CSS transform keeps it smooth in between
 }
 
