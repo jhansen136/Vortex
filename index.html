@@ -2098,10 +2098,8 @@ function drawRadar(targetPath) {
 }
 
 function paintRadar(tiles, snapPath, snapZoom) {
-  if (!lyr.radar || !projection) return;
-  if (snapPath && snapPath !== radarPath) return;
-  // Use the zoom level that was current when tiles were fetched — NOT currentTileZoom
-  // If currentTileZoom changed while tiles were loading, the lon/lat math would be wrong
+  if (!lyr.radar || !projection) { console.log('[radar] bail: no lyr or projection'); return; }
+  if (snapPath && snapPath !== radarPath) { console.log('[radar] bail: snapPath mismatch', snapPath?.slice(-8), radarPath?.slice(-8)); return; }
   const TILE_ZOOM = snapZoom != null ? snapZoom : currentTileZoom;
   const N    = Math.pow(2, TILE_ZOOM);
   const W    = rdrCv.width, H = rdrCv.height;
@@ -2159,7 +2157,7 @@ function paintRadar(tiles, snapPath, snapZoom) {
   });
 
   // Only swap if something was actually drawn — prevents blanking canvas on stale/wrong-zoom tiles
-  if (drawnQuads === 0) return;
+  if (drawnQuads === 0) { console.log('[radar] bail: drawnQuads=0, tiles=', tiles.length, 'TILE_ZOOM=', TILE_ZOOM, 'snapZoom=', snapZoom, 'k=', k.toFixed(3)); return; }
 
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.drawImage(off, 0, 0);
