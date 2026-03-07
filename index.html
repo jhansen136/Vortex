@@ -825,7 +825,7 @@ const INTERVAL_STATIONS    = 10 * 60000;
 const BATCH_SIZE      = 25;
 const FETCH_TIMEOUT   = 15000;
 const FETCH_RETRY_MAX = 2;
-const RADAR_CACHE_MAX = 300;   // FIX(perf): cap tile cache to prevent memory leak
+const RADAR_CACHE_MAX = 2000;  // visible tiles × frames: 70 tiles × 12 frames = 840 max at zoom 5
 
 // Home zone
 const HOME = {
@@ -2098,8 +2098,8 @@ function drawRadar(targetPath) {
 }
 
 function paintRadar(tiles, snapPath, snapZoom) {
-  if (!lyr.radar || !projection) { console.log('[radar] bail: no lyr or projection'); return; }
-  if (snapPath && snapPath !== radarPath) { console.log('[radar] bail: snapPath mismatch', snapPath?.slice(-8), radarPath?.slice(-8)); return; }
+  if (!lyr.radar || !projection) return;
+  if (snapPath && snapPath !== radarPath) return;
   const TILE_ZOOM = snapZoom != null ? snapZoom : currentTileZoom;
   const N    = Math.pow(2, TILE_ZOOM);
   const W    = rdrCv.width, H = rdrCv.height;
@@ -2157,7 +2157,7 @@ function paintRadar(tiles, snapPath, snapZoom) {
   });
 
   // Only swap if something was actually drawn — prevents blanking canvas on stale/wrong-zoom tiles
-  if (drawnQuads === 0) { console.log('[radar] bail: drawnQuads=0, tiles=', tiles.length, 'TILE_ZOOM=', TILE_ZOOM, 'snapZoom=', snapZoom, 'k=', k.toFixed(3)); return; }
+  if (drawnQuads === 0) return;
 
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.drawImage(off, 0, 0);
@@ -2217,22 +2217,18 @@ async function fetchRadar() {
   } catch(e) {}
 }
 
-// FIX(perf): guard against concurrent prefetch runs
+// Prefetch radar tiles for all frames — visible area only, using same bbox as getVisibleTiles
 function prefetchAllFrames() {
   if (prefetchInProgress || !radarFrames.length || !projection) return;
   prefetchInProgress = true;
-  const TZ = getRadarTileZoom(), N = Math.pow(2, TZ);
-  const t  = currentTransform || d3.zoomIdentity;
-  const W  = rdrCv.width, H = rdrCv.height;
+  const TZ = getRadarTileZoom();
+  const visibleTiles = getVisibleTiles(TZ);
   const urlsToFetch = [];
   radarFrames.forEach(frame => {
-    for (let tx=0;tx<N;tx++) for (let ty=0;ty<N;ty++) {
-      const lon=(tx+0.5)/N*360-180, lat=Math.atan(Math.sinh(Math.PI*(1-2*(ty+0.5)/N)))*180/Math.PI;
-      const pt=projection([lon,lat]); if (!pt) continue;
-      if (TZ>=6){const cx=pt[0]*t.k+t.x,cy=pt[1]*t.k+t.y; if(cx<-W*0.5||cx>W*1.5||cy<-H*0.5||cy>H*1.5) continue;}
-      const url=`${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
+    visibleTiles.forEach(({ tx, ty }) => {
+      const url = `${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
       if (!radarTileCache[url]) urlsToFetch.push(url);
-    }
+    });
   });
   let remaining = urlsToFetch.length;
   if (!remaining) { prefetchInProgress = false; return; }
