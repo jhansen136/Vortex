@@ -2456,16 +2456,23 @@ async function fetchNWS() {
 const HOME_FIPS_SET = HOME_FIPS;
 
 function isLocalAlert(areaDesc, geocode) {
+  // Primary: FIPS code match — most reliable
   if (geocode) {
     const fips = geocode.SAME || geocode.UGC || [];
     const fipsArr = Array.isArray(fips) ? fips : Object.values(fips).flat();
     if (fipsArr.some(f => HOME_FIPS_SET.has(String(f).replace(/\D/g,'').slice(-5)))) return true;
   }
+  // Fallback: text match — must match "County, AR" specifically
+  // Split on semicolons to get individual "County, ST" segments
+  // This prevents "Washington, MS" matching "Washington" county in AR
   if (!areaDesc) return false;
-  const text  = areaDesc.toUpperCase();
-  const hasAR = text.includes(', AR') || text.includes('ARKANSAS');
-  if (!hasAR) return false;
-  return HOME.counties.some(c => text.includes(c.toUpperCase()));
+  const segments = areaDesc.split(';').map(s => s.trim().toUpperCase());
+  return segments.some(seg => {
+    // Segment must end with ", AR" or contain "ARKANSAS"
+    const isAR = seg.endsWith(', AR') || seg.includes('ARKANSAS');
+    if (!isAR) return false;
+    return HOME.counties.some(c => seg.includes(c.toUpperCase()));
+  });
 }
 
 // FIX(perf): only add/remove changed polygons instead of full gWarn redraw
@@ -2615,26 +2622,23 @@ function renderNWS() {
 }
 
 // ══════════════════════════════════════════════════════════
-// PUSH PROXY — FIX(critical): route push through Vercel function
-// /api/push serverless function reads NTFY_URL from env — never exposed
-// to the browser. Falls back to direct fetch on localhost/file://
+// PUSH — direct ntfy.sh post (personal tool, single user)
+// The ntfy topic URL is stored in Supabase integrations table.
+// For higher security, restrict the ntfy topic to "publish-only"
+// in the ntfy.sh dashboard so only you can subscribe.
 // ══════════════════════════════════════════════════════════
 async function sendPush({ title, body, priority = 'high', tags = 'rotating_light' }) {
   if (!cfg.push) return;
-  const isLocal = location.hostname === 'localhost' || location.protocol === 'file:';
-  if (isLocal) {
-    // Dev only: direct fetch — ntfy URL only reachable from local machine
-    await fetch(cfg.push, { method:'POST', body,
-      headers: { 'Title': title, 'Priority': priority, 'Tags': tags }
-    });
-    return;
-  }
-  // Production: Vercel serverless proxy (see /api/push.js)
-  await fetch('/api/push', {
+  const response = await fetch(cfg.push, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title, body, priority, tags })
+    body,
+    headers: {
+      'Title':    title,
+      'Priority': priority,
+      'Tags':     tags,
+    },
   });
+  if (!response.ok) throw new Error(`ntfy ${response.status}`);
 }
 
 async function fireAlert(ev, area, col, local=false) {
@@ -2746,7 +2750,7 @@ async function testPush() {
   try {
     await sendPush({ title:'VORTEX Alert', body:`🌪 VORTEX TEST\n${msg}`, priority:'urgent', tags:'rotating_light' });
     showToast('watch','Push Sent ✓','Check your phone.');
-  } catch { showToast('watch','Push Failed','Check ntfy.sh URL in Configure.'); }
+  } catch(e) { showToast('watch','Push Failed', e.message || 'Check ntfy URL in Configure.'); }
 }
 
 function testHue() {
@@ -2913,8 +2917,6 @@ function checkPersonalAlerts() {
     banner.style.display = 'none'; btn.classList.remove('danger'); btn.classList.add('active');
   }
 }
-function setRadarSpeed(ms) { RADAR_FRAME_MS=parseInt(ms,10); if(radarPlaying){stopRadarPlay();startRadarPlay();} }
-
 // ══════════════════════════════════════════════════════════
 // MULTI-HAZARD
 // ══════════════════════════════════════════════════════════
