@@ -2036,14 +2036,14 @@ async function fetchRadar() {
     // Draw the current frame
     drawRadar();
 
-    // Pre-fetch all frames in background, then auto-play once loaded
-    prefetchAllFrames(true);
+    // Pre-fetch all frames in background for smooth playback
+    prefetchAllFrames();
 
   } catch(e) { console.warn('[Radar] fetch failed:', e); }
 }
 
 // Pre-fetch tiles for all frames silently in the background
-function prefetchAllFrames(autoPlay = false) {
+function prefetchAllFrames() {
   if (!radarFrames.length || !projection) return;
   const TZ = getRadarTileZoom();
   const N = Math.pow(2, TZ);
@@ -2068,25 +2068,14 @@ function prefetchAllFrames(autoPlay = false) {
     }
   });
 
-  if (urlsToFetch.length === 0) {
-    if (autoPlay && !radarPlaying) startRadarPlay();
-    return;
-  }
-
-  let remaining = urlsToFetch.length;
-  const done = () => {
-    remaining--;
-    if (remaining === 0 && autoPlay && !radarPlaying) startRadarPlay();
-  };
-
   urlsToFetch.forEach(url => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    img.onload = () => { radarTileCache[url] = img; done(); };
+    img.onload = () => { radarTileCache[url] = img; };
     img.onerror = () => {
       const img2 = new Image();
-      img2.onload = () => { radarTileCache[url] = img2; done(); };
-      img2.onerror = () => done();
+      img2.onload = () => { radarTileCache[url] = img2; };
+      img2.onerror = () => {};
       img2.src = url;
     };
     img.src = url;
@@ -2172,15 +2161,14 @@ function toggleRadarPlay() {
 function startRadarPlay() {
   if (!radarFrames.length) return;
   radarPlaying = true;
-  // If already at live, restart from beginning
+  // Start from beginning if currently on live, otherwise continue from current position
   if (radarFrameIdx >= radarFrames.length - 1) radarFrameIdx = 0;
   updatePlaybarUI();
   radarPlayTimer = setInterval(() => {
     const next = radarFrameIdx + 1;
     if (next >= radarFrames.length) {
-      // End of loop — pause on live
-      stopRadarPlay();
-      goToFrame(radarFrames.length - 1);
+      // Wrap back to start and keep looping
+      goToFrame(0);
     } else {
       goToFrame(next);
     }
