@@ -90,7 +90,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 #windCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
 #radarCanvas{position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .45s;}
 #heatCanvas{display:none;}
-#radarTimestamp{position:absolute;bottom:36px;right:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.5px;pointer-events:none;z-index:20;display:none;}
+#radarTimestamp{position:absolute;bottom:36px;right:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:5px 9px;font-family:var(--font-mono);font-size:9px;color:var(--cyan);letter-spacing:.5px;z-index:20;display:none;}
 /* ── Radar Playbar ────────────────────────────────────── */
 #radarPlaybar{
   position:absolute;bottom:12px;left:50%;transform:translateX(-50%);
@@ -2036,20 +2036,21 @@ async function fetchRadar() {
     // Draw the current frame
     drawRadar();
 
-    // Pre-fetch all frames in background (so playback is smooth)
-    prefetchAllFrames();
+    // Pre-fetch all frames in background, then auto-play once loaded
+    prefetchAllFrames(true);
 
   } catch(e) { console.warn('[Radar] fetch failed:', e); }
 }
 
 // Pre-fetch tiles for all frames silently in the background
-function prefetchAllFrames() {
+function prefetchAllFrames(autoPlay = false) {
   if (!radarFrames.length || !projection) return;
   const TZ = getRadarTileZoom();
   const N = Math.pow(2, TZ);
   const t = currentTransform || d3.zoomIdentity;
   const W = rdrCv.width, H = rdrCv.height;
 
+  const urlsToFetch = [];
   radarFrames.forEach(frame => {
     for (let tx = 0; tx < N; tx++) {
       for (let ty = 0; ty < N; ty++) {
@@ -2062,18 +2063,33 @@ function prefetchAllFrames() {
           if (cx < -W*0.5 || cx > W*1.5 || cy < -H*0.5 || cy > H*1.5) continue;
         }
         const url = `${radarHost}${frame.path}/256/${TZ}/${tx}/${ty}/6/1_1.png`;
-        if (radarTileCache[url]) continue;
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => { radarTileCache[url] = img; };
-        img.onerror = () => {
-          const img2 = new Image();
-          img2.onload = () => { radarTileCache[url] = img2; };
-          img2.src = url;
-        };
-        img.src = url;
+        if (!radarTileCache[url]) urlsToFetch.push(url);
       }
     }
+  });
+
+  if (urlsToFetch.length === 0) {
+    if (autoPlay && !radarPlaying) startRadarPlay();
+    return;
+  }
+
+  let remaining = urlsToFetch.length;
+  const done = () => {
+    remaining--;
+    if (remaining === 0 && autoPlay && !radarPlaying) startRadarPlay();
+  };
+
+  urlsToFetch.forEach(url => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => { radarTileCache[url] = img; done(); };
+    img.onerror = () => {
+      const img2 = new Image();
+      img2.onload = () => { radarTileCache[url] = img2; done(); };
+      img2.onerror = () => done();
+      img2.src = url;
+    };
+    img.src = url;
   });
 }
 
@@ -2126,11 +2142,16 @@ function updatePlaybarUI() {
     }
   }
 
-  // Also update legacy timestamp div
+  // Also update legacy timestamp div — always visible when radar is on
   const ts = document.getElementById('radarTimestamp');
   if (ts && radarFrames[radarFrameIdx]) {
     const d = new Date(radarFrames[radarFrameIdx].time * 1000);
-    ts.textContent = '📡 ' + d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'}) + ' CDT';
+    const timeStr = d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'});
+    const dateStr = d.toLocaleDateString('en-US', {month:'short', day:'numeric', timeZone:'America/Chicago'});
+    const isLiveFrame = radarFrameIdx === radarFrames.length - 1;
+    ts.innerHTML = isLiveFrame
+      ? `📡 <span style="color:var(--green)">LIVE</span> &nbsp;${dateStr} ${timeStr} CDT`
+      : `📡 ${dateStr} ${timeStr} CDT`;
   }
 
   const playBtn = document.getElementById('rdrPlayBtn');
@@ -2214,6 +2235,7 @@ function toggleLayer(name, btn) {
       }
       fetchRadar();
       document.getElementById('radarPlaybar').style.display = 'flex';
+      document.getElementById('radarTimestamp').style.display = 'block';
     } else {
       stopRadarPlay();
       radarFrames = [];
@@ -2222,6 +2244,7 @@ function toggleLayer(name, btn) {
       rdrCv.style.opacity = '0';
       rdrCv.style.transform = '';
       document.getElementById('radarPlaybar').style.display = 'none';
+      document.getElementById('radarTimestamp').style.display = 'none';
     }
   }
 }
