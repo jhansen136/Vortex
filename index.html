@@ -1163,18 +1163,14 @@ function initMap(us) {
         // Apply the delta between current and painted transform as CSS
         if (radarPaintedTransform) {
           const pt = radarPaintedTransform;
-          // Scale delta between painted and current
           const dk = k / pt.k;
-          // When we painted, pt.x/pt.y were the offsets. Now they've changed.
-          // CSS transform origin is top-left of canvas.
-          // New screen position of a painted pixel at (px,py):
-          //   painted screen pos: px*pt.k + pt.x, py*pt.k + pt.y
-          //   current screen pos: px*k + x, py*k + y
-          // delta translate: (x - pt.x*dk), (y - pt.y*dk)  with scale dk
           const dtx = x - pt.x * dk;
           const dty = y - pt.y * dk;
           rdrCv.style.transformOrigin = '0 0';
           rdrCv.style.transform = `translate(${dtx}px,${dty}px) scale(${dk})`;
+        } else if (radarPath) {
+          // No painted transform yet — just draw directly
+          drawRadar(radarPath);
         }
         scheduleRadarRepaint();
       }
@@ -2269,7 +2265,9 @@ function paintRadar(tiles, snapPath) {
     }
   });
 
-  // Atomic swap — record painted transform, clear CSS transform
+  // Only commit if we actually drew something
+  const hasContent = tiles.some(({url}) => radarTileCache[url]);
+  if (!hasContent) return;
   rdrCtx.clearRect(0, 0, W, H);
   rdrCtx.drawImage(off, 0, 0);
   radarPaintedTransform = { x: tx, y: ty, k };
