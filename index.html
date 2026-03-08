@@ -2065,10 +2065,11 @@ function clearRadarCache() {
 
 function getRadarTileZoom() {
   const k = (currentTransform || d3.zoomIdentity).k;
-  if (k >= 5)   return 7;
-  if (k >= 2)   return 6;
-  if (k >= 0.8) return 5;
-  return 4; // very zoomed out — fewer, larger tiles
+  // D3 zoom k=1 is full CONUS, k=12 is NW Arkansas level
+  // Use fewer, larger tiles when zoomed out; more detail when zoomed in
+  if (k >= 8)  return 6;
+  if (k >= 3)  return 5;
+  return 4;  // default CONUS view — zoom 4 tiles cover large areas cleanly
 }
 
 // Convert a Web Mercator tile index to lon/lat of its NW corner
@@ -2087,36 +2088,24 @@ function lat2tile(lat, N) {
 
 function getVisibleTiles(TILE_ZOOM) {
   const N = Math.pow(2, TILE_ZOOM);
-  const t = currentTransform || d3.zoomIdentity;
-  const W = rdrCv.width, H = rdrCv.height;
 
-  // AlbersUSA covers roughly lon -125 to -65, lat 24 to 50
-  // Expand slightly for safety
-  const LON_MIN = -128, LON_MAX = -62, LAT_MIN = 22, LAT_MAX = 52;
+  // Fixed CONUS bounds — slightly generous to avoid edge gaps
+  const LON_MIN = -130, LON_MAX = -60;
+  const LAT_MIN = 20,   LAT_MAX = 55;
 
-  // Convert geographic bounds to tile index range
-  const txMin = Math.max(0,   Math.floor(lon2tile(LON_MIN, N)) - 1);
-  const txMax = Math.min(N-1, Math.ceil( lon2tile(LON_MAX, N)) + 1);
-  const tyMin = Math.max(0,   Math.floor(lat2tile(LAT_MAX, N)) - 1);
-  const tyMax = Math.min(N-1, Math.ceil( lat2tile(LAT_MIN, N)) + 1);
+  const txMin = Math.max(0,   Math.floor(lon2tile(LON_MIN, N)));
+  const txMax = Math.min(N-1, Math.floor(lon2tile(LON_MAX, N)));
+  const tyMin = Math.max(0,   Math.floor(lat2tile(LAT_MAX, N)));
+  const tyMax = Math.min(N-1, Math.floor(lat2tile(LAT_MIN, N)));
 
-  const tileCount = (txMax - txMin + 1) * (tyMax - tyMin + 1);
-
-  // At low zoom levels (≤6) the tile count is small (≤ ~100) and AlbersUSA
-  // projection points are tiny on screen — skip the screen bounds check and
-  // return all tiles in the geographic range. At higher zoom, cull by screen.
-  if (TILE_ZOOM <= 6 || tileCount <= 120) {
-    const visible = [];
-    for (let tx = txMin; tx <= txMax; tx++) {
-      for (let ty = tyMin; ty <= tyMax; ty++) {
-        // Geographic bounds already constrain to CONUS region — no projection
-        // check needed. AlbersUSA clips too aggressively at low zoom and rejects
-        // valid edge tiles whose centers fall outside the clip boundary.
-        visible.push({ tx, ty });
-      }
+  const visible = [];
+  for (let tx = txMin; tx <= txMax; tx++) {
+    for (let ty = tyMin; ty <= tyMax; ty++) {
+      visible.push({ tx, ty });
     }
-    return visible;
   }
+  return visible;
+}
 
   // High zoom: cull by screen bounds with generous margin
   const visible = [];
