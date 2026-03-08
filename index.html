@@ -1963,22 +1963,38 @@ function resizeCanvases() {
 }
 resizeCanvases();
 
+let resizeTimer = null;
 window.addEventListener('resize', () => {
   resizeCanvases();
-  if (projection) {
-    const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
-    projection.scale(W*1.15).translate([W/2, H/2]);
-    if (gMap)      gMap.selectAll('path').attr('d', pathGen);
-    if (gWarn)     gWarn.selectAll('path').attr('d', pathGen);
-    svg.select('rect').attr('width',W).attr('height',H);
-    svg.attr('width',W).attr('height',H);
-    warnSvg.attr('width',W).attr('height',H);
-    d3.select('#hazardSvg').attr('width',W).attr('height',H);
-    d3.select('#gpsSvg').attr('width',W).attr('height',H);
+  if (!projection) return;
+  const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+  projection.scale(W * 1.15).translate([W / 2, H / 2]);
+  svg.select('rect').attr('width', W).attr('height', H);
+  svg.attr('width', W).attr('height', H);
+  warnSvg.attr('width', W).attr('height', H);
+  d3.select('#hazardSvg').attr('width', W).attr('height', H);
+  d3.select('#gpsSvg').attr('width', W).attr('height', H);
+  if (gMap)  gMap.selectAll('path').attr('d', pathGen);
+  if (gWarn) gWarn.selectAll('path').attr('d', pathGen);
+
+  // Debounce the expensive redraws — wait until resize settles
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
     drawStations();
     buildStationGrid();
-    if (geoActive) updateGPSDot();
-  }
+    // Reposition all earthquake/wildfire markers at new projected coords
+    if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
+    if (lyr.wildfires   && wildfireData.length)   renderWildfires();
+    // Redraw NWS warning polygons at new projection
+    if (lyr.warnings) {
+      renderedAlertIds.clear();
+      gWarn.selectAll('.warn-path').remove();
+      renderNWS();
+    }
+    if (lyr.radar)  scheduleRadarRepaint();
+    if (lyr.temp)   drawHeatmap();
+    if (geoActive)  updateGPSDot();
+  }, 150);
 });
 
 function ll2canvas(lat, lon) {
