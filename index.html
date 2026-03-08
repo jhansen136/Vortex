@@ -1984,12 +1984,7 @@ window.addEventListener('resize', () => {
   d3.select('#hazardSvg').attr('width', W).attr('height', H);
   d3.select('#gpsSvg').attr('width', W).attr('height', H);
 
-  // Preserve the current zoom level — just reset pan to center
-  // so the map doesn't fly off-screen after the projection changes
-  const savedK = currentTransform.k;
-  const newT = d3.zoomIdentity.scale(savedK);
-  currentTransform = newT;
-  svg.call(zoom.transform, newT);
+
 
   // Redraw base map paths at new projection
   if (gMap)  gMap.selectAll('path').attr('d', pathGen);
