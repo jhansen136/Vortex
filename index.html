@@ -2309,12 +2309,16 @@ async function fetchRadar() {
     const frames = data.radar?.past;
     if (!frames || !frames.length) return;
     radarHost = data.host;
+    
     const latestPath = frames[frames.length - 1].path;
-    if (radarPath !== latestPath) {
-      clearRadarCache();
-      radarFrames = frames;
-    }
+    const hasNewLiveFrame = radarPath !== latestPath;
+
+    if (hasNewLiveFrame) clearRadarCache();
+
+    radarFrames = frames;
+
     if (!radarPlaying) radarFrameIdx = radarFrames.length - 1;
+    
     // FIX(bug): validate frameIdx before using it
     radarFrameIdx = Math.max(0, Math.min(radarFrameIdx, radarFrames.length - 1));
     radarPath = radarFrames[radarFrameIdx].path;
