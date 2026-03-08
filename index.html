@@ -2049,6 +2049,7 @@ let radarPlayTimer  = null;
 let RADAR_FRAME_MS  = 600;
 // FIX(perf): prevent re-entrant prefetch runs
 let prefetchInProgress = false;
+let prefetchAborted = false;
 
 function addToRadarCache(url, img) {
   if (radarTileCache[url]) return; // already cached
@@ -2333,6 +2334,7 @@ async function fetchRadar() {
 function prefetchAllFrames() {
   if (prefetchInProgress || !radarFrames.length || !projection) return;
   prefetchInProgress = true;
+  prefetchAborted = false;
 
   const BATCH  = 4;
   const DELAY  = 500; // ms between batches — stay well under rate limit
@@ -2353,7 +2355,7 @@ function prefetchAllFrames() {
 
   let i = 0;
   function loadBatch() {
-    if (i >= urls.length) { prefetchInProgress = false; return; }
+    if (prefetchAborted || i >= urls.length) { prefetchInProgress = false; return; }
     const end = Math.min(i + BATCH, urls.length);
     let inFlight = end - i;
     for (; i < end; i++) {
@@ -2501,6 +2503,7 @@ function toggleLayer(name, btn) {
       document.getElementById('radarTimestamp').style.display = 'block';
     } else {
       stopRadarPlay();
+      prefetchAborted = true; prefetchInProgress = false;
       radarFrames = []; radarFrameIdx = -1;
       rdrCtx.clearRect(0, 0, rdrCv.width, rdrCv.height);
       // FIX(bug): reset both opacity and transform together on layer off
