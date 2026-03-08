@@ -1966,26 +1966,40 @@ resizeCanvases();
 let resizeTimer = null;
 window.addEventListener('resize', () => {
   resizeCanvases();
-  if (!projection) return;
+  if (!projection || !zoom) return;
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+
+  // Recalculate projection for new dimensions
   projection.scale(W * 1.15).translate([W / 2, H / 2]);
+
+  // Resize SVG elements
   svg.select('rect').attr('width', W).attr('height', H);
   svg.attr('width', W).attr('height', H);
   warnSvg.attr('width', W).attr('height', H);
   d3.select('#hazardSvg').attr('width', W).attr('height', H);
   d3.select('#gpsSvg').attr('width', W).attr('height', H);
+
+  // Reset zoom to identity — the projection changed so old k/x/y offsets
+  // are wrong. All markers (cities, earthquakes, wildfires) use
+  // currentTransform to convert projection coords → screen coords, so
+  // we must reset it before any redraw. zoomHome() will re-apply the
+  // correct transform after the debounce.
+  currentTransform = d3.zoomIdentity;
+  svg.call(zoom.transform, d3.zoomIdentity);
+
+  // Redraw base map paths at new projection
   if (gMap)  gMap.selectAll('path').attr('d', pathGen);
   if (gWarn) gWarn.selectAll('path').attr('d', pathGen);
 
-  // Debounce the expensive redraws — wait until resize settles
+  // Debounce expensive redraws — wait until resize settles
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
+    // Re-zoom to home so the map isn't at identity scale (too zoomed out)
+    zoomHome();
     drawStations();
     buildStationGrid();
-    // Reposition all earthquake/wildfire markers at new projected coords
     if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
     if (lyr.wildfires   && wildfireData.length)   renderWildfires();
-    // Redraw NWS warning polygons at new projection
     if (lyr.warnings) {
       renderedAlertIds.clear();
       gWarn.selectAll('.warn-path').remove();
@@ -1994,7 +2008,7 @@ window.addEventListener('resize', () => {
     if (lyr.radar)  scheduleRadarRepaint();
     if (lyr.temp)   drawHeatmap();
     if (geoActive)  updateGPSDot();
-  }, 150);
+  }, 200);
 });
 
 function ll2canvas(lat, lon) {
