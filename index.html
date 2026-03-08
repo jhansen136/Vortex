@@ -1984,9 +1984,12 @@ window.addEventListener('resize', () => {
   d3.select('#hazardSvg').attr('width', W).attr('height', H);
   d3.select('#gpsSvg').attr('width', W).attr('height', H);
 
-  // Reset zoom to identity — old pan/zoom offsets are invalid for new projection
-  currentTransform = d3.zoomIdentity;
-  svg.call(zoom.transform, d3.zoomIdentity);
+  // Preserve the current zoom level — just reset pan to center
+  // so the map doesn't fly off-screen after the projection changes
+  const savedK = currentTransform.k;
+  const newT = d3.zoomIdentity.scale(savedK);
+  currentTransform = newT;
+  svg.call(zoom.transform, newT);
 
   // Redraw base map paths at new projection
   if (gMap)  gMap.selectAll('path').attr('d', pathGen);
@@ -2007,8 +2010,6 @@ window.addEventListener('resize', () => {
     if (lyr.radar)  scheduleRadarRepaint();
     if (lyr.temp)   drawHeatmap();
     if (geoActive)  updateGPSDot();
-    // Re-apply home zoom after everything is repositioned
-    zoomHome();
   }, 200);
 });
 
