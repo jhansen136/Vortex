@@ -541,7 +541,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <canvas id="heatCanvas" style="position:absolute;top:0;left:0;pointer-events:none;opacity:0;transition:opacity .5s;will-change:transform;"></canvas>
     <canvas id="windCanvas"></canvas>
     <svg id="warnSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
-    <svg id="hazardSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
+    <!-- hazardSvg removed: gHazard now lives inside mapSvg for correct zoom tracking -->
     <svg id="gpsSvg" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;overflow:hidden;"></svg>
     <div id="dangerBanner">🚨 YOU ARE INSIDE A WARNING ZONE</div>
     <!-- FIX(ux): fetch error banner with retry -->
@@ -1186,8 +1186,8 @@ function initMap(us) {
     .attr('fill', 'none').attr('stroke', '#0d1420').attr('stroke-width', '0.5');
   gMap      = svg.append('g').attr('id', 'gMap');
   gStations = svg.append('g').attr('id', 'gStations');
+  gHazard   = svg.append('g').attr('id', 'gHazard');
   gWarn     = warnSvg.append('g').attr('id', 'gWarn');
-  gHazard   = d3.select('#hazardSvg').append('g').attr('id', 'gHazard');
   gMap.selectAll('.state-fill')
     .data(topojson.feature(us, us.objects.states).features)
     .enter().append('path')
@@ -1969,32 +1969,23 @@ window.addEventListener('resize', () => {
   if (!projection || !zoom) return;
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
 
-  // Recalculate projection for new dimensions
   projection.scale(W * 1.15).translate([W / 2, H / 2]);
 
-  // Resize SVG elements
   svg.select('rect').attr('width', W).attr('height', H);
   svg.attr('width', W).attr('height', H);
   warnSvg.attr('width', W).attr('height', H);
-  d3.select('#hazardSvg').attr('width', W).attr('height', H);
   d3.select('#gpsSvg').attr('width', W).attr('height', H);
 
-  // Reset zoom to identity — the projection changed so old k/x/y offsets
-  // are wrong. All markers (cities, earthquakes, wildfires) use
-  // currentTransform to convert projection coords → screen coords, so
-  // we must reset it before any redraw. zoomHome() will re-apply the
-  // correct transform after the debounce.
+  // Reset zoom to identity — projection changed so old offsets are wrong
   currentTransform = d3.zoomIdentity;
   svg.call(zoom.transform, d3.zoomIdentity);
 
-  // Redraw base map paths at new projection
   if (gMap)  gMap.selectAll('path').attr('d', pathGen);
   if (gWarn) gWarn.selectAll('path').attr('d', pathGen);
 
-  // Debounce expensive redraws — wait until resize settles
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
-    // Re-zoom to home so the map isn't at identity scale (too zoomed out)
+    // Re-zoom home after projection reset
     zoomHome();
     drawStations();
     buildStationGrid();
@@ -3021,7 +3012,8 @@ function renderEarthquakes() {
   if (!gHazard || !projection) return;
   gHazard.selectAll('.eq-marker').remove();
   if (!lyr.earthquakes || !earthquakeData.length) return;
-  const k = currentTransform ? currentTransform.k : 1;
+  // Draw in base projection coords — gHazard transform is applied by D3 zoom
+  const k = (currentTransform || d3.zoomIdentity).k;
   earthquakeData.forEach(feat => {
     const [lon,lat] = feat.geometry.coordinates, mag = feat.properties.mag;
     const place = feat.properties.place||'Unknown';
@@ -3029,6 +3021,7 @@ function renderEarthquakes() {
     const pt = projection([lon,lat]); if (!pt) return;
     const [px,py] = pt, baseR = eqRadius(mag), col = eqColor(mag);
     const g = gHazard.append('g').attr('class','eq-marker').attr('data-base-r',baseR).style('cursor','pointer');
+    // Sizes divided by k so they appear constant in screen pixels as zoom changes
     g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*1.9/k).attr('fill','none').attr('stroke',col).attr('stroke-width',.8/k).attr('opacity',.4);
     g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.85);
     g.append('text').attr('x',px+(baseR+2)/k).attr('y',py+3/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace").attr('font-size',7/k).attr('font-weight','700').style('pointer-events','none').text(`M${mag.toFixed(1)}`);
@@ -3050,7 +3043,8 @@ function renderWildfires() {
   if (!gHazard || !projection) return;
   gHazard.selectAll('.fire-marker').remove();
   if (!lyr.wildfires || !wildfireData.length) return;
-  const k = currentTransform ? currentTransform.k : 1;
+  // Draw in base projection coords — gHazard transform is applied by D3 zoom
+  const k = (currentTransform || d3.zoomIdentity).k;
   wildfireData.forEach(feat => {
     const [lon,lat]=feat.geometry.coordinates, p=feat.properties;
     const name=p.IncidentName||'Unknown Fire', acres=p.DailyAcres||0;
