@@ -410,12 +410,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')authLogin()">
       <button id="authLoginBtn" onclick="authLogin()">Sign In</button>
-      <div id="authSwitch">New user? <a href="#" onclick="showAuthRegister();return false;">Create account</a></div>
+
     </div>
     <div id="authFormRegister" style="display:none;">
       <input type="text" id="authName" placeholder="Display name" autocomplete="name">
       <input type="email" id="authRegEmail" placeholder="Email address" autocomplete="email">
-      <input type="password" id="authRegPassword" placeholder="Password (min 8 chars)" autocomplete="new-password">
+      <input type="password" id="authRegPassword" placeholder="Password (min 8 chars)" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter')authRegister()">
       <!-- invite token read from URL param — not user-entered -->
       <input type="hidden" id="authInviteToken">
       <button id="authRegisterBtn" onclick="authRegister()">Create Account</button>
