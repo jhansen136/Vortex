@@ -935,24 +935,8 @@ function authShowError(msg) {
 }
 
 // ── INVITE TOKEN — read from URL on page load ─────────────
-// If URL has ?invite=TOKEN, show registration form pre-loaded with token
-// Must run after auth overlay is visible and authOverlay display is set
-function checkInviteParam() {
-  const params = new URLSearchParams(window.location.search);
-  const token  = params.get('invite');
-  if (!token) return;
-  // Ensure auth overlay is visible first
-  const overlay = document.getElementById('authOverlay');
-  if (overlay) overlay.style.display = 'flex';
-  showAuthRegister(token);
-}
-// Run on DOMContentLoaded to ensure all elements exist
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', checkInviteParam);
-} else {
-  // DOM already ready — but delay slightly to let auth state resolve first
-  setTimeout(checkInviteParam, 300);
-}
+// Store token globally so resolveAuth can reapply it after auth state resolves
+window._pendingInviteToken = new URLSearchParams(window.location.search).get('invite') || null;
 
 async function authLogin() {
   const email = document.getElementById('authEmail').value.trim();
@@ -1195,7 +1179,11 @@ async function resolveAuth(session, source) {
     authReady = false;
     dataInitialized = false;
     document.getElementById('authOverlay').style.display = 'flex';
-    showAuthLogin();
+    if (window._pendingInviteToken) {
+      showAuthRegister(window._pendingInviteToken);
+    } else {
+      showAuthLogin();
+    }
   }
 }
 
@@ -3031,7 +3019,7 @@ async function sendInvite() {
   }
 
   // Send the invite email via Supabase Edge Function
-  const inviteUrl = `https://vortex-bay-two.vercel.app/?invite=${token}`;
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${token}`;
   try {
     const res = await fetch(`https://dajqwkniduebplujkxht.supabase.co/functions/v1/send-invite`, {
       method: 'POST',
