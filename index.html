@@ -383,6 +383,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .gps-dot-inner{fill:var(--cyan);}
 @keyframes gpsPulse{0%,100%{r:10;opacity:.3;}50%{r:6;opacity:.6;}}
 #rdrSpeedSelect{background:var(--bg);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:10px;border-radius:3px;padding:2px 4px;cursor:pointer;}
+.invite-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;}
+.invite-row:last-child{border-bottom:none;}
+.invite-email{font-family:var(--font-mono);font-size:10px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.invite-meta{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);white-space:nowrap;}
+.invite-status{font-family:var(--font-mono);font-size:9px;padding:1px 5px;border-radius:2px;white-space:nowrap;}
+.invite-status.pending{color:var(--amber);border:1px solid rgba(245,166,35,.4);}
+.invite-status.used{color:var(--green);border:1px solid rgba(57,211,83,.4);}
+.invite-status.expired{color:var(--text-dim);border:1px solid var(--border);}
+.invite-status.revoked{color:var(--red);border:1px solid rgba(230,57,70,.4);}
+.invite-revoke{background:none;border:1px solid rgba(230,57,70,.4);color:var(--red);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.invite-revoke:hover{background:rgba(230,57,70,.15);}
 </style>
 </head>
 <body>
@@ -405,10 +416,17 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <input type="text" id="authName" placeholder="Display name" autocomplete="name">
       <input type="email" id="authRegEmail" placeholder="Email address" autocomplete="email">
       <input type="password" id="authRegPassword" placeholder="Password (min 8 chars)" autocomplete="new-password">
-      <!-- FIX(critical): invite code field for restricted registration -->
-      <input type="text" id="authInviteCode" placeholder="Invite code" autocomplete="off">
+      <!-- invite token read from URL param — not user-entered -->
+      <input type="hidden" id="authInviteToken">
       <button id="authRegisterBtn" onclick="authRegister()">Create Account</button>
       <div id="authSwitch2">Have an account? <a href="#" onclick="showAuthLogin();return false;">Sign in</a></div>
+    </div>
+    <!-- shown after successful registration — waiting for email confirmation -->
+    <div id="authConfirmMsg" style="display:none;text-align:center;padding:8px 0;">
+      <div style="font-size:28px;margin-bottom:10px;">📬</div>
+      <div style="font-family:'Barlow Condensed',sans-serif;font-size:16px;font-weight:700;color:var(--amber);letter-spacing:2px;margin-bottom:8px;">CHECK YOUR EMAIL</div>
+      <div style="font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text-dim);line-height:1.7;">We sent a confirmation link to<br><span id="authConfirmEmail" style="color:var(--text);"></span><br><br>Click the link to activate your account.</div>
+      <div style="margin-top:16px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);">Already confirmed? <a href="#" onclick="showAuthLogin();return false;" style="color:var(--amber);">Sign in</a></div>
     </div>
     <div id="authSpinner" style="display:none;">Authenticating…</div>
   </div>
@@ -439,6 +457,25 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
     <button class="btn-skip" onclick="closeSetup()">Close</button>
     <button class="btn-skip" onclick="authSignOut()" style="color:#ff6b6b;margin-top:4px;">Sign Out</button>
+
+    <!-- ADMIN PANEL — only shown to users with role='admin' -->
+    <div id="adminPanel" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
+      <div style="font-family:var(--font-cond);font-weight:700;font-size:11px;letter-spacing:3px;color:var(--amber);text-transform:uppercase;margin-bottom:12px;">⚡ Admin — Invite Users</div>
+      <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <input type="email" id="inviteEmailInput" placeholder="Email to invite" autocomplete="off"
+          style="flex:1;background:var(--bg);border:1px solid var(--border-bright);border-radius:3px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;"
+          onkeydown="if(event.key==='Enter')sendInvite()">
+        <button onclick="sendInvite()"
+          style="background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border:none;border-radius:3px;padding:8px 14px;cursor:pointer;white-space:nowrap;">
+          SEND
+        </button>
+      </div>
+      <div id="inviteStatus" style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);min-height:16px;margin-bottom:10px;"></div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Pending Invites</div>
+      <div id="inviteList" style="max-height:160px;overflow-y:auto;">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -789,7 +826,7 @@ const SUPA_URL = 'https://dajqwkniduebplujkxht.supabase.co';
 const SUPA_KEY = 'sb_publishable_GJ3cf0S5z8RxdBVu0gksbA_jlvX-hrI';
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-// FIX(critical): invite code for restricted registration
+// Backdoor invite code for admin/owner access (kept client-side intentionally)
 const INVITE_CODE = 'VORTEX2026';
 
 // Risk score formula coefficients — empirically tuned estimates (no real hodograph)
@@ -870,12 +907,15 @@ const isMobile = () => window.innerWidth <= 768;
 function showAuthLogin() {
   document.getElementById('authFormLogin').style.display = 'flex';
   document.getElementById('authFormRegister').style.display = 'none';
+  document.getElementById('authConfirmMsg').style.display = 'none';
   document.getElementById('authError').textContent = '';
 }
-function showAuthRegister() {
+function showAuthRegister(token) {
   document.getElementById('authFormLogin').style.display = 'none';
   document.getElementById('authFormRegister').style.display = 'flex';
+  document.getElementById('authConfirmMsg').style.display = 'none';
   document.getElementById('authError').textContent = '';
+  if (token) document.getElementById('authInviteToken').value = token;
 }
 function authSetLoading(on, form = 'login') {
   document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
@@ -894,6 +934,16 @@ function authShowError(msg) {
   else document.getElementById('authFormLogin').style.display = 'flex';
 }
 
+// ── INVITE TOKEN — read from URL on page load ─────────────
+// If URL has ?invite=TOKEN, show registration form pre-loaded with token
+(function checkInviteParam() {
+  const params = new URLSearchParams(window.location.search);
+  const token  = params.get('invite');
+  if (!token) return;
+  // Small delay so DOM is ready
+  setTimeout(() => showAuthRegister(token), 100);
+})();
+
 async function authLogin() {
   const email = document.getElementById('authEmail').value.trim();
   const pw    = document.getElementById('authPassword').value;
@@ -905,21 +955,59 @@ async function authLogin() {
 
 async function authRegister() {
   const name   = document.getElementById('authName').value.trim();
-  const email  = document.getElementById('authRegEmail').value.trim();
+  const email  = document.getElementById('authRegEmail').value.trim().toLowerCase();
   const pw     = document.getElementById('authRegPassword').value;
-  // FIX(critical): validate invite code before allowing registration
-  const invite = document.getElementById('authInviteCode').value.trim();
-  if (!name || !email || !pw || !invite) { authShowError('All fields required.'); return; }
+  const token  = document.getElementById('authInviteToken').value.trim();
+
+  if (!name || !email || !pw) { authShowError('All fields required.'); return; }
   if (pw.length < 8) { authShowError('Password must be at least 8 characters.'); return; }
-  if (invite !== INVITE_CODE) { authShowError('Invalid invite code.'); return; }
+
   authSetLoading(true, 'register');
+
+  // Allow backdoor INVITE_CODE for admin/owner access
+  const isBackdoor = token === INVITE_CODE;
+
+  if (!isBackdoor) {
+    if (!token) { authSetLoading(false, 'register'); authShowError('Invalid or missing invite link. Please use the link from your invitation email.'); return; }
+
+    // Validate invite token against Supabase
+    const { data: invite, error: invErr } = await supa
+      .from('invites')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+
+    if (invErr || !invite) { authSetLoading(false, 'register'); authShowError('Invalid invite link.'); return; }
+    if (invite.revoked_at)  { authSetLoading(false, 'register'); authShowError('This invite has been revoked.'); return; }
+    if (invite.used_at)     { authSetLoading(false, 'register'); authShowError('This invite has already been used.'); return; }
+    if (new Date(invite.expires_at) < new Date()) { authSetLoading(false, 'register'); authShowError('This invite has expired. Please request a new one.'); return; }
+    if (invite.email.toLowerCase() !== email) { authSetLoading(false, 'register'); authShowError(`This invite was sent to a different email address.`); return; }
+  }
+
+  // Create the account — email confirmation required (Supabase will send the email)
   const { error: signUpError } = await supa.auth.signUp({
     email, password: pw,
     options: { data: { display_name: name } }
   });
   if (signUpError) { authSetLoading(false, 'register'); authShowError(signUpError.message); return; }
-  const { error: signInError } = await supa.auth.signInWithPassword({ email, password: pw });
-  if (signInError) { authSetLoading(false, 'register'); authShowError(signInError.message); return; }
+
+  // Mark invite as used (non-backdoor only)
+  if (!isBackdoor) {
+    await supa.from('invites').update({ used_at: new Date().toISOString() }).eq('token', token).catch(() => {});
+  }
+
+  // Show confirmation message — user must verify email before signing in
+  authSetLoading(false, 'register');
+  document.getElementById('authFormRegister').style.display = 'none';
+  document.getElementById('authSpinner').style.display = 'none';
+  document.getElementById('authConfirmEmail').textContent = email;
+  document.getElementById('authConfirmMsg').style.display = 'block';
+  document.getElementById('authError').textContent = '';
+
+  // Clean invite param from URL without reloading
+  const url = new URL(window.location.href);
+  url.searchParams.delete('invite');
+  window.history.replaceState({}, '', url.toString());
 }
 
 async function authSignOut() {
@@ -2868,9 +2956,150 @@ function openSetup() {
     document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
+  // Show admin panel if user is admin
+  const isAdmin = userProfile?.role === 'admin';
+  const adminPanel = document.getElementById('adminPanel');
+  if (adminPanel) {
+    adminPanel.style.display = isAdmin ? 'block' : 'none';
+    if (isAdmin) loadInviteList();
+  }
   document.getElementById('setupModal').style.display = 'flex';
 }
 function closeSetup() { document.getElementById('setupModal').style.display = 'none'; }
+
+// ══════════════════════════════════════════════════════════
+// INVITE SYSTEM
+// ══════════════════════════════════════════════════════════
+
+// Generate a cryptographically random invite token
+function generateToken(length = 32) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  const arr   = new Uint8Array(length);
+  crypto.getRandomValues(arr);
+  return Array.from(arr, b => chars[b % chars.length]).join('');
+}
+
+async function sendInvite() {
+  const emailInput = document.getElementById('inviteEmailInput');
+  const statusEl   = document.getElementById('inviteStatus');
+  const email      = emailInput.value.trim().toLowerCase();
+
+  if (!email || !email.includes('@')) { statusEl.style.color = 'var(--red)'; statusEl.textContent = 'Enter a valid email address.'; return; }
+  if (!currentUser) return;
+
+  statusEl.style.color = 'var(--text-dim)'; statusEl.textContent = 'Sending…';
+
+  const token     = generateToken();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  // Check if a pending invite already exists for this email
+  const { data: existing } = await supa.from('invites')
+    .select('id, used_at, revoked_at, expires_at')
+    .eq('email', email)
+    .is('used_at', null)
+    .is('revoked_at', null)
+    .maybeSingle();
+
+  if (existing && new Date(existing.expires_at) > new Date()) {
+    statusEl.style.color = 'var(--amber)';
+    statusEl.textContent = `A pending invite already exists for ${email}.`;
+    return;
+  }
+
+  // Insert invite record
+  const { error: insertErr } = await supa.from('invites').insert({
+    email,
+    token,
+    invited_by: currentUser.id,
+    expires_at: expiresAt,
+  });
+
+  if (insertErr) {
+    statusEl.style.color = 'var(--red)';
+    statusEl.textContent = 'Failed to create invite: ' + insertErr.message;
+    return;
+  }
+
+  // Send the invite email via Supabase Edge Function
+  const inviteUrl = `${window.location.origin}${window.location.pathname}?invite=${token}`;
+  try {
+    const res = await fetch(`https://dajqwkniduebplujkxht.supabase.co/functions/v1/send-invite`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${(await supa.auth.getSession()).data.session?.access_token}`
+      },
+      body: JSON.stringify({ to: email, inviteUrl, inviterName: userProfile?.display_name || 'The VORTEX team' })
+    });
+    if (!res.ok) throw new Error('Edge function returned ' + res.status);
+    statusEl.style.color = 'var(--green)';
+    statusEl.textContent = `✓ Invite sent to ${email}`;
+    emailInput.value = '';
+    setTimeout(() => loadInviteList(), 500);
+  } catch(e) {
+    // Edge function not deployed yet — show the link directly as fallback
+    statusEl.style.color = 'var(--amber)';
+    statusEl.textContent = `Invite created. Share this link manually:`;
+    // Show the link in a copyable way
+    const linkEl = document.createElement('div');
+    linkEl.style.cssText = 'font-family:var(--font-mono);font-size:9px;color:var(--cyan);word-break:break-all;margin-top:4px;cursor:pointer;';
+    linkEl.textContent = inviteUrl;
+    linkEl.title = 'Click to copy';
+    linkEl.onclick = () => { navigator.clipboard.writeText(inviteUrl).then(() => { linkEl.style.color = 'var(--green)'; linkEl.textContent = '✓ Copied!'; }); };
+    const statusParent = statusEl.parentNode;
+    const existingLink = statusParent.querySelector('.invite-fallback-link');
+    if (existingLink) existingLink.remove();
+    linkEl.className = 'invite-fallback-link';
+    statusParent.insertBefore(linkEl, statusEl.nextSibling);
+    setTimeout(() => loadInviteList(), 500);
+  }
+}
+
+async function loadInviteList() {
+  const listEl = document.getElementById('inviteList');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
+
+  const { data: invites, error } = await supa.from('invites')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  if (error || !invites?.length) {
+    listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No invites yet.</div>';
+    return;
+  }
+
+  listEl.innerHTML = '';
+  invites.forEach(inv => {
+    const now      = new Date();
+    const expires  = new Date(inv.expires_at);
+    const daysLeft = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
+    let statusText, statusClass;
+    if (inv.revoked_at)          { statusText = 'REVOKED'; statusClass = 'revoked'; }
+    else if (inv.used_at)        { statusText = 'USED';    statusClass = 'used'; }
+    else if (expires < now)      { statusText = 'EXPIRED'; statusClass = 'expired'; }
+    else                         { statusText = `${daysLeft}d left`; statusClass = 'pending'; }
+
+    const row = document.createElement('div');
+    row.className = 'invite-row';
+    row.innerHTML = `
+      <div class="invite-email" title="${inv.email}">${inv.email}</div>
+      <div class="invite-status ${statusClass}">${statusText}</div>
+      ${statusClass === 'pending' ? `<button class="invite-revoke" onclick="revokeInvite('${inv.id}', this)">REVOKE</button>` : ''}
+    `;
+    listEl.appendChild(row);
+  });
+}
+
+async function revokeInvite(id, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const { error } = await supa.from('invites')
+    .update({ revoked_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) { btn.disabled = false; btn.textContent = 'REVOKE'; showToast('watch','Error', error.message); return; }
+  loadInviteList();
+}
 function updateCfgUI() {
   document.querySelectorAll('#pushSub, #pushSubM').forEach(el => {
     el.textContent = cfg.push ? (cfg.push.includes('ntfy') ? 'ntfy.sh · Connected' : 'Configured') : 'ntfy.sh / Pushover';
