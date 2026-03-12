@@ -827,8 +827,6 @@ const SUPA_URL = 'https://dajqwkniduebplujkxht.supabase.co';
 const SUPA_KEY = 'sb_publishable_GJ3cf0S5z8RxdBVu0gksbA_jlvX-hrI';
 const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-// Backdoor invite code for admin/owner access (kept client-side intentionally)
-const INVITE_CODE = 'VORTEX2026';
 
 // Risk score formula coefficients — empirically tuned estimates (no real hodograph)
 const SRH_CAPE_FACTOR  = 0.13;  // CAPE contribution to estimated SRH
@@ -959,25 +957,20 @@ async function authRegister() {
 
   authSetLoading(true, 'register');
 
-  // Allow backdoor INVITE_CODE for admin/owner access
-  const isBackdoor = token === INVITE_CODE;
+  if (!token) { authSetLoading(false, 'register'); authShowError('Invalid or missing invite link. Please use the link from your invitation email.'); return; }
 
-  if (!isBackdoor) {
-    if (!token) { authSetLoading(false, 'register'); authShowError('Invalid or missing invite link. Please use the link from your invitation email.'); return; }
+  // Validate invite token against Supabase
+  const { data: invite, error: invErr } = await supa
+    .from('invites')
+    .select('*')
+    .eq('token', token)
+    .maybeSingle();
 
-    // Validate invite token against Supabase
-    const { data: invite, error: invErr } = await supa
-      .from('invites')
-      .select('*')
-      .eq('token', token)
-      .maybeSingle();
-
-    if (invErr || !invite) { authSetLoading(false, 'register'); authShowError('Invalid invite link.'); return; }
-    if (invite.revoked_at)  { authSetLoading(false, 'register'); authShowError('This invite has been revoked.'); return; }
-    if (invite.used_at)     { authSetLoading(false, 'register'); authShowError('This invite has already been used.'); return; }
-    if (new Date(invite.expires_at) < new Date()) { authSetLoading(false, 'register'); authShowError('This invite has expired. Please request a new one.'); return; }
-    if (invite.email.toLowerCase() !== email) { authSetLoading(false, 'register'); authShowError(`This invite was sent to a different email address.`); return; }
-  }
+  if (invErr || !invite) { authSetLoading(false, 'register'); authShowError('Invalid invite link.'); return; }
+  if (invite.revoked_at)  { authSetLoading(false, 'register'); authShowError('This invite has been revoked.'); return; }
+  if (invite.used_at)     { authSetLoading(false, 'register'); authShowError('This invite has already been used.'); return; }
+  if (new Date(invite.expires_at) < new Date()) { authSetLoading(false, 'register'); authShowError('This invite has expired. Please request a new one.'); return; }
+  if (invite.email.toLowerCase() !== email) { authSetLoading(false, 'register'); authShowError('This invite was sent to a different email address.'); return; }
 
   // Create the account — email confirmation required (Supabase will send the email)
   const { error: signUpError } = await supa.auth.signUp({
@@ -986,10 +979,8 @@ async function authRegister() {
   });
   if (signUpError) { authSetLoading(false, 'register'); authShowError(signUpError.message); return; }
 
-  // Mark invite as used (non-backdoor only)
-  if (!isBackdoor) {
-    await supa.from('invites').update({ used_at: new Date().toISOString() }).eq('token', token).catch(() => {});
-  }
+  // Mark invite as used
+  await supa.from('invites').update({ used_at: new Date().toISOString() }).eq('token', token).catch(() => {});
 
   // Show confirmation message — user must verify email before signing in
   authSetLoading(false, 'register');
