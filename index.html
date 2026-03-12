@@ -46,12 +46,8 @@ let _pwaPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   _pwaPrompt = e;
-  // Show banner after 8 seconds if not already installed
   if (!localStorage.getItem('pwaDismissed')) {
-    setTimeout(() => {
-      const b = document.getElementById('pwaBanner');
-      if (b) b.style.display = 'flex';
-    }, 8000);
+    setTimeout(() => { const b = document.getElementById('pwaBanner'); if (b) b.style.display = 'flex'; }, 8000);
   }
 });
 function pwaBannerInstall() {
@@ -63,6 +59,7 @@ function pwaBannerDismiss() {
   localStorage.setItem('pwaDismissed', '1');
 }
 </script>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
@@ -138,7 +135,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 #rdrLiveBtn:hover{background:var(--green);color:#000;}
 #rdrLiveBtn.at-live{background:var(--green);color:#000;}
 /* FIX(ux): legend raised so it's not hidden behind playbar */
-#mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;}
+#mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;transition:bottom .2s;}
 
 /* ── TOOLTIP ── */
 #mapTooltip{position:absolute;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;display:none;z-index:55;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);}
@@ -505,8 +502,6 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div id="inviteList" style="max-height:160px;overflow-y:auto;">
         <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
       </div>
-
-      <!-- Registered Users -->
       <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:14px 0 6px;">Registered Users</div>
       <div id="userList" style="max-height:180px;overflow-y:auto;">
         <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
@@ -518,7 +513,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 <div class="toast-container" id="toastContainer"></div>
 
 <!-- PWA Install Banner -->
-<div id="pwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;display:none;align-items:center;gap:12px;backdrop-filter:blur(8px);">
+<div id="pwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;align-items:center;gap:12px;backdrop-filter:blur(8px);">
   <div style="font-size:22px;">⟳</div>
   <div style="flex:1;">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--amber);letter-spacing:1px;">ADD VORTEX TO HOME SCREEN</div>
@@ -2605,6 +2600,7 @@ function toggleLayer(name, btn) {
       fetchRadar();
       document.getElementById('radarPlaybar').style.display = 'flex';
       document.getElementById('radarTimestamp').style.display = 'block';
+      document.getElementById('mapLegend').style.bottom = '72px';
     } else {
       stopRadarPlay();
       prefetchAborted = true; prefetchInProgress = false;
@@ -2615,6 +2611,7 @@ function toggleLayer(name, btn) {
       rdrCv.style.transform  = '';
       document.getElementById('radarPlaybar').style.display  = 'none';
       document.getElementById('radarTimestamp').style.display = 'none';
+      document.getElementById('mapLegend').style.bottom = '36px';
     }
   }
 }
@@ -3141,17 +3138,14 @@ async function loadUserList() {
   const listEl = document.getElementById('userList');
   if (!listEl) return;
   listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
-
   const { data: users, error } = await supa
     .from('profiles')
     .select('id, display_name, role, disabled')
     .order('role', { ascending: true });
-
   if (error || !users?.length) {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
     return;
   }
-
   listEl.innerHTML = '';
   users.forEach(u => {
     const isMe = u.id === currentUser?.id;
@@ -3314,7 +3308,6 @@ async function fetchEarthquakes() {
   try {
     const r = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson', {signal:AbortSignal.timeout(10000)});
     if (!r.ok) throw new Error(r.status);
-    // Filter to CONUS bounding box — reduces noise from global events
     earthquakeData = ((await r.json()).features || []).filter(f => {
       const [lon, lat] = f.geometry.coordinates;
       return lat >= 24 && lat <= 50 && lon >= -125 && lon <= -66;
