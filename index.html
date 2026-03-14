@@ -2990,6 +2990,7 @@ function openSetup() {
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
   // Show admin panel if user is admin
+  console.log('[VORTEX] openSetup userProfile:', JSON.stringify(userProfile), '| currentUser:', currentUser?.id);
   const isAdmin = userProfile?.role === 'admin';
   const adminPanel = document.getElementById('adminPanel');
   if (adminPanel) {
