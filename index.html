@@ -946,11 +946,41 @@ const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
 
 // Dynamic city zoom — population threshold by zoom scale
 function popThreshold(k) {
-  if (k < 2)  return 500000;
-  if (k < 5)  return 100000;
-  if (k < 9)  return  25000;
-  if (k < 14) return   5000;
-  return 1000;
+  if (k < 2)  return 750_000;
+  if (k < 4)  return 250_000;
+  if (k < 7)  return  75_000;
+  if (k < 11) return  20_000;
+  if (k < 16) return   5_000;
+  return 1_000;
+}
+
+// Cull cities that would render too close together on screen.
+// Sorted by population desc so bigger cities always win.
+// Pinned cities are always kept regardless of proximity.
+function cullByPixelDistance(cities, minPx) {
+  if (!projection) return cities;
+  const t      = currentTransform || d3.zoomIdentity;
+  const sorted = [...cities].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return  1;
+    return (b.population || 0) - (a.population || 0);
+  });
+  const kept = [];
+  const grid = new Map();
+  for (const c of sorted) {
+    const pt = projection([c.lng ?? c.lo, c.lat ?? c.la]);
+    if (!pt) { kept.push(c); continue; }
+    const sx = pt[0] * t.k + t.x;
+    const sy = pt[1] * t.k + t.y;
+    const cx = Math.round(sx / minPx);
+    const cy = Math.round(sy / minPx);
+    let blocked = false;
+    for (let dx = -1; dx <= 1 && !blocked; dx++)
+      for (let dy = -1; dy <= 1 && !blocked; dy++)
+        if (grid.has(`${cx+dx},${cy+dy}`)) blocked = true;
+    if (c.pinned || !blocked) { kept.push(c); grid.set(`${cx},${cy}`, true); }
+  }
+  return kept;
 }
 // Map population → label tier for zoom-based visibility
 function cityTier(pop) {
@@ -1630,7 +1660,8 @@ async function fetchCityWeatherBatch(cities) {
 
 // Rebuild stations from cache and re-render — no network I/O
 function renderCitiesFromCache(visible) {
-  stations = visible.map(c => {
+  const culled = cullByPixelDistance(visible, 50);
+  stations = culled.map(c => {
     const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
     return cityWeatherCache.get(key);
   }).filter(Boolean);
