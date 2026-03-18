@@ -468,6 +468,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <input type="text" id="setupDisplayName" placeholder="Your name">
     </div>
     <div class="modal-field">
+      <label>Home Location</label>
+      <div id="homeLocationDisplay" style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);margin-bottom:6px;">Not set — using NW Arkansas default</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button onclick="setHomeFromGeo()" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">📍 USE MY LOCATION</button>
+        <button onclick="enableSetHomeFromMap()" id="setHomeMapBtn" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">🗺 CLICK ON MAP</button>
+      </div>
+    </div>
+    <div class="modal-field">
       <label>ntfy.sh Channel URL</label>
       <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
       <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
@@ -511,6 +519,24 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- Right-click context menu -->
+<div id="mapContextMenu" style="display:none;position:fixed;z-index:9000;background:var(--panel);border:1px solid var(--border-bright);border-radius:4px;padding:4px 0;min-width:170px;box-shadow:0 4px 16px rgba(0,0,0,.5);">
+  <div onclick="ctxSetHome()" style="padding:9px 16px;font-family:var(--font-cond);font-size:13px;font-weight:600;letter-spacing:1px;color:var(--amber);cursor:pointer;" onmouseover="this.style.background='rgba(245,166,35,.1)'" onmouseout="this.style.background=''">📍 SET AS HOME</div>
+  <div onclick="ctxPinCity()" style="padding:9px 16px;font-family:var(--font-cond);font-size:13px;font-weight:600;letter-spacing:1px;color:var(--text);cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">📌 PIN THIS LOCATION</div>
+</div>
+
+<!-- Pin city name dialog -->
+<div id="pinCityModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--panel);border:1px solid var(--border-bright);border-radius:6px;padding:24px;min-width:280px;">
+    <div style="font-family:var(--font-cond);font-weight:700;font-size:14px;letter-spacing:2px;color:var(--amber);margin-bottom:12px;">PIN LOCATION</div>
+    <input id="pinCityName" type="text" placeholder="Location name" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border-bright);border-radius:3px;padding:9px 10px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmPinCity()" style="flex:1;background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border:none;border-radius:3px;padding:9px;cursor:pointer;">SAVE PIN</button>
+      <button onclick="document.getElementById('pinCityModal').style.display='none'" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:13px;letter-spacing:1px;border-radius:3px;padding:9px;cursor:pointer;">CANCEL</button>
+    </div>
+  </div>
+</div>
 
 <!-- PWA Install Banner -->
 <div id="pwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;align-items:center;gap:12px;backdrop-filter:blur(8px);">
@@ -918,6 +944,21 @@ const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
 // City label zoom thresholds
 const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
 
+// Dynamic city zoom — population threshold by zoom scale
+function popThreshold(k) {
+  if (k < 2)  return 500000;
+  if (k < 5)  return 100000;
+  if (k < 9)  return  25000;
+  if (k < 14) return   5000;
+  return 1000;
+}
+// Map population → label tier for zoom-based visibility
+function cityTier(pop) {
+  if (pop >= 300000) return 1;
+  if (pop >=  50000) return 2;
+  return 3;
+}
+
 // Current user state
 let currentUser  = null;
 let userProfile  = null;
@@ -1139,10 +1180,10 @@ function startDataPolling() {
   console.log('[VORTEX] startDataPolling — dataInitialized:', dataInitialized);
   if (dataInitialized) return;
   dataInitialized = true;
-  loadStations();
+  loadCitiesForView();
   fetchNWS();
   pollingIntervals.push(
-    setInterval(loadStations,  INTERVAL_STATIONS),
+    setInterval(loadCitiesForView, INTERVAL_STATIONS),
     setInterval(fetchNWS,      INTERVAL_NWS),
     setInterval(checkTh,       INTERVAL_THRESHOLD),
     setInterval(() => { if (lyr.radar) fetchRadar(); }, INTERVAL_RADAR),
@@ -1297,6 +1338,9 @@ function initMap(us) {
     })
     .on('end', () => {
       if (lyr.radar) scheduleRadarRepaint();
+      // Load cities for the new viewport after zoom/pan settles
+      clearTimeout(cityLoadDebounce);
+      cityLoadDebounce = setTimeout(loadCitiesForView, 400);
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -1314,7 +1358,8 @@ function initMap(us) {
     .attr('d', pathGen)
     // FIX(bug): only map-level click goes to fetchPointData — station clicks stop propagation
     .on('click', handleMapClick)
-    .on('mousemove', handleMapHover);
+    .on('mousemove', handleMapHover)
+    .on('contextmenu', handleMapRightClick);
   gMap.append('path')
     .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
     .attr('class', 'state-border').attr('d', pathGen);
@@ -1430,9 +1475,28 @@ function handleMapClick(event) {
   const coords = projection.invert([ix, iy]);
   if (!coords) return;
   const [lon, lat] = coords;
-  if (lat < 15 || lat > 55 || lon < -130 || lon > -60) return;
+  if (lat < 15 || lat > 72 || lon < -180 || lon > -60) return;
+  // "Set home from map" mode — intercept the first click
+  if (settingHomeFromMap) {
+    settingHomeFromMap = false;
+    const btn = document.getElementById('setHomeMapBtn');
+    if (btn) { btn.textContent = '🗺 CLICK ON MAP'; btn.style.borderColor = ''; btn.style.color = ''; }
+    saveHomeLocation(lat, lon);
+    return;
+  }
   clearTimeout(clickDeb);
   clickDeb = setTimeout(() => fetchPointData(lat, lon), 250);
+}
+
+function handleMapRightClick(event) {
+  event.preventDefault();
+  const [x, y] = d3.pointer(event, svgEl);
+  const t  = currentTransform;
+  const coords = projection.invert([(x-t.x)/t.k, (y-t.y)/t.k]);
+  if (!coords) return;
+  const [lon, lat] = coords;
+  if (lat < 15 || lat > 72 || lon < -180 || lon > -60) return;
+  showContextMenu(event, lat, lon);
 }
 
 const OM_PARAMS =
@@ -1507,6 +1571,9 @@ let stations = [];
 let lastStationFetch = 0;
 // FIX(perf): pre-computed nearest-station lookup grid for wind particles
 let stationLookupGrid = null;
+// Dynamic city weather cache — key: 'lat,lng', value: {station data + fetchedAt}
+const cityWeatherCache = new Map();
+const CITY_CACHE_TTL   = 10 * 60 * 1000; // 10 minutes
 const GRID_CELL_PX = 80; // pixels per grid cell
 
 function buildStationGrid() {
@@ -1522,6 +1589,23 @@ function buildStationGrid() {
     if (!stationLookupGrid.has(key)) stationLookupGrid.set(key, []);
     stationLookupGrid.get(key).push(s);
   });
+}
+
+// Return current map bounding box in lat/lng with a small buffer
+function getMapBounds() {
+  if (!projection || !svgEl) return null;
+  const w = svgEl.clientWidth, h = svgEl.clientHeight;
+  const t = currentTransform || d3.zoomIdentity;
+  const corners = [[0,0],[w,0],[0,h],[w,h]].map(([px,py]) => {
+    return projection.invert([(px-t.x)/t.k, (py-t.y)/t.k]);
+  }).filter(Boolean);
+  if (!corners.length) return null;
+  return {
+    minLat: Math.min(...corners.map(c=>c[1])) - 0.5,
+    maxLat: Math.max(...corners.map(c=>c[1])) + 0.5,
+    minLng: Math.min(...corners.map(c=>c[0])) - 0.5,
+    maxLng: Math.max(...corners.map(c=>c[0])) + 0.5,
+  };
 }
 
 // FIX(perf): O(1) nearest station lookup using pre-computed grid
@@ -1651,7 +1735,95 @@ async function loadStations() {
 
 function retryStationFetch() {
   document.getElementById('fetchErrorBanner').style.display = 'none';
-  loadStations();
+  loadCitiesForView();
+}
+
+// ── DYNAMIC CITY LOADER ────────────────────────────────────
+// Replaces static DEFS with zoom+bounds aware city queries
+let cityLoadDebounce = null;
+
+async function loadCitiesForView() {
+  if (!supa || !currentUser) return;
+  const bounds = getMapBounds();
+  if (!bounds) return;
+
+  document.getElementById('liveDot').style.background = 'var(--cyan)';
+  const k   = (currentTransform || d3.zoomIdentity).k;
+  const pop = popThreshold(k);
+
+  // Query Supabase cities within current viewport above population threshold
+  const { data: dbCities } = await supa.from('cities')
+    .select('name, state_abbr, lat, lng, population')
+    .gte('lat', bounds.minLat).lte('lat', bounds.maxLat)
+    .gte('lng', bounds.minLng).lte('lng', bounds.maxLng)
+    .gte('population', pop)
+    .order('population', { ascending: false })
+    .limit(150);
+
+  // Always include user-pinned cities
+  const { data: pinnedData } = await supa.from('user_cities')
+    .select('name, lat, lng').eq('user_id', currentUser.id);
+  const pinnedCities = (pinnedData || []).map(c => ({
+    name: c.name, state_abbr: '', lat: c.lat, lng: c.lng, population: 0, pinned: true
+  }));
+
+  const allCities = [...(dbCities || []), ...pinnedCities];
+  if (!allCities.length) {
+    document.getElementById('liveDot').style.background = 'var(--green)';
+    return;
+  }
+
+  // Only fetch weather for cities not already cached or with stale cache
+  const needFetch = allCities.filter(c => {
+    const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
+    const cached = cityWeatherCache.get(key);
+    return !cached || Date.now() - cached.fetchedAt > CITY_CACHE_TTL;
+  });
+
+  if (needFetch.length > 0) {
+    for (let i = 0; i < needFetch.length; i += BATCH_SIZE) {
+      const chunk = needFetch.slice(i, i + BATCH_SIZE);
+      const defs  = chunk.map(c => ({
+        n:    c.state_abbr ? `${c.name}, ${c.state_abbr}` : c.name,
+        la:   parseFloat(c.lat),
+        lo:   parseFloat(c.lng),
+        tier: c.pinned ? 3 : cityTier(c.population),
+        home: isHomeCity(c),
+      }));
+      const results = await fetchBatch(defs);
+      if (results) {
+        results.forEach((s, idx) => {
+          if (!s) return;
+          const key = `${parseFloat(chunk[idx].lat).toFixed(2)},${parseFloat(chunk[idx].lng).toFixed(2)}`;
+          cityWeatherCache.set(key, { ...s, fetchedAt: Date.now() });
+        });
+      }
+    }
+  }
+
+  // Build stations array from cache for all current cities
+  stations = allCities.map(c => {
+    const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
+    return cityWeatherCache.get(key);
+  }).filter(Boolean);
+
+  buildStationGrid();
+  drawStations();
+  if (lyr.temp) drawHeatmap();
+  renderNWS();
+  checkTh();
+  updateHomeDashboard();
+  document.getElementById('liveDot').style.background = 'var(--green)';
+  document.getElementById('dataSource').textContent =
+    `Open-Meteo · NWS · ${stations.length} stations`;
+  lastStationFetch = Date.now();
+}
+
+// Returns true if a city matches the user's stored home location
+function isHomeCity(c) {
+  if (!userProfile?.home_lat) return false;
+  return Math.abs(parseFloat(c.lat) - userProfile.home_lat) < 0.1 &&
+         Math.abs(parseFloat(c.lng) - userProfile.home_lng) < 0.1;
 }
 
 // rAF-debounced rescale — batches all per-frame zoom events into one DOM pass
@@ -1782,7 +1954,10 @@ function drawStations() {
 
 function zoomHome() {
   if (!projection || !zoom) return;
-  const pt = projection([HOME.lon, HOME.lat]);
+  // Use user's stored home location if set, fall back to NW Arkansas default
+  const homeLat = userProfile?.home_lat ?? HOME.lat;
+  const homeLon = userProfile?.home_lng ?? HOME.lon;
+  const pt = projection([homeLon, homeLat]);
   if (!pt) return;
   // FIX(bug): check if already at home — skip animation if within tolerance
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
@@ -2981,6 +3156,105 @@ function saveSetup() {
   saveUserSettings({ integrations: true, profile: true });
   closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
 }
+
+// ── HOME LOCATION ─────────────────────────────────────────
+function updateHomeLocationDisplay() {
+  const el = document.getElementById('homeLocationDisplay');
+  if (!el) return;
+  if (userProfile?.home_lat && userProfile?.home_lng) {
+    el.textContent = `${userProfile.home_lat.toFixed(4)}°N, ${Math.abs(userProfile.home_lng).toFixed(4)}°W`;
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = 'Not set — using NW Arkansas default';
+    el.style.color = 'var(--text-dim)';
+  }
+}
+
+async function saveHomeLocation(lat, lng) {
+  if (!currentUser) return;
+  // Reverse-geocode to get county FIPS via NWS points API
+  let homeFips = null;
+  try {
+    const r = await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`);
+    const j = await r.json();
+    homeFips = j.properties?.county?.split('/').pop() || null; // e.g. "https://api.weather.gov/zones/county/ARZ001" → "ARZ001"
+    // NWS county FIPS: extract last segment e.g. "ARC143" — convert to 5-digit FIPS
+    // Actually NWS uses UGC codes, not FIPS. Get countyFips from relativeLocation
+    const fipsRaw = j.properties?.relativeLocation?.properties?.city; // fallback
+    // Use the cwa+gridX+gridY for uniqueness; for alert engine use FIPS from county URL
+    // County URL like https://api.weather.gov/zones/county/ARC143 — ARC143 is not standard FIPS
+    // Use forecastZone instead — county property has a 5-digit code embedded
+    const countyUrl = j.properties?.county || '';
+    const match = countyUrl.match(/(\d{5})$/);
+    if (match) homeFips = match[1];
+  } catch (e) { /* ignore — FIPS optional */ }
+
+  await supa.from('profiles').update({
+    home_lat: lat, home_lng: lng, home_fips: homeFips
+  }).eq('id', currentUser.id);
+
+  userProfile = { ...userProfile, home_lat: lat, home_lng: lng, home_fips: homeFips };
+  updateHomeLocationDisplay();
+  showToast('watch', 'Home Set', `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W${homeFips ? ` · FIPS ${homeFips}` : ''}`);
+}
+
+function setHomeFromGeo() {
+  if (!navigator.geolocation) { showToast('alert','Error','Geolocation not supported.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => saveHomeLocation(pos.coords.latitude, pos.coords.longitude),
+    ()  => showToast('alert','Error','Could not get your location.')
+  );
+}
+
+let settingHomeFromMap = false;
+function enableSetHomeFromMap() {
+  settingHomeFromMap = true;
+  const btn = document.getElementById('setHomeMapBtn');
+  if (btn) { btn.textContent = '🗺 CLICK MAP NOW'; btn.style.borderColor = 'var(--amber)'; btn.style.color = 'var(--amber)'; }
+  closeSetup();
+  showToast('watch', 'Click the Map', 'Click anywhere to set your home location.');
+}
+
+// ── RIGHT-CLICK CONTEXT MENU ──────────────────────────────
+let ctxLat = null, ctxLng = null;
+
+function showContextMenu(e, lat, lng) {
+  ctxLat = lat; ctxLng = lng;
+  const menu = document.getElementById('mapContextMenu');
+  menu.style.display = 'block';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top  = `${e.clientY}px`;
+}
+
+function hideContextMenu() {
+  document.getElementById('mapContextMenu').style.display = 'none';
+}
+
+async function ctxSetHome() {
+  hideContextMenu();
+  if (ctxLat !== null) await saveHomeLocation(ctxLat, ctxLng);
+}
+
+function ctxPinCity() {
+  hideContextMenu();
+  if (ctxLat === null) return;
+  document.getElementById('pinCityName').value = '';
+  document.getElementById('pinCityModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('pinCityName').focus(), 50);
+}
+
+async function confirmPinCity() {
+  const name = document.getElementById('pinCityName').value.trim();
+  if (!name || !currentUser || ctxLat === null) return;
+  document.getElementById('pinCityModal').style.display = 'none';
+  await supa.from('user_cities').insert({ user_id: currentUser.id, name, lat: ctxLat, lng: ctxLng });
+  cityWeatherCache.delete(`${ctxLat.toFixed(2)},${ctxLng.toFixed(2)}`); // force fresh fetch
+  loadCitiesForView();
+  showToast('watch', 'Location Pinned', `${name} added to your map.`);
+}
+
+// Close context menu on outside click
+document.addEventListener('click', hideContextMenu);
 async function openSetup() {
   document.getElementById('pushToken').value = cfg.push  || '';
   document.getElementById('hueIP').value     = cfg.hueIP || '';
@@ -2989,6 +3263,7 @@ async function openSetup() {
     document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
+  updateHomeLocationDisplay();
   // If profile hasn't loaded yet (race condition on page load), fetch it now before checking role
   if (!userProfile?.role && currentUser?.id) {
     const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
