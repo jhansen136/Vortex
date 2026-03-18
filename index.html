@@ -474,6 +474,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <button onclick="setHomeFromGeo()" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">📍 USE MY LOCATION</button>
         <button onclick="enableSetHomeFromMap()" id="setHomeMapBtn" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">🗺 CLICK ON MAP</button>
       </div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+        <input type="number" id="homeManualLat" placeholder="Lat  (e.g. 36.08)" step="0.0001"
+          style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;">
+        <input type="number" id="homeManualLng" placeholder="Lng  (e.g. -94.20)" step="0.0001"
+          style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;">
+        <button onclick="setHomeFromManual()" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">SET</button>
+      </div>
     </div>
     <div class="modal-field">
       <label>ntfy.sh Channel URL</label>
@@ -1336,7 +1343,7 @@ function initMap(us) {
   svg.attr('width', W).attr('height', H);
   warnSvg.attr('width', W).attr('height', H);
   zoom = d3.zoom()
-    .scaleExtent([0.5, 12])
+    .scaleExtent([0.5, 100])
     .on('zoom', (event) => {
       currentTransform = event.transform;
       const {x, y, k} = event.transform;
@@ -3293,6 +3300,18 @@ function setHomeFromGeo() {
     pos => saveHomeLocation(pos.coords.latitude, pos.coords.longitude),
     ()  => showToast('alert','Error','Could not get your location.')
   );
+}
+
+function setHomeFromManual() {
+  const lat = parseFloat(document.getElementById('homeManualLat').value);
+  const lng = parseFloat(document.getElementById('homeManualLng').value);
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    showToast('alert', 'Invalid Coordinates', 'Enter a valid lat (−90 to 90) and lng (−180 to 180).');
+    return;
+  }
+  document.getElementById('homeManualLat').value = '';
+  document.getElementById('homeManualLng').value = '';
+  saveHomeLocation(lat, lng);
 }
 
 let settingHomeFromMap = false;
