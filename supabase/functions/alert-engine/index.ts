@@ -46,8 +46,11 @@ function calcRisk(cape: number, srh: number, sh: number, h: number, dF: number, 
 }
 
 serve(async (req) => {
-  // Verify cron secret
-  if (req.headers.get('authorization') !== `Bearer ${CRON_SECRET}`) {
+  // Verify cron secret — check Authorization header or ?secret= query param
+  const url = new URL(req.url);
+  const headerAuth = req.headers.get('authorization') === `Bearer ${CRON_SECRET}`;
+  const queryAuth  = url.searchParams.get('secret') === CRON_SECRET;
+  if (!headerAuth && !queryAuth) {
     return new Response('Unauthorized', { status: 401 });
   }
 
