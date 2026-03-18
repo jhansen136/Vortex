@@ -2981,7 +2981,7 @@ function saveSetup() {
   saveUserSettings({ integrations: true, profile: true });
   closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
 }
-function openSetup() {
+async function openSetup() {
   document.getElementById('pushToken').value = cfg.push  || '';
   document.getElementById('hueIP').value     = cfg.hueIP || '';
   document.getElementById('hueToken').value  = cfg.hueT  || '';
@@ -2989,8 +2989,11 @@ function openSetup() {
     document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
-  // Show admin panel if user is admin
-  console.log('[VORTEX] openSetup userProfile:', JSON.stringify(userProfile), '| currentUser:', currentUser?.id);
+  // If profile hasn't loaded yet (race condition on page load), fetch it now before checking role
+  if (!userProfile?.role && currentUser?.id) {
+    const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    if (data) userProfile = data;
+  }
   const isAdmin = userProfile?.role === 'admin';
   const adminPanel = document.getElementById('adminPanel');
   if (adminPanel) {
