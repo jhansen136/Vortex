@@ -1572,8 +1572,77 @@ let lastStationFetch = 0;
 // FIX(perf): pre-computed nearest-station lookup grid for wind particles
 let stationLookupGrid = null;
 // Dynamic city weather cache — key: 'lat,lng', value: {station data + fetchedAt}
-const cityWeatherCache = new Map();
-const CITY_CACHE_TTL   = 10 * 60 * 1000; // 10 minutes
+const cityWeatherCache   = new Map();        // key:'lat,lng' → weather data + fetchedAt
+const CITY_CACHE_TTL     = 3 * 60 * 1000;   // 3 min — stale-while-revalidate
+const cityPositionCache  = new Map();        // key:'lat,lng' → city object (session-permanent)
+const tiersLoaded        = { 1: false, 2: false, 3: false };
+let   pinnedCitiesLoaded = false;
+
+// Population bands — each tier is loaded once per session (nationwide, no bbox)
+const TIER_DEFS = [
+  { tier: 1, minPop: 300_000, maxPop: null,    triggerK: 0 }, // major metros — always
+  { tier: 2, minPop:  50_000, maxPop: 299_999, triggerK: 2 }, // mid-size — on first zoom
+  { tier: 3, minPop:   5_000, maxPop:  49_999, triggerK: 5 }, // small cities — zoomed in
+];
+
+// Load one tier from Supabase (one-time per session, no bounding box)
+async function loadTier(td) {
+  if (tiersLoaded[td.tier]) return;
+  let q = supa.from('cities')
+    .select('name, state_abbr, lat, lng, population')
+    .gte('population', td.minPop);
+  if (td.maxPop !== null) q = q.lte('population', td.maxPop);
+  const { data } = await q.order('population', { ascending: false });
+  (data || []).forEach(c => {
+    const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
+    if (!cityPositionCache.has(key)) {
+      cityPositionCache.set(key, {
+        name: c.name, state_abbr: c.state_abbr,
+        lat: parseFloat(c.lat), lng: parseFloat(c.lng),
+        population: parseInt(c.population) || 0,
+        tier: td.tier,
+      });
+    }
+  });
+  tiersLoaded[td.tier] = true;
+}
+
+// Fetch weather for a list of city objects and populate cityWeatherCache
+async function fetchCityWeatherBatch(cities) {
+  for (let i = 0; i < cities.length; i += BATCH_SIZE) {
+    const chunk   = cities.slice(i, i + BATCH_SIZE);
+    const defs    = chunk.map(c => ({
+      n:    c.state_abbr ? `${c.name}, ${c.state_abbr}` : c.name,
+      la:   c.lat, lo: c.lng,
+      tier: c.tier || 3,
+      home: isHomeCity(c),
+    }));
+    const results = await fetchBatch(defs);
+    if (results) {
+      results.forEach((s, idx) => {
+        if (!s) return;
+        const key = `${chunk[idx].lat.toFixed(2)},${chunk[idx].lng.toFixed(2)}`;
+        cityWeatherCache.set(key, { ...s, fetchedAt: Date.now() });
+      });
+    }
+  }
+}
+
+// Rebuild stations from cache and re-render — no network I/O
+function renderCitiesFromCache(visible) {
+  stations = visible.map(c => {
+    const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
+    return cityWeatherCache.get(key);
+  }).filter(Boolean);
+  buildStationGrid();
+  drawStations();
+  if (lyr.temp) drawHeatmap();
+  renderNWS();
+  checkTh();
+  updateHomeDashboard();
+  document.getElementById('dataSource').textContent =
+    `Open-Meteo · NWS · ${stations.length} stations`;
+}
 const GRID_CELL_PX = 80; // pixels per grid cell
 
 function buildStationGrid() {
@@ -1738,85 +1807,74 @@ function retryStationFetch() {
   loadCitiesForView();
 }
 
-// ── DYNAMIC CITY LOADER ────────────────────────────────────
-// Replaces static DEFS with zoom+bounds aware city queries
+// ── OPTION C CITY LOADER ───────────────────────────────────
+// Tiers loaded once per session (nationwide, no bbox) — zero DB calls on pan.
+// Weather uses 3-min stale-while-revalidate: show cached instantly, refresh in background.
 let cityLoadDebounce = null;
 
 async function loadCitiesForView() {
   if (!supa || !currentUser) return;
-  const bounds = getMapBounds();
-  if (!bounds) return;
+  const k = (currentTransform || d3.zoomIdentity).k;
 
-  document.getElementById('liveDot').style.background = 'var(--cyan)';
-  const k   = (currentTransform || d3.zoomIdentity).k;
-  const pop = popThreshold(k);
-
-  // Query Supabase cities within current viewport above population threshold
-  const { data: dbCities } = await supa.from('cities')
-    .select('name, state_abbr, lat, lng, population')
-    .gte('lat', bounds.minLat).lte('lat', bounds.maxLat)
-    .gte('lng', bounds.minLng).lte('lng', bounds.maxLng)
-    .gte('population', pop)
-    .order('population', { ascending: false })
-    .limit(150);
-
-  // Always include user-pinned cities
-  const { data: pinnedData } = await supa.from('user_cities')
-    .select('name, lat, lng').eq('user_id', currentUser.id);
-  const pinnedCities = (pinnedData || []).map(c => ({
-    name: c.name, state_abbr: '', lat: c.lat, lng: c.lng, population: 0, pinned: true
-  }));
-
-  const allCities = [...(dbCities || []), ...pinnedCities];
-  if (!allCities.length) {
-    document.getElementById('liveDot').style.background = 'var(--green)';
-    return;
+  // 1. Load any tiers now needed for this zoom level (one-time per session)
+  for (const td of TIER_DEFS) {
+    if (k >= td.triggerK && !tiersLoaded[td.tier]) await loadTier(td);
   }
 
-  // Only fetch weather for cities not already cached or with stale cache
-  const needFetch = allCities.filter(c => {
-    const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
-    const cached = cityWeatherCache.get(key);
-    return !cached || Date.now() - cached.fetchedAt > CITY_CACHE_TTL;
+  // 2. Load pinned cities once per session (set pinnedCitiesLoaded=false to force reload)
+  if (!pinnedCitiesLoaded) {
+    const { data } = await supa.from('user_cities')
+      .select('name, lat, lng').eq('user_id', currentUser.id);
+    (data || []).forEach(c => {
+      const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
+      cityPositionCache.set(key, {
+        name: c.name, state_abbr: '', lat: parseFloat(c.lat), lng: parseFloat(c.lng),
+        population: 0, pinned: true, tier: 3,
+      });
+    });
+    pinnedCitiesLoaded = true;
+  }
+
+  // 3. Filter position cache to cities visible at the current zoom level
+  const bounds  = getMapBounds();
+  const pop     = popThreshold(k);
+  const visible = [...cityPositionCache.values()].filter(c => {
+    if (c.pinned) return true;
+    if (c.population < pop) return false;
+    if (!bounds) return false;
+    return c.lat >= bounds.minLat && c.lat <= bounds.maxLat &&
+           c.lng >= bounds.minLng && c.lng <= bounds.maxLng;
   });
 
-  if (needFetch.length > 0) {
-    for (let i = 0; i < needFetch.length; i += BATCH_SIZE) {
-      const chunk = needFetch.slice(i, i + BATCH_SIZE);
-      const defs  = chunk.map(c => ({
-        n:    c.state_abbr ? `${c.name}, ${c.state_abbr}` : c.name,
-        la:   parseFloat(c.lat),
-        lo:   parseFloat(c.lng),
-        tier: c.pinned ? 3 : cityTier(c.population),
-        home: isHomeCity(c),
-      }));
-      const results = await fetchBatch(defs);
-      if (results) {
-        results.forEach((s, idx) => {
-          if (!s) return;
-          const key = `${parseFloat(chunk[idx].lat).toFixed(2)},${parseFloat(chunk[idx].lng).toFixed(2)}`;
-          cityWeatherCache.set(key, { ...s, fetchedAt: Date.now() });
-        });
-      }
-    }
+  if (!visible.length) return;
+
+  const now = Date.now();
+
+  // 4a. Cities with no weather data at all — must fetch before first render
+  const missing = visible.filter(c =>
+    !cityWeatherCache.has(`${c.lat.toFixed(2)},${c.lng.toFixed(2)}`)
+  );
+  // 4b. Cities with stale data — render last-known instantly, refresh silently in background
+  const stale = visible.filter(c => {
+    const cached = cityWeatherCache.get(`${c.lat.toFixed(2)},${c.lng.toFixed(2)}`);
+    return cached && now - cached.fetchedAt > CITY_CACHE_TTL;
+  });
+
+  // 5. Block only for cities with no data yet
+  if (missing.length > 0) {
+    document.getElementById('liveDot').style.background = 'var(--cyan)';
+    await fetchCityWeatherBatch(missing);
   }
 
-  // Build stations array from cache for all current cities
-  stations = allCities.map(c => {
-    const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
-    return cityWeatherCache.get(key);
-  }).filter(Boolean);
-
-  buildStationGrid();
-  drawStations();
-  if (lyr.temp) drawHeatmap();
-  renderNWS();
-  checkTh();
-  updateHomeDashboard();
+  // 6. Render — stale cities show their last-known data immediately (no flicker)
+  renderCitiesFromCache(visible);
   document.getElementById('liveDot').style.background = 'var(--green)';
-  document.getElementById('dataSource').textContent =
-    `Open-Meteo · NWS · ${stations.length} stations`;
   lastStationFetch = Date.now();
+
+  // 7. Background-refresh stale cities; quietly re-render when the new data arrives
+  if (stale.length > 0) {
+    fetchCityWeatherBatch(stale).then(() => renderCitiesFromCache(visible));
+  }
 }
 
 // Returns true if a city matches the user's stored home location
@@ -3248,7 +3306,10 @@ async function confirmPinCity() {
   if (!name || !currentUser || ctxLat === null) return;
   document.getElementById('pinCityModal').style.display = 'none';
   await supa.from('user_cities').insert({ user_id: currentUser.id, name, lat: ctxLat, lng: ctxLng });
-  cityWeatherCache.delete(`${ctxLat.toFixed(2)},${ctxLng.toFixed(2)}`); // force fresh fetch
+  // Inject directly into position cache — no DB re-query needed
+  const key = `${ctxLat.toFixed(2)},${ctxLng.toFixed(2)}`;
+  cityPositionCache.set(key, { name, state_abbr: '', lat: ctxLat, lng: ctxLng, population: 0, pinned: true, tier: 3 });
+  cityWeatherCache.delete(key); // ensure fresh weather fetch on next render
   loadCitiesForView();
   showToast('watch', 'Location Pinned', `${name} added to your map.`);
 }
