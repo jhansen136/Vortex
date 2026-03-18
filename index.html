@@ -41,6 +41,23 @@ self.addEventListener('fetch', e => {
     navigator.serviceWorker.register(swUrl).catch(()=>{});
   } catch(e) {}
 }
+// PWA Install Prompt
+let _pwaPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _pwaPrompt = e;
+  if (!localStorage.getItem('pwaDismissed')) {
+    setTimeout(() => { const b = document.getElementById('pwaBanner'); if (b) b.style.display = 'flex'; }, 8000);
+  }
+});
+function pwaBannerInstall() {
+  if (_pwaPrompt) { _pwaPrompt.prompt(); _pwaPrompt.userChoice.then(() => { _pwaPrompt = null; }); }
+  document.getElementById('pwaBanner').style.display = 'none';
+}
+function pwaBannerDismiss() {
+  document.getElementById('pwaBanner').style.display = 'none';
+  localStorage.setItem('pwaDismissed', '1');
+}
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -118,7 +135,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 #rdrLiveBtn:hover{background:var(--green);color:#000;}
 #rdrLiveBtn.at-live{background:var(--green);color:#000;}
 /* FIX(ux): legend raised so it's not hidden behind playbar */
-#mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;}
+#mapLegend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;pointer-events:none;z-index:20;min-width:100px;transition:bottom .2s;}
 
 /* ── TOOLTIP ── */
 #mapTooltip{position:absolute;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;display:none;z-index:55;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);}
@@ -394,6 +411,15 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .invite-status.revoked{color:var(--red);border:1px solid rgba(230,57,70,.4);}
 .invite-revoke{background:none;border:1px solid rgba(230,57,70,.4);color:var(--red);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
 .invite-revoke:hover{background:rgba(230,57,70,.15);}
+.user-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:8px;}
+.user-row:last-child{border-bottom:none;}
+.user-email{font-family:var(--font-mono);font-size:10px;color:var(--text);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.user-role{font-family:var(--font-mono);font-size:9px;padding:1px 5px;border-radius:2px;white-space:nowrap;color:var(--amber);border:1px solid rgba(245,166,35,.4);}
+.user-role.user{color:var(--text-dim);border-color:var(--border);}
+.user-disable{background:none;border:1px solid rgba(230,57,70,.4);color:var(--red);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.user-disable:hover{background:rgba(230,57,70,.15);}
+.user-enable{background:none;border:1px solid rgba(57,211,83,.4);color:var(--green);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.user-enable:hover{background:rgba(57,211,83,.15);}
 </style>
 </head>
 <body>
@@ -476,11 +502,26 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div id="inviteList" style="max-height:160px;overflow-y:auto;">
         <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
       </div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:14px 0 6px;">Registered Users</div>
+      <div id="userList" style="max-height:180px;overflow-y:auto;">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
+      </div>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- PWA Install Banner -->
+<div id="pwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;align-items:center;gap:12px;backdrop-filter:blur(8px);">
+  <div style="font-size:22px;">⟳</div>
+  <div style="flex:1;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--amber);letter-spacing:1px;">ADD VORTEX TO HOME SCREEN</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px;">Get instant access to storm intelligence</div>
+  </div>
+  <button onclick="pwaBannerInstall()" style="background:var(--amber);color:#000;border:none;border-radius:4px;padding:7px 12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;cursor:pointer;white-space:nowrap;">INSTALL</button>
+  <button onclick="pwaBannerDismiss()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;">✕</button>
+</div>
 
 <header>
   <div class="logo">
@@ -2559,6 +2600,7 @@ function toggleLayer(name, btn) {
       fetchRadar();
       document.getElementById('radarPlaybar').style.display = 'flex';
       document.getElementById('radarTimestamp').style.display = 'block';
+      document.getElementById('mapLegend').style.bottom = '72px';
     } else {
       stopRadarPlay();
       prefetchAborted = true; prefetchInProgress = false;
@@ -2569,6 +2611,7 @@ function toggleLayer(name, btn) {
       rdrCv.style.transform  = '';
       document.getElementById('radarPlaybar').style.display  = 'none';
       document.getElementById('radarTimestamp').style.display = 'none';
+      document.getElementById('mapLegend').style.bottom = '36px';
     }
   }
 }
@@ -2947,11 +2990,12 @@ function openSetup() {
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
   // Show admin panel if user is admin
+  console.log('[VORTEX] openSetup userProfile:', JSON.stringify(userProfile), '| currentUser:', currentUser?.id);
   const isAdmin = userProfile?.role === 'admin';
   const adminPanel = document.getElementById('adminPanel');
   if (adminPanel) {
     adminPanel.style.display = isAdmin ? 'block' : 'none';
-    if (isAdmin) loadInviteList();
+    if (isAdmin) { loadInviteList(); loadUserList(); }
   }
   document.getElementById('setupModal').style.display = 'flex';
 }
@@ -3089,6 +3133,42 @@ async function revokeInvite(id, btn) {
     .eq('id', id);
   if (error) { btn.disabled = false; btn.textContent = 'REVOKE'; showToast('watch','Error', error.message); return; }
   loadInviteList();
+}
+
+async function loadUserList() {
+  const listEl = document.getElementById('userList');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
+  const { data: users, error } = await supa
+    .from('profiles')
+    .select('id, display_name, role, disabled')
+    .order('role', { ascending: true });
+  if (error || !users?.length) {
+    listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
+    return;
+  }
+  listEl.innerHTML = '';
+  users.forEach(u => {
+    const isMe = u.id === currentUser?.id;
+    const isDisabled = u.disabled === true;
+    const row = document.createElement('div');
+    row.className = 'user-row';
+    row.innerHTML = `
+      <div class="user-email" title="${u.display_name || u.id}">${u.display_name || '(no name)'}${isMe ? ' <span style="color:var(--cyan);font-size:9px;">YOU</span>' : ''}</div>
+      <div class="user-role ${u.role === 'admin' ? '' : 'user'}">${(u.role || 'user').toUpperCase()}</div>
+      ${!isMe ? `<button class="${isDisabled ? 'user-enable' : 'user-disable'}" onclick="toggleUserDisabled('${u.id}', ${isDisabled}, this)">${isDisabled ? 'ENABLE' : 'DISABLE'}</button>` : ''}
+    `;
+    listEl.appendChild(row);
+  });
+}
+
+async function toggleUserDisabled(id, currentlyDisabled, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const { error } = await supa.from('profiles')
+    .update({ disabled: !currentlyDisabled })
+    .eq('id', id);
+  if (error) { btn.disabled = false; btn.textContent = currentlyDisabled ? 'ENABLE' : 'DISABLE'; showToast('watch','Error', error.message); return; }
+  loadUserList();
 }
 function updateCfgUI() {
   document.querySelectorAll('#pushSub, #pushSubM').forEach(el => {
@@ -3229,7 +3309,10 @@ async function fetchEarthquakes() {
   try {
     const r = await fetch('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_day.geojson', {signal:AbortSignal.timeout(10000)});
     if (!r.ok) throw new Error(r.status);
-    earthquakeData = (await r.json()).features || [];
+    earthquakeData = ((await r.json()).features || []).filter(f => {
+      const [lon, lat] = f.geometry.coordinates;
+      return lat >= 24 && lat <= 50 && lon >= -125 && lon <= -66;
+    });
     renderEarthquakes();
   } catch(e) {}
 }
@@ -3255,7 +3338,7 @@ function renderEarthquakes() {
 async function fetchWildfires() {
   if (!lyr.wildfires || !gHazard || !projection) return;
   try {
-    const url='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200';
+    const url='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects';
     const r = await fetch(url,{signal:AbortSignal.timeout(12000)});
     if (!r.ok) throw new Error(r.status);
     wildfireData = ((await r.json()).features||[]).filter(f=>f.geometry?.type==='Point');
