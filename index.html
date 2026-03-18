@@ -2991,9 +2991,11 @@ async function openSetup() {
   }
   // If profile hasn't loaded yet (race condition on page load), fetch it now before checking role
   if (!userProfile?.role && currentUser?.id) {
-    const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    const { data, error } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
+    console.log('[VORTEX] openSetup re-fetch → data:', JSON.stringify(data), 'error:', error);
     if (data) userProfile = data;
   }
+  console.log('[VORTEX] openSetup → userProfile:', JSON.stringify(userProfile), 'currentUser.id:', currentUser?.id);
   const isAdmin = userProfile?.role === 'admin';
   const adminPanel = document.getElementById('adminPanel');
   if (adminPanel) {
