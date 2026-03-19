@@ -24,6 +24,9 @@ const THRESHOLD_COOLDOWN_MS = 30 * 60 * 1000;
 // Call cooldown — suppress repeated threshold calls within 3 hours
 const CALL_COOLDOWN_MS = 3 * 60 * 60 * 1000;
 
+// Daily call cap per user
+const DAILY_CALL_CAP = 5;
+
 // Severe parameter thresholds that trigger a phone call (in addition to push)
 const SEVERE = { cape: 1500, srh: 250, risk: 70 };
 
@@ -205,6 +208,12 @@ serve(async (req) => {
       const lastCallAt      = user.last_threshold_call_at ? new Date(user.last_threshold_call_at).getTime() : 0;
       const thresholdCallOk = (Date.now() - lastCallAt) > CALL_COOLDOWN_MS;
 
+      // Daily call cap — count call: prefixed keys sent in the last 24 hours
+      const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
+      let dailyCallCount = userSent.filter((a: any) =>
+        a.alert_key.startsWith('call:') && new Date(a.sent_at).getTime() > cutoff24h
+      ).length;
+
       type AlertItem = {
         key: string; title: string; body: string;
         priority: string; tags: string;
@@ -288,12 +297,36 @@ serve(async (req) => {
 
         // Twilio phone call (tornado warning or severe threshold)
         if (alert.call && phone) {
-          try {
-            await makeCall(phone, alert.callType!);
-            results.called++;
-            if (alert.callType === 'threshold') calledForThreshold = true;
-          } catch (e: any) {
-            results.errors.push(`call:${user.id}: ${e.message}`);
+          const todayKey = `call:cap:${new Date().toISOString().slice(0, 10)}`;
+          if (dailyCallCount >= DAILY_CALL_CAP) {
+            // Cap hit — send one ntfy notification per day to let user know
+            if (!hasSent(todayKey) && pref?.push_enabled && intg?.ntfy_url?.startsWith('https://ntfy.sh/')) {
+              try {
+                await fetch(intg.ntfy_url, {
+                  method: 'POST',
+                  headers: {
+                    'Title':        'VORTEX: Daily Call Limit Reached',
+                    'Priority':     'default',
+                    'Tags':         'phone,warning',
+                    'Content-Type': 'text/plain',
+                  },
+                  body: `You've reached the 5-call daily limit. Push notifications will continue for the rest of the day. Calls reset at midnight.`,
+                });
+                newAlerts.push({ user_id: user.id, alert_key: todayKey });
+              } catch (e: any) {
+                results.errors.push(`cap-notify:${user.id}: ${e.message}`);
+              }
+            }
+          } else {
+            try {
+              await makeCall(phone, alert.callType!);
+              results.called++;
+              dailyCallCount++;
+              newAlerts.push({ user_id: user.id, alert_key: `call:${alert.key}` });
+              if (alert.callType === 'threshold') calledForThreshold = true;
+            } catch (e: any) {
+              results.errors.push(`call:${user.id}: ${e.message}`);
+            }
           }
         }
 

@@ -534,7 +534,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
             📞 TEST
           </button>
         </div>
-        <div class="hint">Called directly for tornado warnings + severe conditions. Twilio · leave blank to disable.</div>
+        <div class="hint">Called for tornado warnings + severe conditions (CAPE≥1500, SRH≥250, Risk≥70). Max 5 calls/day — you'll get a push notification if the limit is reached. Leave blank to disable.</div>
       </div>
       <div class="modal-field">
         <label>Philips Hue Bridge IP</label>
@@ -689,7 +689,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="panel-section">
       <div class="local-panel">
         <div class="local-header">
-          <div class="local-title">📍 NW ARKANSAS</div>
+          <div class="local-title" id="homeTileLabel">📍 NW ARKANSAS</div>
           <button class="home-zoom-btn" onclick="zoomHome()">ZOOM HOME</button>
         </div>
         <div class="local-grid">
@@ -858,7 +858,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         </div>
       </div>
       <div style="margin-top:10px;">
-        <button class="home-zoom-btn" style="width:100%;padding:10px;" onclick="zoomHome();closeAllSheets()">📍 ZOOM TO NW ARKANSAS</button>
+        <button class="home-zoom-btn" style="width:100%;padding:10px;" id="homeMobileZoomBtn" onclick="zoomHome();closeAllSheets()">📍 ZOOM TO NW ARKANSAS</button>
       </div>
     </div>
   </div>
@@ -1219,6 +1219,7 @@ async function loadUserSettings(userId) {
     ]);
     userProfile = profRes.data || {};
     cfg.phone = userProfile.phone || '';
+    updateHomeTileLabel();
     if (intRes.data) {
       cfg.push  = intRes.data.ntfy_url  || '';
       cfg.hueIP = intRes.data.hue_ip    || '';
@@ -3439,6 +3440,16 @@ function updateHomeLocationDisplay() {
   }
 }
 
+function updateHomeTileLabel() {
+  const label = userProfile?.home_label || null;
+  const display = label ? `📍 ${label.toUpperCase()}` : '📍 HOME';
+  const zoomDisplay = label ? `📍 ZOOM TO ${label.toUpperCase()}` : '📍 ZOOM HOME';
+  const el = document.getElementById('homeTileLabel');
+  const btn = document.getElementById('homeMobileZoomBtn');
+  if (el)  el.textContent  = display;
+  if (btn) btn.textContent = zoomDisplay;
+}
+
 async function saveHomeLocation(lat, lng) {
   if (!currentUser) return;
   // Reverse-geocode to get county FIPS + city name via NWS points API
@@ -3458,12 +3469,13 @@ async function saveHomeLocation(lat, lng) {
   } catch (e) { /* ignore — FIPS optional */ }
 
   await supa.from('profiles').update({
-    home_lat: lat, home_lng: lng, home_fips: homeFips
+    home_lat: lat, home_lng: lng, home_fips: homeFips, home_label: homeCityName || null
   }).eq('id', currentUser.id);
 
-  userProfile = { ...userProfile, home_lat: lat, home_lng: lng, home_fips: homeFips };
+  userProfile = { ...userProfile, home_lat: lat, home_lng: lng, home_fips: homeFips, home_label: homeCityName };
   updateHomeLocationDisplay();
-  showToast('watch', 'Home Set', `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W${homeFips ? ` · FIPS ${homeFips}` : ''}`);
+  updateHomeTileLabel();
+  showToast('watch', 'Home Set', homeCityName || `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W`);
 
   // Option 4 — auto-pin home city so it always appears on the map
   if (homeCityName) addPinnedCity(homeCityName, lat, lng, { silent: true });
@@ -3565,8 +3577,10 @@ function selectHomeResult(lat, lng) {
 async function addPinnedCity(name, lat, lng, opts = {}) {
   if (!currentUser || !supa) return;
   const la = parseFloat(lat), lo = parseFloat(lng);
-  // Skip duplicate — already pinned within 0.05° of this location
-  if (pinnedCityDefs.some(c => Math.abs(c.la - la) < 0.05 && Math.abs(c.lo - lo) < 0.05)) return;
+  // Skip duplicate — already pinned within 0.15° of this location
+  if (pinnedCityDefs.some(c => Math.abs(c.la - la) < 0.15 && Math.abs(c.lo - lo) < 0.15)) return;
+  // Skip duplicate — already exists in DEFS (built-in cities) within 0.15°
+  if (DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.15 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.15)) return;
   const { data, error } = await supa.from('user_cities')
     .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
     .select('id').single();
@@ -3706,6 +3720,7 @@ async function openSetup() {
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
   updateHomeLocationDisplay();
+  updateHomeTileLabel();
   loadMyCitiesList();
   // If profile hasn't loaded yet (race condition on page load), fetch it now before checking role
   if (!userProfile?.role && currentUser?.id) {
