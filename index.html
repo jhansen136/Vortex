@@ -483,6 +483,20 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       </div>
     </div>
     <div class="modal-field">
+      <label>My Cities</label>
+      <div id="myCitiesList" style="margin-bottom:8px;max-height:120px;overflow-y:auto;">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">No cities added yet.</div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input type="text" id="citySearchInput" placeholder="Search city (e.g. Ozark, MO)"
+          style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;outline:none;"
+          onkeydown="if(event.key==='Enter')searchCity()">
+        <button onclick="searchCity()"
+          style="background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">SEARCH</button>
+      </div>
+      <div id="citySearchResults" style="margin-top:6px;"></div>
+    </div>
+    <div class="modal-field">
       <label>ntfy.sh Channel URL</label>
       <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
       <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
@@ -1682,6 +1696,7 @@ const CITY_CACHE_TTL     = 3 * 60 * 1000;   // 3 min — stale-while-revalidate
 const cityPositionCache  = new Map();        // key:'lat,lng' → city object (session-permanent)
 const tiersLoaded        = { 1: false, 2: false, 3: false };
 let   pinnedCitiesLoaded = false;
+let   pinnedCityDefs    = []; // [{n, la, lo, tier, pinned, pinnedId}] — kept in sync with user_cities table
 
 // Population bands — each tier is loaded once per session (nationwide, no bbox)
 const TIER_DEFS = [
@@ -1920,17 +1935,18 @@ function retryStationFetch() {
 async function loadCitiesForView() {
   if (!currentUser) return;
 
-  // 1. Build full city list: DEFS + user pinned cities (loaded once per session)
-  const allDefs = [...DEFS];
+  // 1. Load pinned cities from DB once per session into pinnedCityDefs[]
   if (!pinnedCitiesLoaded && supa) {
     const { data } = await supa.from('user_cities')
-      .select('name, lat, lng').eq('user_id', currentUser.id);
-    (data || []).forEach(c => allDefs.push({
+      .select('id, name, lat, lng').eq('user_id', currentUser.id);
+    pinnedCityDefs = (data || []).map(c => ({
       n: c.name, la: parseFloat(c.lat), lo: parseFloat(c.lng),
-      tier: 3, pinned: true,
+      tier: 3, pinned: true, pinnedId: c.id,
     }));
     pinnedCitiesLoaded = true;
   }
+  // allDefs always reflects current pinnedCityDefs — add/remove ops update it directly
+  const allDefs = [...DEFS, ...pinnedCityDefs];
 
   const cacheKey = c => `${parseFloat(c.la).toFixed(2)},${parseFloat(c.lo).toFixed(2)}`;
   const now = Date.now();
@@ -3356,21 +3372,20 @@ function updateHomeLocationDisplay() {
 
 async function saveHomeLocation(lat, lng) {
   if (!currentUser) return;
-  // Reverse-geocode to get county FIPS via NWS points API
-  let homeFips = null;
+  // Reverse-geocode to get county FIPS + city name via NWS points API
+  let homeFips = null, homeCityName = null;
   try {
     const r = await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`);
     const j = await r.json();
-    homeFips = j.properties?.county?.split('/').pop() || null; // e.g. "https://api.weather.gov/zones/county/ARZ001" → "ARZ001"
-    // NWS county FIPS: extract last segment e.g. "ARC143" — convert to 5-digit FIPS
-    // Actually NWS uses UGC codes, not FIPS. Get countyFips from relativeLocation
-    const fipsRaw = j.properties?.relativeLocation?.properties?.city; // fallback
-    // Use the cwa+gridX+gridY for uniqueness; for alert engine use FIPS from county URL
-    // County URL like https://api.weather.gov/zones/county/ARC143 — ARC143 is not standard FIPS
-    // Use forecastZone instead — county property has a 5-digit code embedded
     const countyUrl = j.properties?.county || '';
     const match = countyUrl.match(/(\d{5})$/);
     if (match) homeFips = match[1];
+    // Extract city name + state abbreviation from relativeLocation + forecastZone
+    const city      = j.properties?.relativeLocation?.properties?.city;
+    const zoneUrl   = j.properties?.forecastZone || '';
+    const stateM    = zoneUrl.match(/zones\/forecast\/([A-Z]{2})/);
+    const stateAbbr = stateM ? stateM[1] : null;
+    if (city) homeCityName = stateAbbr ? `${city}, ${stateAbbr}` : city;
   } catch (e) { /* ignore — FIPS optional */ }
 
   await supa.from('profiles').update({
@@ -3380,6 +3395,9 @@ async function saveHomeLocation(lat, lng) {
   userProfile = { ...userProfile, home_lat: lat, home_lng: lng, home_fips: homeFips };
   updateHomeLocationDisplay();
   showToast('watch', 'Home Set', `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W${homeFips ? ` · FIPS ${homeFips}` : ''}`);
+
+  // Option 4 — auto-pin home city so it always appears on the map
+  if (homeCityName) addPinnedCity(homeCityName, lat, lng, { silent: true });
 }
 
 function setHomeFromGeo() {
@@ -3400,6 +3418,97 @@ function setHomeFromManual() {
   document.getElementById('homeManualLat').value = '';
   document.getElementById('homeManualLng').value = '';
   saveHomeLocation(lat, lng);
+}
+
+// ── MY CITIES ─────────────────────────────────────────────
+
+// Shared helper — insert into user_cities + push to pinnedCityDefs + re-render
+async function addPinnedCity(name, lat, lng, opts = {}) {
+  if (!currentUser || !supa) return;
+  const la = parseFloat(lat), lo = parseFloat(lng);
+  // Skip duplicate — already pinned within 0.05° of this location
+  if (pinnedCityDefs.some(c => Math.abs(c.la - la) < 0.05 && Math.abs(c.lo - lo) < 0.05)) return;
+  const { data, error } = await supa.from('user_cities')
+    .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
+    .select('id').single();
+  if (error) { if (!opts.silent) showToast('alert', 'Error', 'Could not save city.'); return; }
+  pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
+  cityWeatherCache.delete(`${la.toFixed(2)},${lo.toFixed(2)}`);
+  loadCitiesForView();
+  if (!opts.silent) {
+    showToast('watch', 'City Added', `${name} added to your map.`);
+    loadMyCitiesList();
+  }
+}
+
+// Remove a pinned city by its DB id
+async function removePinnedCity(id, lat, lng) {
+  if (!currentUser || !supa) return;
+  await supa.from('user_cities').delete().eq('id', id).eq('user_id', currentUser.id);
+  pinnedCityDefs = pinnedCityDefs.filter(c => c.pinnedId !== id);
+  cityWeatherCache.delete(`${parseFloat(lat).toFixed(2)},${parseFloat(lng).toFixed(2)}`);
+  loadCitiesForView();
+  loadMyCitiesList();
+}
+
+// Nominatim city search
+async function searchCity() {
+  const q = document.getElementById('citySearchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('citySearchResults');
+  resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Searching…</div>';
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=us&limit=5&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en-US' } }
+    );
+    const items = await r.json();
+    if (!items.length) {
+      resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No results found.</div>';
+      return;
+    }
+    resultsEl.innerHTML = items.map(item => {
+      const city  = item.address?.city || item.address?.town || item.address?.village || item.address?.county || item.name;
+      const state = item.address?.state_code?.toUpperCase() || item.address?.state || '';
+      const label = state ? `${city}, ${state}` : city;
+      const la = parseFloat(item.lat), lo = parseFloat(item.lon);
+      return `<div onclick="selectCityResult('${label.replace(/'/g,"\\'")}',${la},${lo})"
+        style="padding:7px 8px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer;border-radius:3px;border:1px solid var(--border);margin-bottom:4px;"
+        onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">
+        📍 ${label}
+        <span style="color:var(--text-dim);font-size:9px;display:block;">${la.toFixed(3)}°N  ${Math.abs(lo).toFixed(3)}°W</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--red);padding:4px 0;">Search failed — try again.</div>';
+  }
+}
+
+async function selectCityResult(name, lat, lng) {
+  document.getElementById('citySearchResults').innerHTML = '';
+  document.getElementById('citySearchInput').value = '';
+  await addPinnedCity(name, lat, lng);
+}
+
+// Render the current pinned city list inside the setup modal
+async function loadMyCitiesList() {
+  const el = document.getElementById('myCitiesList');
+  if (!el || !currentUser || !supa) return;
+  const { data } = await supa.from('user_cities')
+    .select('id, name, lat, lng')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: true });
+  if (!data?.length) {
+    el.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:2px 0;">No cities added yet.</div>';
+    return;
+  }
+  el.innerHTML = data.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+      <span style="flex:1;font-family:var(--font-mono);font-size:11px;color:var(--text);">📌 ${c.name}</span>
+      <button onclick="removePinnedCity('${c.id}',${c.lat},${c.lng})"
+        style="background:transparent;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:0 4px;line-height:1;"
+        title="Remove">✕</button>
+    </div>`).join('');
 }
 
 let settingHomeFromMap = false;
@@ -3443,13 +3552,7 @@ async function confirmPinCity() {
   const name = document.getElementById('pinCityName').value.trim();
   if (!name || !currentUser || ctxLat === null) return;
   document.getElementById('pinCityModal').style.display = 'none';
-  await supa.from('user_cities').insert({ user_id: currentUser.id, name, lat: ctxLat, lng: ctxLng });
-  // Inject directly into position cache — no DB re-query needed
-  const key = `${ctxLat.toFixed(2)},${ctxLng.toFixed(2)}`;
-  cityPositionCache.set(key, { name, state_abbr: '', lat: ctxLat, lng: ctxLng, population: 0, pinned: true, tier: 3 });
-  cityWeatherCache.delete(key); // ensure fresh weather fetch on next render
-  loadCitiesForView();
-  showToast('watch', 'Location Pinned', `${name} added to your map.`);
+  await addPinnedCity(name, ctxLat, ctxLng);
 }
 
 // Close context menu on outside click
@@ -3463,6 +3566,7 @@ async function openSetup() {
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
   updateHomeLocationDisplay();
+  loadMyCitiesList();
   // If profile hasn't loaded yet (race condition on page load), fetch it now before checking role
   if (!userProfile?.role && currentUser?.id) {
     const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
