@@ -475,6 +475,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <button onclick="enableSetHomeFromMap()" id="setHomeMapBtn" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">🗺 CLICK ON MAP</button>
       </div>
       <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+        <input type="text" id="homeSearchInput" placeholder="Search city (e.g. Ozark, MO)"
+          style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;outline:none;"
+          onkeydown="if(event.key==='Enter')searchHomeCity()">
+        <button onclick="searchHomeCity()"
+          style="background:transparent;border:1px solid var(--green);color:var(--green);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">SEARCH</button>
+      </div>
+      <div id="homeSearchResults" style="margin-top:4px;"></div>
+      <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
         <input type="number" id="homeManualLat" placeholder="Lat  (e.g. 36.08)" step="0.0001"
           style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;">
         <input type="number" id="homeManualLng" placeholder="Lng  (e.g. -94.20)" step="0.0001"
@@ -3417,6 +3425,44 @@ function setHomeFromManual() {
   }
   document.getElementById('homeManualLat').value = '';
   document.getElementById('homeManualLng').value = '';
+  saveHomeLocation(lat, lng);
+}
+
+async function searchHomeCity() {
+  const q = document.getElementById('homeSearchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('homeSearchResults');
+  resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Searching…</div>';
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=us&limit=5&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en-US' } }
+    );
+    const items = await r.json();
+    if (!items.length) {
+      resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No results found.</div>';
+      return;
+    }
+    resultsEl.innerHTML = items.map(item => {
+      const city  = item.address?.city || item.address?.town || item.address?.village || item.address?.county || item.name;
+      const state = item.address?.state_code?.toUpperCase() || item.address?.state || '';
+      const label = state ? `${city}, ${state}` : city;
+      const la = parseFloat(item.lat), lo = parseFloat(item.lon);
+      return `<div onclick="selectHomeResult(${la},${lo})"
+        style="padding:7px 8px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer;border-radius:3px;border:1px solid var(--border);margin-bottom:4px;"
+        onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">
+        🏠 ${label}
+        <span style="color:var(--text-dim);font-size:9px;display:block;">${la.toFixed(3)}°N  ${Math.abs(lo).toFixed(3)}°W</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--red);padding:4px 0;">Search failed — try again.</div>';
+  }
+}
+
+function selectHomeResult(lat, lng) {
+  document.getElementById('homeSearchResults').innerHTML = '';
+  document.getElementById('homeSearchInput').value = '';
   saveHomeLocation(lat, lng);
 }
 
