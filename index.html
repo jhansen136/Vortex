@@ -525,6 +525,12 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
       </div>
       <div class="modal-field">
+        <label>Phone Number <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
+        <input type="tel" id="phoneNumber" placeholder="+1 (555) 000-0000"
+          style="font-family:var(--font-mono);">
+        <div class="hint">Called directly for tornado warnings + severe conditions. Twilio · leave blank to disable.</div>
+      </div>
+      <div class="modal-field">
         <label>Philips Hue Bridge IP</label>
         <input type="text" id="hueIP" placeholder="192.168.1.xxx">
       </div>
@@ -1064,7 +1070,7 @@ function cityTier(pop) {
 // Current user state
 let currentUser  = null;
 let userProfile  = null;
-let cfg = { push: '', hueIP: '', hueT: '' };
+let cfg = { push: '', hueIP: '', hueT: '', phone: '' };
 
 // FIX(security): track active polling interval IDs so signOut can stop them
 let pollingIntervals = [];
@@ -1206,6 +1212,7 @@ async function loadUserSettings(userId) {
       timeout
     ]);
     userProfile = profRes.data || {};
+    cfg.phone = userProfile.phone || '';
     if (intRes.data) {
       cfg.push  = intRes.data.ntfy_url  || '';
       cfg.hueIP = intRes.data.hue_ip    || '';
@@ -1268,11 +1275,14 @@ async function saveUserSettings(updates) {
   }
   if (updates.profile) {
     const displayName = document.getElementById('setupDisplayName')?.value.trim();
+    const profileUpdate: Record<string, any> = { phone: cfg.phone || null };
     if (displayName) {
-      await supa.from('profiles').update({ display_name: displayName }).eq('id', uid);
+      profileUpdate.display_name = displayName;
       document.getElementById('userName').textContent = displayName;
       document.getElementById('userAvatar').textContent = displayName.charAt(0).toUpperCase();
     }
+    await supa.from('profiles').update(profileUpdate).eq('id', uid);
+    userProfile = { ...userProfile, ...profileUpdate };
   }
 }
 
@@ -3398,12 +3408,14 @@ function showToast(type, title, body) {
 // SETUP MODAL
 // ══════════════════════════════════════════════════════════
 function saveSetup() {
-  const push = document.getElementById('pushToken').value.trim();
+  const push  = document.getElementById('pushToken').value.trim();
   const hueIP = document.getElementById('hueIP').value.trim();
   const hueT  = document.getElementById('hueToken').value.trim();
+  const phone = document.getElementById('phoneNumber').value.trim();
   if (push)  cfg.push  = push;
   if (hueIP) cfg.hueIP = hueIP;
   if (hueT)  cfg.hueT  = hueT;
+  cfg.phone = phone; // allow clearing — always write
   saveUserSettings({ integrations: true, profile: true });
   closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
 }
@@ -3647,9 +3659,10 @@ async function confirmPinCity() {
 // Close context menu on outside click
 document.addEventListener('click', hideContextMenu);
 async function openSetup() {
-  document.getElementById('pushToken').value = cfg.push  || '';
-  document.getElementById('hueIP').value     = cfg.hueIP || '';
-  document.getElementById('hueToken').value  = cfg.hueT  || '';
+  document.getElementById('pushToken').value   = cfg.push  || '';
+  document.getElementById('phoneNumber').value = cfg.phone || '';
+  document.getElementById('hueIP').value       = cfg.hueIP || '';
+  document.getElementById('hueToken').value    = cfg.hueT  || '';
   if (currentUser) {
     document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;

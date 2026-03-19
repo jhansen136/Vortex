@@ -4,6 +4,11 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const CRON_SECRET          = Deno.env.get('CRON_SECRET')!;
+const TWILIO_SID           = Deno.env.get('TWILIO_ACCOUNT_SID') || '';
+const TWILIO_TOKEN         = Deno.env.get('TWILIO_AUTH_TOKEN')  || '';
+const TWILIO_FROM          = Deno.env.get('TWILIO_FROM_NUMBER') || '';
+// Optional: URL to NWS EAS audio file — set via: npx supabase secrets set TWILIO_ALERT_AUDIO_URL=https://...
+const TWILIO_AUDIO_URL     = Deno.env.get('TWILIO_ALERT_AUDIO_URL') || '';
 
 // NW Arkansas fallback (used for users who haven't set a home location yet)
 const FALLBACK_LAT  = 36.08;
@@ -13,8 +18,14 @@ const FALLBACK_SAME = ['005007', '005143', '005087', '005015', '005009'];
 // NWS event types to monitor
 const NWS_EVENTS = ['Tornado Warning', 'Flash Flood Warning', 'Flood Warning'];
 
-// Threshold cooldown: suppress repeated threshold alerts within 30 min
+// Push cooldown — suppress repeated threshold pushes within 30 min
 const THRESHOLD_COOLDOWN_MS = 30 * 60 * 1000;
+
+// Call cooldown — suppress repeated threshold calls within 3 hours
+const CALL_COOLDOWN_MS = 3 * 60 * 60 * 1000;
+
+// Severe parameter thresholds that trigger a phone call (in addition to push)
+const SEVERE = { cape: 1500, srh: 250, risk: 70 };
 
 // Risk score constants — must stay in sync with client-side values in index.html
 const SRH_CAPE_FACTOR = 0.13;
@@ -43,7 +54,6 @@ function calcRisk(cape: number, srh: number, sh: number, h: number, dF: number, 
   return Math.min(Math.round(capePts + srhPts + shPts + liftPts + dewPts + humPts), 100);
 }
 
-// Fetch Open-Meteo for a given lat/lon and return computed weather metrics
 async function fetchWeather(lat: number, lon: number) {
   const res = await fetch(
     `https://api.open-meteo.com/v1/forecast` +
@@ -69,6 +79,47 @@ async function fetchWeather(lat: number, lon: number) {
   return { tF, h, w, cape, srh, sh, lift, dF, risk };
 }
 
+// ── Twilio voice call ──────────────────────────────────────────────────────────
+// Plays the NWS EAS audio (if TWILIO_ALERT_AUDIO_URL is set) then a TTS message.
+// When you have the NWS recording: npx supabase secrets set TWILIO_ALERT_AUDIO_URL=https://...
+async function makeCall(phone: string, type: 'warning' | 'threshold'): Promise<void> {
+  if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return;
+
+  const audioTag = TWILIO_AUDIO_URL
+    ? `<Play loop="1">${TWILIO_AUDIO_URL}</Play>`
+    : '';
+
+  const tts = type === 'warning'
+    ? 'This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active for your home area. Open the Vortex app immediately.'
+    : 'This is a Vortex weather alert. Severe storm conditions are developing near your home area. Check the Vortex app for current conditions.';
+
+  // Message repeated twice — second repetition helps iOS DND repeated-calls bypass
+  const twiml = `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+  ${audioTag}
+  <Say voice="alice">${tts}</Say>
+  <Pause length="2"/>
+  <Say voice="alice">${tts}</Say>
+</Response>`;
+
+  const creds = btoa(`${TWILIO_SID}:${TWILIO_TOKEN}`);
+  await fetch(
+    `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Calls.json`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${creds}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams({
+        To:    phone,
+        From:  TWILIO_FROM,
+        Twiml: twiml,
+      }).toString(),
+    }
+  );
+}
+
 serve(async (req) => {
   // Verify cron secret — check Authorization header or ?secret= query param
   const url = new URL(req.url);
@@ -79,7 +130,7 @@ serve(async (req) => {
   }
 
   const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-  const results: { notified: number; errors: string[] } = { notified: 0, errors: [] };
+  const results: { notified: number; called: number; errors: string[] } = { notified: 0, called: 0, errors: [] };
 
   try {
     // ── 1. Fetch all active NWS tornado + flood warnings (CONUS) ─────────────
@@ -88,13 +139,13 @@ serve(async (req) => {
       `https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=${eventParam}`,
       { headers: { 'User-Agent': 'VORTEX Storm Intelligence (jhansen136@gmail.com)' } }
     );
-    const nwsJson  = await nwsRes.json();
+    const nwsJson   = await nwsRes.json();
     const allAlerts = nwsJson.features || [];
 
-    // ── 2. Load all active users with home location + settings ────────────────
+    // ── 2. Load all active users with home location + phone ───────────────────
     const { data: users, error: usersErr } = await supa
       .from('profiles')
-      .select('id, display_name, home_lat, home_lng, home_fips')
+      .select('id, display_name, home_lat, home_lng, home_fips, phone, last_threshold_call_at')
       .eq('disabled', false);
 
     if (usersErr || !users?.length) {
@@ -115,36 +166,30 @@ serve(async (req) => {
       .select('user_id, alert_key, sent_at')
       .gte('sent_at', cutoff48h);
 
-    // ── 4. Fetch weather — deduplicated by approximate location ───────────────
-    // Cache keyed by rounded lat/lon to avoid duplicate API calls for nearby users
+    // ── 4. Weather cache — deduplicated by rounded lat/lon ────────────────────
     const wxCache = new Map<string, any>();
     async function getWeather(lat: number, lon: number) {
       const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-      if (!wxCache.has(key)) {
-        wxCache.set(key, await fetchWeather(lat, lon));
-      }
+      if (!wxCache.has(key)) wxCache.set(key, await fetchWeather(lat, lon));
       return wxCache.get(key);
     }
 
     // ── 5. Process each user ──────────────────────────────────────────────────
     const newAlerts: { user_id: string; alert_key: string }[] = [];
+    const profileUpdates: { id: string; last_threshold_call_at: string }[] = [];
 
     for (const user of users) {
       const th   = (thresholds   || []).find((t: any) => t.user_id === user.id);
       const intg = (integrations || []).find((i: any) => i.user_id === user.id);
       const pref = (preferences  || []).find((p: any) => p.user_id === user.id);
 
-      // Use user's stored home location, fall back to NW Arkansas
       const homeLat  = user.home_lat  ?? FALLBACK_LAT;
       const homeLon  = user.home_lng  ?? FALLBACK_LON;
       const homeFips = user.home_fips ?? null;
+      const phone    = (user.phone || '').trim();
 
-      // Build user's SAME code list for NWS filtering
-      const userSame: string[] = homeFips
-        ? ['0' + homeFips]      // 5-digit FIPS → 6-digit SAME code
-        : FALLBACK_SAME;
+      const userSame: string[] = homeFips ? ['0' + homeFips] : FALLBACK_SAME;
 
-      // Filter NWS alerts to this user's exact county
       const userAlerts = allAlerts.filter((f: any) => {
         const same: string[] = f.properties?.geocode?.SAME || [];
         return same.some((code: string) => userSame.includes(code));
@@ -156,41 +201,62 @@ serve(async (req) => {
         a.alert_key === key && new Date(a.sent_at).getTime() > Date.now() - THRESHOLD_COOLDOWN_MS
       );
 
-      const toSend: { key: string; title: string; body: string; priority: string; tags: string }[] = [];
+      // 3-hour cooldown check for threshold calls
+      const lastCallAt      = user.last_threshold_call_at ? new Date(user.last_threshold_call_at).getTime() : 0;
+      const thresholdCallOk = (Date.now() - lastCallAt) > CALL_COOLDOWN_MS;
 
-      // NWS alerts — never re-send the same NWS event ID
+      type AlertItem = {
+        key: string; title: string; body: string;
+        priority: string; tags: string;
+        call?: boolean; callType?: 'warning' | 'threshold';
+      };
+      const toSend: AlertItem[] = [];
+
+      // ── NWS alerts ───────────────────────────────────────────────────────────
+      // Trigger logic:
+      //   Tornado Warning → push (max priority) + call
+      //   Tornado Watch   → push only (early warning, no call)
+      //   Flood Warning   → push only
       for (const alert of userAlerts) {
-        const key = `nws:${alert.properties.id}`;
+        const key       = `nws:${alert.properties.id}`;
+        const isTornado = alert.properties.event === 'Tornado Warning';
         if (!hasSent(key)) {
-          const isTornado = alert.properties.event === 'Tornado Warning';
           toSend.push({
             key,
             title:    `⚠️ ${alert.properties.event}`,
             body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
             priority: isTornado ? 'max' : 'high',
             tags:     isTornado ? 'rotating_light,sos' : 'rain,warning',
+            call:     isTornado && !!phone,
+            callType: 'warning',
           });
         }
       }
 
-      // Threshold alerts — fetch weather for this user's home location
+      // ── Threshold alerts ─────────────────────────────────────────────────────
+      // Trigger logic:
+      //   Moderate threshold hit → push only
+      //   Severe threshold hit (CAPE≥1500, SRH≥250, Risk≥70) → push + call (3hr cooldown)
       if (th) {
         try {
           const wx = await getWeather(homeLat, homeLon);
           const checks = [
-            { key: 'threshold:cape', value: wx.cape, limit: th.cape, label: 'CAPE',       unit: ' J/kg'  },
-            { key: 'threshold:srh',  value: wx.srh,  limit: th.srh,  label: 'SRH',        unit: ' m²/s²' },
-            { key: 'threshold:wind', value: wx.w,    limit: th.wind, label: 'Wind Speed',  unit: ' mph'   },
-            { key: 'threshold:risk', value: wx.risk, limit: th.risk, label: 'Risk Score',  unit: ' / 100' },
+            { key: 'threshold:cape', value: wx.cape, limit: th.cape, label: 'CAPE',      unit: ' J/kg',  severe: wx.cape >= SEVERE.cape },
+            { key: 'threshold:srh',  value: wx.srh,  limit: th.srh,  label: 'SRH',       unit: ' m²/s²', severe: wx.srh  >= SEVERE.srh  },
+            { key: 'threshold:wind', value: wx.w,    limit: th.wind, label: 'Wind Speed', unit: ' mph',   severe: false },
+            { key: 'threshold:risk', value: wx.risk, limit: th.risk, label: 'Risk Score', unit: ' / 100', severe: wx.risk >= SEVERE.risk },
           ];
           for (const c of checks) {
             if (c.value >= c.limit && !sentRecently(c.key)) {
+              const triggerCall = c.severe && !!phone && thresholdCallOk;
               toSend.push({
                 key:      c.key,
                 title:    `VORTEX: ${c.label} Alert`,
                 body:     `${c.label} is ${Math.round(c.value)}${c.unit} — your threshold is ${c.limit}${c.unit}`,
-                priority: 'high',
+                priority: c.severe ? 'max' : 'high',
                 tags:     'warning,chart_increasing',
+                call:     triggerCall,
+                callType: 'threshold',
               });
             }
           }
@@ -199,7 +265,8 @@ serve(async (req) => {
         }
       }
 
-      // ── 6. Send notifications ───────────────────────────────────────────────
+      // ── Send notifications ────────────────────────────────────────────────────
+      let calledForThreshold = false;
       for (const alert of toSend) {
         // ntfy.sh push notification
         if (pref?.push_enabled && intg?.ntfy_url?.startsWith('https://ntfy.sh/')) {
@@ -219,11 +286,24 @@ serve(async (req) => {
           }
         }
 
-        // Future notification channels — add new integrations here:
-        // smart speaker, phone call, SMS, etc.
+        // Twilio phone call (tornado warning or severe threshold)
+        if (alert.call && phone) {
+          try {
+            await makeCall(phone, alert.callType!);
+            results.called++;
+            if (alert.callType === 'threshold') calledForThreshold = true;
+          } catch (e: any) {
+            results.errors.push(`call:${user.id}: ${e.message}`);
+          }
+        }
 
         newAlerts.push({ user_id: user.id, alert_key: alert.key });
         results.notified++;
+      }
+
+      // Stamp last_threshold_call_at to enforce 3-hour cooldown
+      if (calledForThreshold) {
+        profileUpdates.push({ id: user.id, last_threshold_call_at: new Date().toISOString() });
       }
     }
 
@@ -232,7 +312,14 @@ serve(async (req) => {
       await supa.from('sent_alerts').insert(newAlerts);
     }
 
-    // ── 8. Clean up sent_alerts older than 48h ────────────────────────────────
+    // ── 8. Update last_threshold_call_at for users who were called ────────────
+    for (const u of profileUpdates) {
+      await supa.from('profiles')
+        .update({ last_threshold_call_at: u.last_threshold_call_at })
+        .eq('id', u.id);
+    }
+
+    // ── 9. Clean up sent_alerts older than 48h ────────────────────────────────
     await supa.from('sent_alerts').delete().lt('sent_at', cutoff48h);
 
   } catch (e: any) {
