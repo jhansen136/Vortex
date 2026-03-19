@@ -462,55 +462,165 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 <div class="modal-overlay" id="setupModal" style="display:none;">
   <div class="modal">
     <div class="modal-title">VORTEX Setup</div>
-    <div class="modal-sub" id="setupUserInfo" style="color:var(--cyan);font-size:11px;letter-spacing:1px;"></div>
-    <div class="modal-field">
-      <label>Display Name</label>
-      <input type="text" id="setupDisplayName" placeholder="Your name">
-    </div>
-    <div class="modal-field">
-      <label>ntfy.sh Channel URL</label>
-      <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
-      <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
-    </div>
-    <div class="modal-field">
-      <label>Philips Hue Bridge IP</label>
-      <input type="text" id="hueIP" placeholder="192.168.1.xxx">
-    </div>
-    <div class="modal-field">
-      <label>Hue API Username / Token</label>
-      <input type="text" id="hueToken" placeholder="Your Hue API username">
-      <div class="hint">Get at http://[bridge-ip]/debug/clip.html — used only on your local network</div>
-    </div>
-    <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
-    <button class="btn-skip" onclick="closeSetup()">Close</button>
-    <button class="btn-skip" onclick="authSignOut()" style="color:#ff6b6b;margin-top:4px;">Sign Out</button>
+    <div class="modal-sub" id="setupUserInfo" style="color:var(--cyan);font-size:11px;letter-spacing:1px;margin-bottom:10px;"></div>
 
-    <!-- ADMIN PANEL — only shown to users with role='admin' -->
-    <div id="adminPanel" style="display:none;margin-top:20px;border-top:1px solid var(--border);padding-top:16px;">
-      <div style="font-family:var(--font-cond);font-weight:700;font-size:11px;letter-spacing:3px;color:var(--amber);text-transform:uppercase;margin-bottom:12px;">⚡ Admin — Invite Users</div>
-      <div style="display:flex;gap:8px;margin-bottom:10px;">
-        <input type="email" id="inviteEmailInput" placeholder="Email to invite" autocomplete="off"
-          style="flex:1;background:var(--bg);border:1px solid var(--border-bright);border-radius:3px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;"
-          onkeydown="if(event.key==='Enter')sendInvite()">
-        <button onclick="sendInvite()"
-          style="background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border:none;border-radius:3px;padding:8px 14px;cursor:pointer;white-space:nowrap;">
-          SEND
-        </button>
-      </div>
-      <div id="inviteStatus" style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);min-height:16px;margin-bottom:10px;"></div>
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">Pending Invites</div>
-      <div id="inviteList" style="max-height:160px;overflow-y:auto;">
-        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
-      </div>
-      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:14px 0 6px;">Registered Users</div>
-      <div id="userList" style="max-height:180px;overflow-y:auto;">
-        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
-      </div>
+    <!-- Tab bar -->
+    <div style="display:flex;border-bottom:1px solid var(--border);margin-bottom:16px;">
+      <button id="tabBtnSettings" onclick="switchSetupTab('settings')"
+        style="flex:1;background:none;border:none;border-bottom:2px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:2px;padding:8px 0;cursor:pointer;transition:color .15s,border-color .15s;">
+        ⚙ SETTINGS
+      </button>
+      <button id="tabBtnAdmin" onclick="switchSetupTab('admin')"
+        style="display:none;flex:1;background:none;border:none;border-bottom:2px solid transparent;color:var(--text-dim);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:2px;padding:8px 0;cursor:pointer;transition:color .15s,border-color .15s;">
+        ⚡ ADMIN
+      </button>
     </div>
+
+    <!-- ── SETTINGS TAB ── -->
+    <div id="tabSettings">
+      <div class="modal-field">
+        <label>Display Name</label>
+        <input type="text" id="setupDisplayName" placeholder="Your name">
+      </div>
+      <div class="modal-field">
+        <label>Home Location</label>
+        <div id="homeLocationDisplay" style="font-family:var(--font-mono);font-size:11px;color:var(--cyan);margin-bottom:6px;">Not set — using NW Arkansas default</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+          <button onclick="setHomeFromGeo()" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">📍 USE MY LOCATION</button>
+          <button onclick="enableSetHomeFromMap()" id="setHomeMapBtn" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:12px;font-weight:600;letter-spacing:1px;padding:7px 10px;border-radius:3px;cursor:pointer;">🗺 CLICK ON MAP</button>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+          <input type="text" id="homeSearchInput" placeholder="Search city (e.g. Ozark, MO)"
+            style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;outline:none;"
+            onkeydown="if(event.key==='Enter')searchHomeCity()">
+          <button onclick="searchHomeCity()"
+            style="background:transparent;border:1px solid var(--green);color:var(--green);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">SEARCH</button>
+        </div>
+        <div id="homeSearchResults" style="margin-top:4px;"></div>
+        <div style="display:flex;gap:6px;align-items:center;margin-top:6px;">
+          <input type="number" id="homeManualLat" placeholder="Lat  (e.g. 36.08)" step="0.0001"
+            style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;">
+          <input type="number" id="homeManualLng" placeholder="Lng  (e.g. -94.20)" step="0.0001"
+            style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;">
+          <button onclick="setHomeFromManual()" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">SET</button>
+        </div>
+      </div>
+      <div class="modal-field">
+        <label>My Cities</label>
+        <div id="myCitiesList" style="margin-bottom:8px;max-height:120px;overflow-y:auto;">
+          <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">No cities added yet.</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <input type="text" id="citySearchInput" placeholder="Search city (e.g. Ozark, MO)"
+            style="flex:1;background:var(--surface);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:7px 8px;border-radius:3px;min-width:0;outline:none;"
+            onkeydown="if(event.key==='Enter')searchCity()">
+          <button onclick="searchCity()"
+            style="background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">SEARCH</button>
+        </div>
+        <div id="citySearchResults" style="margin-top:6px;"></div>
+      </div>
+      <div class="modal-field">
+        <label>ntfy.sh Channel URL</label>
+        <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
+        <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
+      </div>
+      <div class="modal-field">
+        <label>Phone Number <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="tel" id="phoneNumber" placeholder="+1 (555) 000-0000"
+            style="flex:1;font-family:var(--font-mono);min-width:0;">
+          <button onclick="testPhoneCall()"
+            style="background:transparent;border:1px solid var(--green);color:var(--green);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">
+            📞 TEST
+          </button>
+        </div>
+        <div class="hint">Called directly for tornado warnings + severe conditions. Twilio · leave blank to disable.</div>
+      </div>
+      <div class="modal-field">
+        <label>Philips Hue Bridge IP</label>
+        <input type="text" id="hueIP" placeholder="192.168.1.xxx">
+      </div>
+      <div class="modal-field">
+        <label>Hue API Username / Token</label>
+        <input type="text" id="hueToken" placeholder="Your Hue API username">
+        <div class="hint">Get at http://[bridge-ip]/debug/clip.html — used only on your local network</div>
+      </div>
+      <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
+      <button class="btn-skip" onclick="closeSetup()">Close</button>
+      <button class="btn-skip" onclick="authSignOut()" style="color:#ff6b6b;margin-top:4px;">Sign Out</button>
+    </div>
+
+    <!-- ── ADMIN TAB — only rendered for admins ── -->
+    <div id="tabAdmin" style="display:none;">
+
+      <!-- Stat cards -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;text-align:center;">
+          <div id="statUsers" style="font-family:var(--font-cond);font-size:22px;font-weight:700;color:var(--cyan);">—</div>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-top:2px;">USERS</div>
+        </div>
+        <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;text-align:center;">
+          <div id="statPending" style="font-family:var(--font-cond);font-size:22px;font-weight:700;color:var(--amber);">—</div>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-top:2px;">PENDING</div>
+        </div>
+        <div style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:10px 12px;text-align:center;">
+          <div id="statDisabled" style="font-family:var(--font-cond);font-size:22px;font-weight:700;color:#ff6b6b;">—</div>
+          <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-top:2px;">DISABLED</div>
+        </div>
+      </div>
+
+      <!-- Invite -->
+      <div class="modal-field" style="margin-bottom:4px;">
+        <label>Invite User</label>
+        <div style="display:flex;gap:8px;">
+          <input type="email" id="inviteEmailInput" placeholder="Email to invite" autocomplete="off"
+            style="flex:1;background:var(--bg);border:1px solid var(--border-bright);border-radius:3px;padding:8px 10px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;"
+            onkeydown="if(event.key==='Enter')sendInvite()">
+          <button onclick="sendInvite()"
+            style="background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border:none;border-radius:3px;padding:8px 14px;cursor:pointer;white-space:nowrap;">SEND</button>
+        </div>
+        <div id="inviteStatus" style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);min-height:14px;margin-top:6px;"></div>
+      </div>
+
+      <!-- Pending invites -->
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:14px 0 6px;">Pending Invites</div>
+      <div id="inviteList" style="max-height:140px;overflow-y:auto;margin-bottom:4px;">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
+      </div>
+
+      <!-- Registered users -->
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:14px 0 6px;">Registered Users</div>
+      <div id="userList" style="max-height:200px;overflow-y:auto;">
+        <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
+      </div>
+
+      <button class="btn-skip" onclick="closeSetup()" style="margin-top:16px;">Close</button>
+    </div>
+
+    <!-- kept for JS compatibility — hidden, never shown -->
+    <div id="adminPanel" style="display:none;"></div>
   </div>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
+
+<!-- Right-click context menu -->
+<div id="mapContextMenu" style="display:none;position:fixed;z-index:9000;background:var(--panel);border:1px solid var(--border-bright);border-radius:4px;padding:4px 0;min-width:170px;box-shadow:0 4px 16px rgba(0,0,0,.5);">
+  <div onclick="ctxSetHome()" style="padding:9px 16px;font-family:var(--font-cond);font-size:13px;font-weight:600;letter-spacing:1px;color:var(--amber);cursor:pointer;" onmouseover="this.style.background='rgba(245,166,35,.1)'" onmouseout="this.style.background=''">📍 SET AS HOME</div>
+  <div onclick="ctxPinCity()" style="padding:9px 16px;font-family:var(--font-cond);font-size:13px;font-weight:600;letter-spacing:1px;color:var(--text);cursor:pointer;" onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">📌 PIN THIS LOCATION</div>
+</div>
+
+<!-- Pin city name dialog -->
+<div id="pinCityModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--panel);border:1px solid var(--border-bright);border-radius:6px;padding:24px;min-width:280px;">
+    <div style="font-family:var(--font-cond);font-weight:700;font-size:14px;letter-spacing:2px;color:var(--amber);margin-bottom:12px;">PIN LOCATION</div>
+    <input id="pinCityName" type="text" placeholder="Location name" style="width:100%;box-sizing:border-box;background:var(--bg);border:1px solid var(--border-bright);border-radius:3px;padding:9px 10px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;">
+      <button onclick="confirmPinCity()" style="flex:1;background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border:none;border-radius:3px;padding:9px;cursor:pointer;">SAVE PIN</button>
+      <button onclick="document.getElementById('pinCityModal').style.display='none'" style="flex:1;background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-cond);font-size:13px;letter-spacing:1px;border-radius:3px;padding:9px;cursor:pointer;">CANCEL</button>
+    </div>
+  </div>
+</div>
 
 <!-- PWA Install Banner -->
 <div id="pwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;align-items:center;gap:12px;backdrop-filter:blur(8px);">
@@ -915,13 +1025,58 @@ const HOME = {
 };
 const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
 
-// City label zoom thresholds
-const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
+// City label zoom thresholds — dots always show, labels fade in by tier as you zoom
+const LABEL_ZOOM = { 1: 1.5, 2: 3.5, 3: 7.0 };
+
+// Dynamic city zoom — population threshold by zoom scale
+function popThreshold(k) {
+  if (k < 2)  return 750_000;
+  if (k < 4)  return 250_000;
+  if (k < 7)  return  75_000;
+  if (k < 11) return  20_000;
+  if (k < 16) return   5_000;
+  return 1_000;
+}
+
+// Cull cities that would render too close together on screen.
+// Sorted by population desc so bigger cities always win.
+// Pinned cities are always kept regardless of proximity.
+function cullByPixelDistance(cities, minPx) {
+  if (!projection) return cities;
+  const t      = currentTransform || d3.zoomIdentity;
+  const sorted = [...cities].sort((a, b) => {
+    if (a.pinned && !b.pinned) return -1;
+    if (!a.pinned && b.pinned) return  1;
+    return (b.population || 0) - (a.population || 0);
+  });
+  const kept = [];
+  const grid = new Map();
+  for (const c of sorted) {
+    const pt = projection([c.lng ?? c.lo, c.lat ?? c.la]);
+    if (!pt) { kept.push(c); continue; }
+    const sx = pt[0] * t.k + t.x;
+    const sy = pt[1] * t.k + t.y;
+    const cx = Math.round(sx / minPx);
+    const cy = Math.round(sy / minPx);
+    let blocked = false;
+    for (let dx = -1; dx <= 1 && !blocked; dx++)
+      for (let dy = -1; dy <= 1 && !blocked; dy++)
+        if (grid.has(`${cx+dx},${cy+dy}`)) blocked = true;
+    if (c.pinned || !blocked) { kept.push(c); grid.set(`${cx},${cy}`, true); }
+  }
+  return kept;
+}
+// Map population → label tier for zoom-based visibility
+function cityTier(pop) {
+  if (pop >= 300000) return 1;
+  if (pop >=  50000) return 2;
+  return 3;
+}
 
 // Current user state
 let currentUser  = null;
 let userProfile  = null;
-let cfg = { push: '', hueIP: '', hueT: '' };
+let cfg = { push: '', hueIP: '', hueT: '', phone: '' };
 
 // FIX(security): track active polling interval IDs so signOut can stop them
 let pollingIntervals = [];
@@ -1063,6 +1218,7 @@ async function loadUserSettings(userId) {
       timeout
     ]);
     userProfile = profRes.data || {};
+    cfg.phone = userProfile.phone || '';
     if (intRes.data) {
       cfg.push  = intRes.data.ntfy_url  || '';
       cfg.hueIP = intRes.data.hue_ip    || '';
@@ -1125,11 +1281,14 @@ async function saveUserSettings(updates) {
   }
   if (updates.profile) {
     const displayName = document.getElementById('setupDisplayName')?.value.trim();
+    const profileUpdate = { phone: cfg.phone || null };
     if (displayName) {
-      await supa.from('profiles').update({ display_name: displayName }).eq('id', uid);
+      profileUpdate.display_name = displayName;
       document.getElementById('userName').textContent = displayName;
       document.getElementById('userAvatar').textContent = displayName.charAt(0).toUpperCase();
     }
+    await supa.from('profiles').update(profileUpdate).eq('id', uid);
+    userProfile = { ...userProfile, ...profileUpdate };
   }
 }
 
@@ -1139,10 +1298,10 @@ function startDataPolling() {
   console.log('[VORTEX] startDataPolling — dataInitialized:', dataInitialized);
   if (dataInitialized) return;
   dataInitialized = true;
-  loadStations();
+  loadCitiesForView();
   fetchNWS();
   pollingIntervals.push(
-    setInterval(loadStations,  INTERVAL_STATIONS),
+    setInterval(loadCitiesForView, INTERVAL_STATIONS),
     setInterval(fetchNWS,      INTERVAL_NWS),
     setInterval(checkTh,       INTERVAL_THRESHOLD),
     setInterval(() => { if (lyr.radar) fetchRadar(); }, INTERVAL_RADAR),
@@ -1265,7 +1424,7 @@ function initMap(us) {
   svg.attr('width', W).attr('height', H);
   warnSvg.attr('width', W).attr('height', H);
   zoom = d3.zoom()
-    .scaleExtent([0.5, 12])
+    .scaleExtent([0.5, 100])
     .on('zoom', (event) => {
       currentTransform = event.transform;
       const {x, y, k} = event.transform;
@@ -1297,6 +1456,7 @@ function initMap(us) {
     })
     .on('end', () => {
       if (lyr.radar) scheduleRadarRepaint();
+      // rescaleStations handles all label visibility on zoom — no city reload needed
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -1314,7 +1474,8 @@ function initMap(us) {
     .attr('d', pathGen)
     // FIX(bug): only map-level click goes to fetchPointData — station clicks stop propagation
     .on('click', handleMapClick)
-    .on('mousemove', handleMapHover);
+    .on('mousemove', handleMapHover)
+    .on('contextmenu', handleMapRightClick);
   gMap.append('path')
     .datum(topojson.mesh(us, us.objects.states, (a, b) => a !== b))
     .attr('class', 'state-border').attr('d', pathGen);
@@ -1430,9 +1591,28 @@ function handleMapClick(event) {
   const coords = projection.invert([ix, iy]);
   if (!coords) return;
   const [lon, lat] = coords;
-  if (lat < 15 || lat > 55 || lon < -130 || lon > -60) return;
+  if (lat < 15 || lat > 72 || lon < -180 || lon > -60) return;
+  // "Set home from map" mode — intercept the first click
+  if (settingHomeFromMap) {
+    settingHomeFromMap = false;
+    const btn = document.getElementById('setHomeMapBtn');
+    if (btn) { btn.textContent = '🗺 CLICK ON MAP'; btn.style.borderColor = ''; btn.style.color = ''; }
+    saveHomeLocation(lat, lon);
+    return;
+  }
   clearTimeout(clickDeb);
   clickDeb = setTimeout(() => fetchPointData(lat, lon), 250);
+}
+
+function handleMapRightClick(event) {
+  event.preventDefault();
+  const [x, y] = d3.pointer(event, svgEl);
+  const t  = currentTransform;
+  const coords = projection.invert([(x-t.x)/t.k, (y-t.y)/t.k]);
+  if (!coords) return;
+  const [lon, lat] = coords;
+  if (lat < 15 || lat > 72 || lon < -180 || lon > -60) return;
+  showContextMenu(event, lat, lon);
 }
 
 const OM_PARAMS =
@@ -1464,49 +1644,193 @@ const DEFS = [
   {n:'Harrison, AR',        la:36.23, lo:-93.11, home:true, tier:3},
   {n:'Fort Smith, AR',      la:35.39, lo:-94.42, home:true, tier:3},
   // ── Tier 1 — Major metros ──
-  {n:'Dallas, TX',        la:32.78, lo:-96.80,  tier:1},
-  {n:'Kansas City, MO',   la:39.10, lo:-94.58,  tier:1},
-  {n:'Chicago, IL',       la:41.88, lo:-87.63,  tier:1},
-  {n:'Minneapolis, MN',   la:44.98, lo:-93.27,  tier:1},
-  {n:'Des Moines, IA',    la:41.60, lo:-93.61,  tier:1},
-  {n:'Oklahoma City, OK', la:35.47, lo:-97.52,  tier:1},
-  {n:'Denver, CO',        la:39.74, lo:-104.98, tier:1},
-  {n:'Houston, TX',       la:29.76, lo:-95.37,  tier:1},
-  {n:'St. Louis, MO',     la:38.63, lo:-90.20,  tier:1},
-  {n:'Memphis, TN',       la:35.15, lo:-90.05,  tier:1},
-  {n:'Nashville, TN',     la:36.17, lo:-86.78,  tier:1},
-  {n:'Atlanta, GA',       la:33.75, lo:-84.39,  tier:1},
-  {n:'Indianapolis, IN',  la:39.77, lo:-86.16,  tier:1},
-  {n:'Salt Lake City, UT',la:40.76, lo:-111.89, tier:1},
-  {n:'Phoenix, AZ',       la:33.45, lo:-112.07, tier:1},
+  {n:'Dallas, TX',          la:32.78, lo:-96.80,  tier:1},
+  {n:'Houston, TX',         la:29.76, lo:-95.37,  tier:1},
+  {n:'Kansas City, MO',     la:39.10, lo:-94.58,  tier:1},
+  {n:'Chicago, IL',         la:41.88, lo:-87.63,  tier:1},
+  {n:'Minneapolis, MN',     la:44.98, lo:-93.27,  tier:1},
+  {n:'Des Moines, IA',      la:41.60, lo:-93.61,  tier:1},
+  {n:'Oklahoma City, OK',   la:35.47, lo:-97.52,  tier:1},
+  {n:'Denver, CO',          la:39.74, lo:-104.98, tier:1},
+  {n:'St. Louis, MO',       la:38.63, lo:-90.20,  tier:1},
+  {n:'Memphis, TN',         la:35.15, lo:-90.05,  tier:1},
+  {n:'Nashville, TN',       la:36.17, lo:-86.78,  tier:1},
+  {n:'Atlanta, GA',         la:33.75, lo:-84.39,  tier:1},
+  {n:'Indianapolis, IN',    la:39.77, lo:-86.16,  tier:1},
+  {n:'Salt Lake City, UT',  la:40.76, lo:-111.89, tier:1},
+  {n:'Phoenix, AZ',         la:33.45, lo:-112.07, tier:1},
+  {n:'Los Angeles, CA',     la:34.05, lo:-118.24, tier:1},
+  {n:'San Francisco, CA',   la:37.77, lo:-122.42, tier:1},
+  {n:'Seattle, WA',         la:47.61, lo:-122.33, tier:1},
+  {n:'Portland, OR',        la:45.52, lo:-122.68, tier:1},
+  {n:'Las Vegas, NV',       la:36.17, lo:-115.14, tier:1},
+  {n:'Detroit, MI',         la:42.33, lo:-83.05,  tier:1},
+  {n:'Columbus, OH',        la:39.96, lo:-82.99,  tier:1},
+  {n:'Charlotte, NC',       la:35.23, lo:-80.84,  tier:1},
+  {n:'Jacksonville, FL',    la:30.33, lo:-81.66,  tier:1},
+  {n:'Miami, FL',           la:25.77, lo:-80.19,  tier:1},
+  {n:'Philadelphia, PA',    la:39.95, lo:-75.17,  tier:1},
+  {n:'New York, NY',        la:40.71, lo:-74.01,  tier:1},
+  {n:'Boston, MA',          la:42.36, lo:-71.06,  tier:1},
+  {n:'Baltimore, MD',       la:39.29, lo:-76.61,  tier:1},
+  {n:'Honolulu, HI',        la:21.31, lo:-157.86, tier:1},
+  {n:'Anchorage, AK',       la:61.22, lo:-149.90, tier:1},
   // ── Tier 2 — Regional cities ──
-  {n:'Tulsa, OK',         la:36.15, lo:-95.99,  tier:2},
-  {n:'Wichita, KS',       la:37.69, lo:-97.34,  tier:2},
-  {n:'Amarillo, TX',      la:35.22, lo:-101.83, tier:2},
-  {n:'Lubbock, TX',       la:33.57, lo:-101.85, tier:2},
-  {n:'Midland, TX',       la:31.99, lo:-102.08, tier:2},
-  {n:'San Antonio, TX',   la:29.42, lo:-98.49,  tier:2},
-  {n:'Joplin, MO',        la:37.08, lo:-94.51,  tier:2},
-  {n:'Springfield, MO',   la:37.21, lo:-93.30,  tier:2},
-  {n:'Columbia, MO',      la:38.95, lo:-92.33,  tier:2},
-  {n:'Little Rock, AR',   la:34.75, lo:-92.29,  tier:2},
-  {n:'Shreveport, LA',    la:32.52, lo:-93.75,  tier:2},
-  {n:'Jackson, MS',       la:32.30, lo:-90.18,  tier:2},
-  {n:'Birmingham, AL',    la:33.52, lo:-86.80,  tier:2},
-  {n:'Louisville, KY',    la:38.25, lo:-85.76,  tier:2},
-  {n:'Topeka, KS',        la:39.05, lo:-95.68,  tier:2},
-  {n:'Lincoln, NE',       la:40.81, lo:-96.70,  tier:2},
-  {n:'Omaha, NE',         la:41.26, lo:-95.94,  tier:2},
-  {n:'Sioux Falls, SD',   la:43.55, lo:-96.73,  tier:2},
-  {n:'Billings, MT',      la:45.78, lo:-108.50, tier:2},
-  {n:'Albuquerque, NM',   la:35.08, lo:-106.65, tier:2},
-  {n:'Davenport, IA',     la:41.52, lo:-90.58,  tier:2},
+  {n:'Tulsa, OK',           la:36.15, lo:-95.99,  tier:2},
+  {n:'Wichita, KS',         la:37.69, lo:-97.34,  tier:2},
+  {n:'Amarillo, TX',        la:35.22, lo:-101.83, tier:2},
+  {n:'Lubbock, TX',         la:33.57, lo:-101.85, tier:2},
+  {n:'Midland, TX',         la:31.99, lo:-102.08, tier:2},
+  {n:'San Antonio, TX',     la:29.42, lo:-98.49,  tier:2},
+  {n:'El Paso, TX',         la:31.76, lo:-106.49, tier:2},
+  {n:'Austin, TX',          la:30.27, lo:-97.74,  tier:2},
+  {n:'Joplin, MO',          la:37.08, lo:-94.51,  tier:2},
+  {n:'Springfield, MO',     la:37.21, lo:-93.30,  tier:2},
+  {n:'Columbia, MO',        la:38.95, lo:-92.33,  tier:2},
+  {n:'Little Rock, AR',     la:34.75, lo:-92.29,  tier:2},
+  {n:'Shreveport, LA',      la:32.52, lo:-93.75,  tier:2},
+  {n:'New Orleans, LA',     la:29.95, lo:-90.07,  tier:2},
+  {n:'Jackson, MS',         la:32.30, lo:-90.18,  tier:2},
+  {n:'Gulfport, MS',        la:30.37, lo:-89.09,  tier:2},
+  {n:'Birmingham, AL',      la:33.52, lo:-86.80,  tier:2},
+  {n:'Mobile, AL',          la:30.69, lo:-88.04,  tier:2},
+  {n:'Louisville, KY',      la:38.25, lo:-85.76,  tier:2},
+  {n:'Lexington, KY',       la:38.05, lo:-84.50,  tier:2},
+  {n:'Topeka, KS',          la:39.05, lo:-95.68,  tier:2},
+  {n:'Lincoln, NE',         la:40.81, lo:-96.70,  tier:2},
+  {n:'Omaha, NE',           la:41.26, lo:-95.94,  tier:2},
+  {n:'Sioux Falls, SD',     la:43.55, lo:-96.73,  tier:2},
+  {n:'Rapid City, SD',      la:44.08, lo:-103.23, tier:2},
+  {n:'Bismarck, ND',        la:46.81, lo:-100.79, tier:2},
+  {n:'Fargo, ND',           la:46.88, lo:-96.79,  tier:2},
+  {n:'Billings, MT',        la:45.78, lo:-108.50, tier:2},
+  {n:'Great Falls, MT',     la:47.50, lo:-111.30, tier:2},
+  {n:'Cheyenne, WY',        la:41.14, lo:-104.82, tier:2},
+  {n:'Casper, WY',          la:42.87, lo:-106.31, tier:2},
+  {n:'Albuquerque, NM',     la:35.08, lo:-106.65, tier:2},
+  {n:'Santa Fe, NM',        la:35.69, lo:-105.94, tier:2},
+  {n:'Tucson, AZ',          la:32.22, lo:-110.93, tier:2},
+  {n:'Boise, ID',           la:43.62, lo:-116.20, tier:2},
+  {n:'Idaho Falls, ID',     la:43.49, lo:-112.03, tier:2},
+  {n:'Spokane, WA',         la:47.66, lo:-117.43, tier:2},
+  {n:'Eugene, OR',          la:44.05, lo:-123.09, tier:2},
+  {n:'Sacramento, CA',      la:38.58, lo:-121.49, tier:2},
+  {n:'San Diego, CA',       la:32.72, lo:-117.16, tier:2},
+  {n:'Fresno, CA',          la:36.74, lo:-119.77, tier:2},
+  {n:'Reno, NV',            la:39.53, lo:-119.81, tier:2},
+  {n:'Davenport, IA',       la:41.52, lo:-90.58,  tier:2},
+  {n:'Milwaukee, WI',       la:43.04, lo:-87.91,  tier:2},
+  {n:'Madison, WI',         la:43.07, lo:-89.40,  tier:2},
+  {n:'Grand Rapids, MI',    la:42.96, lo:-85.66,  tier:2},
+  {n:'Cleveland, OH',       la:41.50, lo:-81.69,  tier:2},
+  {n:'Cincinnati, OH',      la:39.10, lo:-84.51,  tier:2},
+  {n:'Pittsburgh, PA',      la:40.44, lo:-80.00,  tier:2},
+  {n:'Buffalo, NY',         la:42.89, lo:-78.88,  tier:2},
+  {n:'Albany, NY',          la:42.65, lo:-73.75,  tier:2},
+  {n:'Raleigh, NC',         la:35.78, lo:-78.64,  tier:2},
+  {n:'Columbia, SC',        la:34.00, lo:-81.03,  tier:2},
+  {n:'Charleston, SC',      la:32.78, lo:-79.93,  tier:2},
+  {n:'Tampa, FL',           la:27.95, lo:-82.46,  tier:2},
+  {n:'Orlando, FL',         la:28.54, lo:-81.38,  tier:2},
+  {n:'Richmond, VA',        la:37.54, lo:-77.43,  tier:2},
+  {n:'Norfolk, VA',         la:36.85, lo:-76.29,  tier:2},
+  {n:'Charleston, WV',      la:38.35, lo:-81.63,  tier:2},
+  {n:'Huntington, WV',      la:38.42, lo:-82.44,  tier:2},
+  {n:'Washington, DC',      la:38.91, lo:-77.04,  tier:2},
+  {n:'Newark, NJ',          la:40.74, lo:-74.17,  tier:2},
+  {n:'Trenton, NJ',         la:40.22, lo:-74.76,  tier:2},
+  {n:'Wilmington, DE',      la:39.74, lo:-75.54,  tier:2},
+  {n:'Dover, DE',           la:39.16, lo:-75.52,  tier:2},
+  {n:'Annapolis, MD',       la:38.97, lo:-76.49,  tier:2},
+  {n:'Providence, RI',      la:41.82, lo:-71.42,  tier:2},
+  {n:'Hartford, CT',        la:41.76, lo:-72.68,  tier:2},
+  {n:'New Haven, CT',       la:41.31, lo:-72.92,  tier:2},
+  {n:'Manchester, NH',      la:42.99, lo:-71.46,  tier:2},
+  {n:'Burlington, VT',      la:44.48, lo:-73.21,  tier:2},
+  {n:'Portland, ME',        la:43.66, lo:-70.26,  tier:2},
+  {n:'Bangor, ME',          la:44.80, lo:-68.78,  tier:2},
+  {n:'Hilo, HI',            la:19.71, lo:-155.09, tier:2},
+  {n:'Fairbanks, AK',       la:64.84, lo:-147.72, tier:2},
 ];
 
 let stations = [];
 let lastStationFetch = 0;
 // FIX(perf): pre-computed nearest-station lookup grid for wind particles
 let stationLookupGrid = null;
+// Dynamic city weather cache — key: 'lat,lng', value: {station data + fetchedAt}
+const cityWeatherCache   = new Map();        // key:'lat,lng' → weather data + fetchedAt
+const CITY_CACHE_TTL     = 3 * 60 * 1000;   // 3 min — stale-while-revalidate
+const cityPositionCache  = new Map();        // key:'lat,lng' → city object (session-permanent)
+const tiersLoaded        = { 1: false, 2: false, 3: false };
+let   pinnedCitiesLoaded = false;
+let   pinnedCityDefs    = []; // [{n, la, lo, tier, pinned, pinnedId}] — kept in sync with user_cities table
+
+// Population bands — each tier is loaded once per session (nationwide, no bbox)
+const TIER_DEFS = [
+  { tier: 1, minPop: 300_000, maxPop: null,    triggerK: 0 }, // major metros — always
+  { tier: 2, minPop:  50_000, maxPop: 299_999, triggerK: 2 }, // mid-size — on first zoom
+  { tier: 3, minPop:   5_000, maxPop:  49_999, triggerK: 5 }, // small cities — zoomed in
+];
+
+// Load one tier from Supabase (one-time per session, no bounding box)
+async function loadTier(td) {
+  if (tiersLoaded[td.tier]) return;
+  let q = supa.from('cities')
+    .select('name, state_abbr, lat, lng, population')
+    .gte('population', td.minPop);
+  if (td.maxPop !== null) q = q.lte('population', td.maxPop);
+  const { data } = await q.order('population', { ascending: false });
+  (data || []).forEach(c => {
+    const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
+    if (!cityPositionCache.has(key)) {
+      cityPositionCache.set(key, {
+        name: c.name, state_abbr: c.state_abbr,
+        lat: parseFloat(c.lat), lng: parseFloat(c.lng),
+        population: parseInt(c.population) || 0,
+        tier: td.tier,
+      });
+    }
+  });
+  tiersLoaded[td.tier] = true;
+}
+
+// Fetch weather for a list of city objects and populate cityWeatherCache
+async function fetchCityWeatherBatch(cities) {
+  for (let i = 0; i < cities.length; i += BATCH_SIZE) {
+    const chunk   = cities.slice(i, i + BATCH_SIZE);
+    const defs    = chunk.map(c => ({
+      n:    c.state_abbr ? `${c.name}, ${c.state_abbr}` : c.name,
+      la:   c.lat, lo: c.lng,
+      tier: c.tier || 3,
+      home: isHomeCity(c),
+    }));
+    const results = await fetchBatch(defs);
+    if (results) {
+      results.forEach((s, idx) => {
+        if (!s) return;
+        const key = `${chunk[idx].lat.toFixed(2)},${chunk[idx].lng.toFixed(2)}`;
+        cityWeatherCache.set(key, { ...s, fetchedAt: Date.now() });
+      });
+    }
+  }
+}
+
+// Rebuild stations from cache and re-render — no network I/O
+function renderCitiesFromCache(visible) {
+  const culled = cullByPixelDistance(visible, 50);
+  stations = culled.map(c => {
+    const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
+    return cityWeatherCache.get(key);
+  }).filter(Boolean);
+  buildStationGrid();
+  drawStations();
+  if (lyr.temp) drawHeatmap();
+  renderNWS();
+  checkTh();
+  updateHomeDashboard();
+  document.getElementById('dataSource').textContent =
+    `Open-Meteo · NWS · ${stations.length} stations`;
+}
 const GRID_CELL_PX = 80; // pixels per grid cell
 
 function buildStationGrid() {
@@ -1522,6 +1846,23 @@ function buildStationGrid() {
     if (!stationLookupGrid.has(key)) stationLookupGrid.set(key, []);
     stationLookupGrid.get(key).push(s);
   });
+}
+
+// Return current map bounding box in lat/lng with a small buffer
+function getMapBounds() {
+  if (!projection || !svgEl) return null;
+  const w = svgEl.clientWidth, h = svgEl.clientHeight;
+  const t = currentTransform || d3.zoomIdentity;
+  const corners = [[0,0],[w,0],[0,h],[w,h]].map(([px,py]) => {
+    return projection.invert([(px-t.x)/t.k, (py-t.y)/t.k]);
+  }).filter(Boolean);
+  if (!corners.length) return null;
+  return {
+    minLat: Math.min(...corners.map(c=>c[1])) - 0.5,
+    maxLat: Math.max(...corners.map(c=>c[1])) + 0.5,
+    minLng: Math.min(...corners.map(c=>c[0])) - 0.5,
+    maxLng: Math.max(...corners.map(c=>c[0])) + 0.5,
+  };
 }
 
 // FIX(perf): O(1) nearest station lookup using pre-computed grid
@@ -1651,7 +1992,105 @@ async function loadStations() {
 
 function retryStationFetch() {
   document.getElementById('fetchErrorBanner').style.display = 'none';
-  loadStations();
+  loadCitiesForView();
+}
+
+// ── CITY LOADER ────────────────────────────────────────────
+// Source: hardcoded DEFS + user pinned cities.
+// Dots always rendered — labels show/hide by tier via rescaleStations.
+// Weather: 3-min stale-while-revalidate. No filtering on zoom or pan.
+async function loadCitiesForView() {
+  if (!currentUser) return;
+
+  // 1. Load pinned cities from DB once per session into pinnedCityDefs[]
+  if (!pinnedCitiesLoaded && supa) {
+    const { data } = await supa.from('user_cities')
+      .select('id, name, lat, lng').eq('user_id', currentUser.id);
+    pinnedCityDefs = (data || []).map(c => ({
+      n: c.name, la: parseFloat(c.lat), lo: parseFloat(c.lng),
+      tier: 3, pinned: true, pinnedId: c.id,
+    }));
+    pinnedCitiesLoaded = true;
+  }
+  // allDefs always reflects current pinnedCityDefs — add/remove ops update it directly
+  const allDefs = [...DEFS, ...pinnedCityDefs];
+
+  const cacheKey = c => `${parseFloat(c.la).toFixed(2)},${parseFloat(c.lo).toFixed(2)}`;
+  const now = Date.now();
+
+  // 2a. Missing — no data yet (blocks render until fetched)
+  const missing = allDefs.filter(c => !cityWeatherCache.has(cacheKey(c)));
+  // 2b. Stale — data exists but older than TTL (render immediately, refresh in background)
+  const stale = allDefs.filter(c => {
+    const cached = cityWeatherCache.get(cacheKey(c));
+    return cached && now - cached.fetchedAt > CITY_CACHE_TTL;
+  });
+
+  // Helper: fetch a batch of defs and store results in cache
+  async function fetchAndCache(defs) {
+    const chunks = [];
+    for (let i = 0; i < defs.length; i += BATCH_SIZE) chunks.push(defs.slice(i, i + BATCH_SIZE));
+    const results = await Promise.all(chunks.map(fetchBatch));
+    results.filter(Boolean).flat().forEach(s => {
+      if (!s) return;
+      cityWeatherCache.set(`${s.la.toFixed(2)},${s.lo.toFixed(2)}`, { ...s, fetchedAt: Date.now() });
+    });
+    return results;
+  }
+
+  // Helper: rebuild stations array from cache and re-render everything
+  function rebuildAndDraw() {
+    stations = allDefs.map(c => cityWeatherCache.get(cacheKey(c))).filter(Boolean);
+    buildStationGrid();
+    drawStations();
+    if (lyr.temp) drawHeatmap();
+    renderNWS();
+    checkTh();
+    updateHomeDashboard();
+    document.getElementById('dataSource').textContent =
+      `Open-Meteo · NWS · ${stations.length} stations`;
+    document.getElementById('liveDot').style.background = 'var(--green)';
+    lastStationFetch = Date.now();
+  }
+
+  const banner = document.getElementById('fetchErrorBanner');
+  const msgEl  = document.getElementById('fetchErrorMsg');
+
+  // 3. Block only on first load (no data at all yet)
+  if (missing.length > 0) {
+    document.getElementById('liveDot').style.background = 'var(--cyan)';
+    const results = await fetchAndCache(missing);
+    const failed  = results.filter(r => r === null).length;
+    if (failed === results.length && stations.length === 0) {
+      stationFetchFails++;
+      banner.style.display = 'flex';
+      msgEl.textContent = `⚠ Weather data unavailable — retrying in ${INTERVAL_STATIONS / 60000} min`;
+      document.getElementById('liveDot').style.background = 'var(--red)';
+      return;
+    }
+    if (failed > 0) {
+      banner.style.display = 'flex';
+      msgEl.textContent = `⚠ Partial data — ${failed} sources failed`;
+    } else {
+      banner.style.display = 'none';
+      stationFetchFails = 0;
+    }
+  }
+
+  // 4. Render — stale cities show last-known data immediately, no flicker
+  rebuildAndDraw();
+
+  // 5. Background-refresh stale — quietly re-render when fresh data arrives
+  if (stale.length > 0) {
+    fetchAndCache(stale).then(() => rebuildAndDraw());
+  }
+}
+
+// Returns true if a city matches the user's stored home location
+function isHomeCity(c) {
+  if (!userProfile?.home_lat) return false;
+  return Math.abs(parseFloat(c.lat) - userProfile.home_lat) < 0.1 &&
+         Math.abs(parseFloat(c.lng) - userProfile.home_lng) < 0.1;
 }
 
 // rAF-debounced rescale — batches all per-frame zoom events into one DOM pass
@@ -1782,7 +2221,10 @@ function drawStations() {
 
 function zoomHome() {
   if (!projection || !zoom) return;
-  const pt = projection([HOME.lon, HOME.lat]);
+  // Use user's stored home location if set, fall back to NW Arkansas default
+  const homeLat = userProfile?.home_lat ?? HOME.lat;
+  const homeLon = userProfile?.home_lng ?? HOME.lon;
+  const pt = projection([homeLon, homeLat]);
   if (!pt) return;
   // FIX(bug): check if already at home — skip animation if within tolerance
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
@@ -2972,37 +3414,324 @@ function showToast(type, title, body) {
 // SETUP MODAL
 // ══════════════════════════════════════════════════════════
 function saveSetup() {
-  const push = document.getElementById('pushToken').value.trim();
+  const push  = document.getElementById('pushToken').value.trim();
   const hueIP = document.getElementById('hueIP').value.trim();
   const hueT  = document.getElementById('hueToken').value.trim();
+  const phone = document.getElementById('phoneNumber').value.trim();
   if (push)  cfg.push  = push;
   if (hueIP) cfg.hueIP = hueIP;
   if (hueT)  cfg.hueT  = hueT;
+  cfg.phone = phone; // allow clearing — always write
   saveUserSettings({ integrations: true, profile: true });
   closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
 }
+
+// ── HOME LOCATION ─────────────────────────────────────────
+function updateHomeLocationDisplay() {
+  const el = document.getElementById('homeLocationDisplay');
+  if (!el) return;
+  if (userProfile?.home_lat && userProfile?.home_lng) {
+    el.textContent = `${userProfile.home_lat.toFixed(4)}°N, ${Math.abs(userProfile.home_lng).toFixed(4)}°W`;
+    el.style.color = 'var(--green)';
+  } else {
+    el.textContent = 'Not set — using NW Arkansas default';
+    el.style.color = 'var(--text-dim)';
+  }
+}
+
+async function saveHomeLocation(lat, lng) {
+  if (!currentUser) return;
+  // Reverse-geocode to get county FIPS + city name via NWS points API
+  let homeFips = null, homeCityName = null;
+  try {
+    const r = await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`);
+    const j = await r.json();
+    const countyUrl = j.properties?.county || '';
+    const match = countyUrl.match(/(\d{5})$/);
+    if (match) homeFips = match[1];
+    // Extract city name + state abbreviation from relativeLocation + forecastZone
+    const city      = j.properties?.relativeLocation?.properties?.city;
+    const zoneUrl   = j.properties?.forecastZone || '';
+    const stateM    = zoneUrl.match(/zones\/forecast\/([A-Z]{2})/);
+    const stateAbbr = stateM ? stateM[1] : null;
+    if (city) homeCityName = stateAbbr ? `${city}, ${stateAbbr}` : city;
+  } catch (e) { /* ignore — FIPS optional */ }
+
+  await supa.from('profiles').update({
+    home_lat: lat, home_lng: lng, home_fips: homeFips
+  }).eq('id', currentUser.id);
+
+  userProfile = { ...userProfile, home_lat: lat, home_lng: lng, home_fips: homeFips };
+  updateHomeLocationDisplay();
+  showToast('watch', 'Home Set', `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W${homeFips ? ` · FIPS ${homeFips}` : ''}`);
+
+  // Option 4 — auto-pin home city so it always appears on the map
+  if (homeCityName) addPinnedCity(homeCityName, lat, lng, { silent: true });
+}
+
+function setHomeFromGeo() {
+  if (!navigator.geolocation) { showToast('alert','Error','Geolocation not supported.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => saveHomeLocation(pos.coords.latitude, pos.coords.longitude),
+    ()  => showToast('alert','Error','Could not get your location.')
+  );
+}
+
+async function testPhoneCall() {
+  const phone = document.getElementById('phoneNumber').value.trim();
+  if (!phone) {
+    showToast('alert', 'No Phone Number', 'Enter a phone number first, then hit TEST.');
+    return;
+  }
+  const btn = document.querySelector('button[onclick="testPhoneCall()"]');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+  try {
+    const session = (await supa.auth.getSession()).data.session;
+    if (!session) throw new Error('Not signed in');
+    const res = await fetch(
+      `${SUPA_URL}/functions/v1/test-call`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone }),
+      }
+    );
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Call failed');
+    showToast('watch', '📞 Test Call Sent', `Calling ${phone} — should ring within 15 seconds.`);
+  } catch (e) {
+    showToast('alert', 'Call Failed', e.message);
+  } finally {
+    if (btn) { btn.textContent = '📞 TEST'; btn.disabled = false; }
+  }
+}
+
+function setHomeFromManual() {
+  const lat = parseFloat(document.getElementById('homeManualLat').value);
+  const lng = parseFloat(document.getElementById('homeManualLng').value);
+  if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    showToast('alert', 'Invalid Coordinates', 'Enter a valid lat (−90 to 90) and lng (−180 to 180).');
+    return;
+  }
+  document.getElementById('homeManualLat').value = '';
+  document.getElementById('homeManualLng').value = '';
+  saveHomeLocation(lat, lng);
+}
+
+async function searchHomeCity() {
+  const q = document.getElementById('homeSearchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('homeSearchResults');
+  resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Searching…</div>';
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=us&limit=5&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en-US' } }
+    );
+    const items = await r.json();
+    if (!items.length) {
+      resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No results found.</div>';
+      return;
+    }
+    resultsEl.innerHTML = items.map(item => {
+      const city  = item.address?.city || item.address?.town || item.address?.village || item.address?.county || item.name;
+      const state = item.address?.state_code?.toUpperCase() || item.address?.state || '';
+      const label = state ? `${city}, ${state}` : city;
+      const la = parseFloat(item.lat), lo = parseFloat(item.lon);
+      return `<div onclick="selectHomeResult(${la},${lo})"
+        style="padding:7px 8px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer;border-radius:3px;border:1px solid var(--border);margin-bottom:4px;"
+        onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">
+        🏠 ${label}
+        <span style="color:var(--text-dim);font-size:9px;display:block;">${la.toFixed(3)}°N  ${Math.abs(lo).toFixed(3)}°W</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--red);padding:4px 0;">Search failed — try again.</div>';
+  }
+}
+
+function selectHomeResult(lat, lng) {
+  document.getElementById('homeSearchResults').innerHTML = '';
+  document.getElementById('homeSearchInput').value = '';
+  saveHomeLocation(lat, lng);
+}
+
+// ── MY CITIES ─────────────────────────────────────────────
+
+// Shared helper — insert into user_cities + push to pinnedCityDefs + re-render
+async function addPinnedCity(name, lat, lng, opts = {}) {
+  if (!currentUser || !supa) return;
+  const la = parseFloat(lat), lo = parseFloat(lng);
+  // Skip duplicate — already pinned within 0.05° of this location
+  if (pinnedCityDefs.some(c => Math.abs(c.la - la) < 0.05 && Math.abs(c.lo - lo) < 0.05)) return;
+  const { data, error } = await supa.from('user_cities')
+    .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
+    .select('id').single();
+  if (error) { if (!opts.silent) showToast('alert', 'Error', 'Could not save city.'); return; }
+  pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
+  cityWeatherCache.delete(`${la.toFixed(2)},${lo.toFixed(2)}`);
+  loadCitiesForView();
+  if (!opts.silent) {
+    showToast('watch', 'City Added', `${name} added to your map.`);
+    loadMyCitiesList();
+  }
+}
+
+// Remove a pinned city by its DB id
+async function removePinnedCity(id, lat, lng) {
+  if (!currentUser || !supa) return;
+  await supa.from('user_cities').delete().eq('id', id).eq('user_id', currentUser.id);
+  pinnedCityDefs = pinnedCityDefs.filter(c => c.pinnedId !== id);
+  cityWeatherCache.delete(`${parseFloat(lat).toFixed(2)},${parseFloat(lng).toFixed(2)}`);
+  loadCitiesForView();
+  loadMyCitiesList();
+}
+
+// Nominatim city search
+async function searchCity() {
+  const q = document.getElementById('citySearchInput').value.trim();
+  if (!q) return;
+  const resultsEl = document.getElementById('citySearchResults');
+  resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Searching…</div>';
+  try {
+    const r = await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&countrycodes=us&limit=5&addressdetails=1`,
+      { headers: { 'Accept-Language': 'en-US' } }
+    );
+    const items = await r.json();
+    if (!items.length) {
+      resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No results found.</div>';
+      return;
+    }
+    resultsEl.innerHTML = items.map(item => {
+      const city  = item.address?.city || item.address?.town || item.address?.village || item.address?.county || item.name;
+      const state = item.address?.state_code?.toUpperCase() || item.address?.state || '';
+      const label = state ? `${city}, ${state}` : city;
+      const la = parseFloat(item.lat), lo = parseFloat(item.lon);
+      return `<div onclick="selectCityResult('${label.replace(/'/g,"\\'")}',${la},${lo})"
+        style="padding:7px 8px;font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer;border-radius:3px;border:1px solid var(--border);margin-bottom:4px;"
+        onmouseover="this.style.background='rgba(255,255,255,.06)'" onmouseout="this.style.background=''">
+        📍 ${label}
+        <span style="color:var(--text-dim);font-size:9px;display:block;">${la.toFixed(3)}°N  ${Math.abs(lo).toFixed(3)}°W</span>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    resultsEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--red);padding:4px 0;">Search failed — try again.</div>';
+  }
+}
+
+async function selectCityResult(name, lat, lng) {
+  document.getElementById('citySearchResults').innerHTML = '';
+  document.getElementById('citySearchInput').value = '';
+  await addPinnedCity(name, lat, lng);
+}
+
+// Render the current pinned city list inside the setup modal
+async function loadMyCitiesList() {
+  const el = document.getElementById('myCitiesList');
+  if (!el || !currentUser || !supa) return;
+  const { data } = await supa.from('user_cities')
+    .select('id, name, lat, lng')
+    .eq('user_id', currentUser.id)
+    .order('created_at', { ascending: true });
+  if (!data?.length) {
+    el.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:2px 0;">No cities added yet.</div>';
+    return;
+  }
+  el.innerHTML = data.map(c => `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
+      <span style="flex:1;font-family:var(--font-mono);font-size:11px;color:var(--text);">📌 ${c.name}</span>
+      <button onclick="removePinnedCity('${c.id}',${c.lat},${c.lng})"
+        style="background:transparent;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:0 4px;line-height:1;"
+        title="Remove">✕</button>
+    </div>`).join('');
+}
+
+let settingHomeFromMap = false;
+function enableSetHomeFromMap() {
+  settingHomeFromMap = true;
+  const btn = document.getElementById('setHomeMapBtn');
+  if (btn) { btn.textContent = '🗺 CLICK MAP NOW'; btn.style.borderColor = 'var(--amber)'; btn.style.color = 'var(--amber)'; }
+  closeSetup();
+  showToast('watch', 'Click the Map', 'Click anywhere to set your home location.');
+}
+
+// ── RIGHT-CLICK CONTEXT MENU ──────────────────────────────
+let ctxLat = null, ctxLng = null;
+
+function showContextMenu(e, lat, lng) {
+  ctxLat = lat; ctxLng = lng;
+  const menu = document.getElementById('mapContextMenu');
+  menu.style.display = 'block';
+  menu.style.left = `${e.clientX}px`;
+  menu.style.top  = `${e.clientY}px`;
+}
+
+function hideContextMenu() {
+  document.getElementById('mapContextMenu').style.display = 'none';
+}
+
+async function ctxSetHome() {
+  hideContextMenu();
+  if (ctxLat !== null) await saveHomeLocation(ctxLat, ctxLng);
+}
+
+function ctxPinCity() {
+  hideContextMenu();
+  if (ctxLat === null) return;
+  document.getElementById('pinCityName').value = '';
+  document.getElementById('pinCityModal').style.display = 'flex';
+  setTimeout(() => document.getElementById('pinCityName').focus(), 50);
+}
+
+async function confirmPinCity() {
+  const name = document.getElementById('pinCityName').value.trim();
+  if (!name || !currentUser || ctxLat === null) return;
+  document.getElementById('pinCityModal').style.display = 'none';
+  await addPinnedCity(name, ctxLat, ctxLng);
+}
+
+// Close context menu on outside click
+document.addEventListener('click', hideContextMenu);
 async function openSetup() {
-  document.getElementById('pushToken').value = cfg.push  || '';
-  document.getElementById('hueIP').value     = cfg.hueIP || '';
-  document.getElementById('hueToken').value  = cfg.hueT  || '';
+  document.getElementById('pushToken').value   = cfg.push  || '';
+  document.getElementById('phoneNumber').value = cfg.phone || '';
+  document.getElementById('hueIP').value       = cfg.hueIP || '';
+  document.getElementById('hueToken').value    = cfg.hueT  || '';
   if (currentUser) {
     document.getElementById('setupDisplayName').value = userProfile?.display_name || '';
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser.email}`;
   }
+  updateHomeLocationDisplay();
+  loadMyCitiesList();
   // If profile hasn't loaded yet (race condition on page load), fetch it now before checking role
   if (!userProfile?.role && currentUser?.id) {
     const { data } = await supa.from('profiles').select('*').eq('id', currentUser.id).maybeSingle();
     if (data) userProfile = data;
   }
   const isAdmin = userProfile?.role === 'admin';
-  const adminPanel = document.getElementById('adminPanel');
-  if (adminPanel) {
-    adminPanel.style.display = isAdmin ? 'block' : 'none';
-    if (isAdmin) { loadInviteList(); loadUserList(); }
-  }
+  const adminTabBtn = document.getElementById('tabBtnAdmin');
+  if (adminTabBtn) adminTabBtn.style.display = isAdmin ? 'flex' : 'none';
+  if (isAdmin) { loadInviteList(); loadUserList(); }
+  switchSetupTab('settings');
   document.getElementById('setupModal').style.display = 'flex';
 }
 function closeSetup() { document.getElementById('setupModal').style.display = 'none'; }
+
+function switchSetupTab(tab) {
+  const isSettings = tab === 'settings';
+  document.getElementById('tabSettings').style.display = isSettings ? '' : 'none';
+  document.getElementById('tabAdmin').style.display   = isSettings ? 'none' : '';
+  const btnS = document.getElementById('tabBtnSettings');
+  const btnA = document.getElementById('tabBtnAdmin');
+  btnS.style.borderBottomColor = isSettings ? 'var(--amber)' : 'transparent';
+  btnS.style.color             = isSettings ? 'var(--amber)' : 'var(--text-dim)';
+  btnA.style.borderBottomColor = isSettings ? 'transparent' : 'var(--amber)';
+  btnA.style.color             = isSettings ? 'var(--text-dim)' : 'var(--amber)';
+}
 
 // ══════════════════════════════════════════════════════════
 // INVITE SYSTEM
@@ -3104,12 +3833,20 @@ async function loadInviteList() {
 
   if (error || !invites?.length) {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No invites yet.</div>';
+    const statP = document.getElementById('statPending');
+    if (statP) statP.textContent = '0';
     return;
   }
 
+  const now = new Date();
+  const pendingCount = invites.filter(inv =>
+    !inv.revoked_at && !inv.used_at && new Date(inv.expires_at) > now
+  ).length;
+  const statP = document.getElementById('statPending');
+  if (statP) statP.textContent = pendingCount;
+
   listEl.innerHTML = '';
   invites.forEach(inv => {
-    const now      = new Date();
     const expires  = new Date(inv.expires_at);
     const daysLeft = Math.ceil((expires - now) / (1000 * 60 * 60 * 24));
     let statusText, statusClass;
@@ -3150,6 +3887,11 @@ async function loadUserList() {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
     return;
   }
+  const disabledCount = users.filter(u => u.disabled).length;
+  const statU = document.getElementById('statUsers');
+  const statD = document.getElementById('statDisabled');
+  if (statU) statU.textContent = users.length;
+  if (statD) statD.textContent = disabledCount;
   listEl.innerHTML = '';
   users.forEach(u => {
     const isMe = u.id === currentUser?.id;
