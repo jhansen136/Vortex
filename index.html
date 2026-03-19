@@ -526,8 +526,14 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       </div>
       <div class="modal-field">
         <label>Phone Number <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
-        <input type="tel" id="phoneNumber" placeholder="+1 (555) 000-0000"
-          style="font-family:var(--font-mono);">
+        <div style="display:flex;gap:6px;align-items:center;">
+          <input type="tel" id="phoneNumber" placeholder="+1 (555) 000-0000"
+            style="flex:1;font-family:var(--font-mono);min-width:0;">
+          <button onclick="testPhoneCall()"
+            style="background:transparent;border:1px solid var(--green);color:var(--green);font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:1px;padding:7px 12px;border-radius:3px;cursor:pointer;white-space:nowrap;">
+            📞 TEST
+          </button>
+        </div>
         <div class="hint">Called directly for tornado warnings + severe conditions. Twilio · leave blank to disable.</div>
       </div>
       <div class="modal-field">
@@ -3469,6 +3475,38 @@ function setHomeFromGeo() {
     pos => saveHomeLocation(pos.coords.latitude, pos.coords.longitude),
     ()  => showToast('alert','Error','Could not get your location.')
   );
+}
+
+async function testPhoneCall() {
+  const phone = document.getElementById('phoneNumber').value.trim();
+  if (!phone) {
+    showToast('alert', 'No Phone Number', 'Enter a phone number first, then hit TEST.');
+    return;
+  }
+  const btn = document.querySelector('button[onclick="testPhoneCall()"]');
+  if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
+  try {
+    const session = (await supa.auth.getSession()).data.session;
+    if (!session) throw new Error('Not signed in');
+    const res = await fetch(
+      `${SUPABASE_URL}/functions/v1/test-call`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ phone }),
+      }
+    );
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.error || 'Call failed');
+    showToast('watch', '📞 Test Call Sent', `Calling ${phone} — should ring within 15 seconds.`);
+  } catch (e) {
+    showToast('alert', 'Call Failed', e.message);
+  } finally {
+    if (btn) { btn.textContent = '📞 TEST'; btn.disabled = false; }
+  }
 }
 
 function setHomeFromManual() {
