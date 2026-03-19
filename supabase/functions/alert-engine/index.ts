@@ -145,11 +145,18 @@ serve(async (req) => {
     const nwsJson   = await nwsRes.json();
     const allAlerts = nwsJson.features || [];
 
-    // ── 2. Load all active users with home location + phone ───────────────────
-    const { data: users, error: usersErr } = await supa
+    // ── 2. Load Pro/trial users only — free users don't get background alerts ─
+    const now = new Date().toISOString();
+    const { data: allUsers, error: usersErr } = await supa
       .from('profiles')
-      .select('id, display_name, home_lat, home_lng, home_fips, phone, last_threshold_call_at')
-      .eq('disabled', false);
+      .select('id, display_name, home_lat, home_lng, home_fips, phone, last_threshold_call_at, subscription_status, trial_ends_at')
+      .eq('disabled', false)
+      .in('subscription_status', ['pro', 'trial']);
+    // Filter out expired trials server-side
+    const users = (allUsers || []).filter((u: any) =>
+      u.subscription_status === 'pro' ||
+      (u.subscription_status === 'trial' && u.trial_ends_at && u.trial_ends_at > now)
+    );
 
     if (usersErr || !users?.length) {
       return new Response(JSON.stringify({ ok: true, users: 0 }), { status: 200 });

@@ -519,13 +519,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         </div>
         <div id="citySearchResults" style="margin-top:6px;"></div>
       </div>
+      <!-- Pro/trial status banner — shown for non-pro users -->
+      <div id="proStatusBanner" style="display:none;background:var(--surface);border:1px solid var(--amber);border-radius:4px;padding:10px 12px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div id="proStatusText" style="font-family:var(--font-mono);font-size:10px;color:var(--text);line-height:1.4;"></div>
+        <button onclick="showUpgradeModal()" style="background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:11px;letter-spacing:1px;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;white-space:nowrap;">UPGRADE</button>
+      </div>
+
       <div class="modal-field">
-        <label>ntfy.sh Channel URL</label>
+        <label>ntfy.sh Channel URL <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></label>
         <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
         <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
       </div>
       <div class="modal-field">
-        <label>Phone Number <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
+        <label>Phone Number <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span> <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
         <div style="display:flex;gap:6px;align-items:center;">
           <input type="tel" id="phoneNumber" placeholder="+1 (555) 000-0000"
             style="flex:1;font-family:var(--font-mono);min-width:0;">
@@ -611,6 +617,36 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 </div>
 
 <!-- Pin city name dialog -->
+<!-- ── UPGRADE MODAL ─────────────────────────────────────────────────── -->
+<div id="upgradeModal" style="display:none;position:fixed;inset:0;z-index:9600;background:rgba(0,0,0,.8);align-items:center;justify-content:center;">
+  <div style="background:var(--panel);border:1px solid var(--amber);border-radius:8px;padding:32px 28px;max-width:360px;width:90%;text-align:center;">
+    <div style="font-size:28px;margin-bottom:8px;">⚡</div>
+    <div style="font-family:var(--font-cond);font-weight:700;font-size:20px;letter-spacing:2px;color:var(--amber);margin-bottom:6px;">VORTEX PRO</div>
+    <div id="upgradeModalReason" style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);margin-bottom:20px;line-height:1.5;"></div>
+    <div style="background:var(--surface);border-radius:6px;padding:16px;margin-bottom:20px;text-align:left;">
+      <div style="font-family:var(--font-cond);font-size:12px;color:var(--text-dim);letter-spacing:1px;margin-bottom:10px;">WHAT YOU GET</div>
+      <div style="font-family:var(--font-mono);font-size:11px;color:var(--text);line-height:2;">
+        ✅ Background push notifications<br>
+        ✅ Tornado warning phone calls<br>
+        ✅ Unlimited pinned cities<br>
+        ✅ 14-day free trial — cancel anytime
+      </div>
+    </div>
+    <button id="upgradeMonthlyBtn" onclick="openStripeCheckout('monthly')"
+      style="width:100%;background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:14px;letter-spacing:1px;border:none;border-radius:4px;padding:12px;cursor:pointer;margin-bottom:8px;">
+      START FREE TRIAL — $5.99/mo
+    </button>
+    <button id="upgradeAnnualBtn" onclick="openStripeCheckout('annual')"
+      style="width:100%;background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border-radius:4px;padding:11px;cursor:pointer;margin-bottom:16px;">
+      $47.99/yr — SAVE 33%
+    </button>
+    <div onclick="document.getElementById('upgradeModal').style.display='none'"
+      style="font-family:var(--font-cond);font-size:12px;color:var(--text-dim);cursor:pointer;letter-spacing:1px;">
+      MAYBE LATER
+    </div>
+  </div>
+</div>
+
 <div id="pinCityModal" style="display:none;position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;">
   <div style="background:var(--panel);border:1px solid var(--border-bright);border-radius:6px;padding:24px;min-width:280px;">
     <div style="font-family:var(--font-cond);font-weight:700;font-size:14px;letter-spacing:2px;color:var(--amber);margin-bottom:12px;">PIN LOCATION</div>
@@ -1077,6 +1113,43 @@ function cityTier(pop) {
 let currentUser  = null;
 let userProfile  = null;
 let cfg = { push: '', hueIP: '', hueT: '', phone: '' };
+
+// ── STRIPE CHECKOUT URLS — fill in after Stripe setup ────────────────────────
+const STRIPE_MONTHLY_URL = '';  // e.g. https://buy.stripe.com/xxx
+const STRIPE_ANNUAL_URL  = '';  // e.g. https://buy.stripe.com/xxx
+
+// Returns true if the user has an active Pro or trial subscription
+function isProUser() {
+  if (!userProfile) return false;
+  const s = userProfile.subscription_status;
+  if (s === 'pro') return true;
+  if (s === 'trial') {
+    const ends = userProfile.trial_ends_at ? new Date(userProfile.trial_ends_at) : null;
+    return ends ? ends > new Date() : false;
+  }
+  return false;
+}
+
+// Returns days remaining in trial, or null if not on trial
+function trialDaysLeft() {
+  if (userProfile?.subscription_status !== 'trial') return null;
+  const ends = userProfile.trial_ends_at ? new Date(userProfile.trial_ends_at) : null;
+  if (!ends) return null;
+  const days = Math.ceil((ends - new Date()) / (1000 * 60 * 60 * 24));
+  return days > 0 ? days : 0;
+}
+
+function showUpgradeModal(reason = '') {
+  const el = document.getElementById('upgradeModalReason');
+  if (el) el.textContent = reason || 'Upgrade to VORTEX Pro to unlock background alerts, phone calls, and unlimited cities.';
+  document.getElementById('upgradeModal').style.display = 'flex';
+}
+
+function openStripeCheckout(plan) {
+  const url = plan === 'annual' ? STRIPE_ANNUAL_URL : STRIPE_MONTHLY_URL;
+  if (!url) { showToast('watch', 'Coming Soon', 'Stripe checkout not yet configured.'); return; }
+  window.open(url, '_blank');
+}
 
 // FIX(security): track active polling interval IDs so signOut can stop them
 let pollingIntervals = [];
@@ -3581,6 +3654,11 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
   if (pinnedCityDefs.some(c => Math.abs(c.la - la) < 0.15 && Math.abs(c.lo - lo) < 0.15)) return;
   // Skip duplicate — already exists in DEFS (built-in cities) within 0.15°
   if (DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.15 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.15)) return;
+  // Free users limited to 1 pinned city
+  if (!isProUser() && pinnedCityDefs.length >= 1 && !opts.silent) {
+    showUpgradeModal('Free accounts can pin 1 city. Upgrade to Pro for unlimited pinned cities.');
+    return;
+  }
   const { data, error } = await supa.from('user_cities')
     .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
     .select('id').single();
@@ -3731,6 +3809,33 @@ async function openSetup() {
   const adminTabBtn = document.getElementById('tabBtnAdmin');
   if (adminTabBtn) adminTabBtn.style.display = isAdmin ? 'flex' : 'none';
   if (isAdmin) { loadInviteList(); loadUserList(); }
+
+  // Pro status banner
+  const banner   = document.getElementById('proStatusBanner');
+  const bannerTxt = document.getElementById('proStatusText');
+  const pro = isProUser();
+  if (pro) {
+    banner.style.display = 'none';
+  } else {
+    const days = trialDaysLeft();
+    banner.style.display = 'flex';
+    if (days !== null && days > 0) {
+      bannerTxt.textContent = `⚡ Pro trial — ${days} day${days === 1 ? '' : 's'} remaining. Alert fields below are active during trial.`;
+    } else if (days === 0) {
+      bannerTxt.textContent = '⚠ Your free trial has expired. Upgrade to keep background alerts and phone calls.';
+    } else {
+      bannerTxt.textContent = 'Alert notifications and phone calls require VORTEX Pro.';
+    }
+  }
+
+  // Dim Pro fields for free users
+  const proFieldOpacity = pro ? '1' : '0.45';
+  const proFieldPointer = pro ? '' : 'none';
+  ['pushToken','phoneNumber'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.parentElement.style.opacity = proFieldOpacity; el.parentElement.style.pointerEvents = proFieldPointer; }
+  });
+
   switchSetupTab('settings');
   document.getElementById('setupModal').style.display = 'flex';
 }
