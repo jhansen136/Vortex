@@ -948,8 +948,8 @@ const HOME = {
 };
 const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
 
-// City label zoom thresholds
-const LABEL_ZOOM = { 1: 2.0, 2: 4.0, 3: 7.0 };
+// City label zoom thresholds — dots always show, labels fade in by tier as you zoom
+const LABEL_ZOOM = { 1: 1.5, 2: 3.5, 3: 7.0 };
 
 // Dynamic city zoom — population threshold by zoom scale
 function popThreshold(k) {
@@ -1375,9 +1375,7 @@ function initMap(us) {
     })
     .on('end', () => {
       if (lyr.radar) scheduleRadarRepaint();
-      // Load cities for the new viewport after zoom/pan settles
-      clearTimeout(cityLoadDebounce);
-      cityLoadDebounce = setTimeout(loadCitiesForView, 400);
+      // rescaleStations handles all label visibility on zoom — no city reload needed
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -1845,73 +1843,93 @@ function retryStationFetch() {
   loadCitiesForView();
 }
 
-// ── OPTION C CITY LOADER ───────────────────────────────────
-// Tiers loaded once per session (nationwide, no bbox) — zero DB calls on pan.
-// Weather uses 3-min stale-while-revalidate: show cached instantly, refresh in background.
-let cityLoadDebounce = null;
-
+// ── CITY LOADER ────────────────────────────────────────────
+// Source: hardcoded DEFS + user pinned cities.
+// Dots always rendered — labels show/hide by tier via rescaleStations.
+// Weather: 3-min stale-while-revalidate. No filtering on zoom or pan.
 async function loadCitiesForView() {
-  if (!supa || !currentUser) return;
-  const k = (currentTransform || d3.zoomIdentity).k;
+  if (!currentUser) return;
 
-  // 1. Load any tiers now needed for this zoom level (one-time per session)
-  for (const td of TIER_DEFS) {
-    if (k >= td.triggerK && !tiersLoaded[td.tier]) await loadTier(td);
-  }
-
-  // 2. Load pinned cities once per session (set pinnedCitiesLoaded=false to force reload)
-  if (!pinnedCitiesLoaded) {
+  // 1. Build full city list: DEFS + user pinned cities (loaded once per session)
+  const allDefs = [...DEFS];
+  if (!pinnedCitiesLoaded && supa) {
     const { data } = await supa.from('user_cities')
       .select('name, lat, lng').eq('user_id', currentUser.id);
-    (data || []).forEach(c => {
-      const key = `${parseFloat(c.lat).toFixed(2)},${parseFloat(c.lng).toFixed(2)}`;
-      cityPositionCache.set(key, {
-        name: c.name, state_abbr: '', lat: parseFloat(c.lat), lng: parseFloat(c.lng),
-        population: 0, pinned: true, tier: 3,
-      });
-    });
+    (data || []).forEach(c => allDefs.push({
+      n: c.name, la: parseFloat(c.lat), lo: parseFloat(c.lng),
+      tier: 3, pinned: true,
+    }));
     pinnedCitiesLoaded = true;
   }
 
-  // 3. Filter position cache to cities visible at the current zoom level
-  const bounds  = getMapBounds();
-  const pop     = popThreshold(k);
-  const visible = [...cityPositionCache.values()].filter(c => {
-    if (c.pinned) return true;
-    if (c.population < pop) return false;
-    if (!bounds) return false;
-    return c.lat >= bounds.minLat && c.lat <= bounds.maxLat &&
-           c.lng >= bounds.minLng && c.lng <= bounds.maxLng;
-  });
-
-  if (!visible.length) return;
-
+  const cacheKey = c => `${parseFloat(c.la).toFixed(2)},${parseFloat(c.lo).toFixed(2)}`;
   const now = Date.now();
 
-  // 4a. Cities with no weather data at all — must fetch before first render
-  const missing = visible.filter(c =>
-    !cityWeatherCache.has(`${c.lat.toFixed(2)},${c.lng.toFixed(2)}`)
-  );
-  // 4b. Cities with stale data — render last-known instantly, refresh silently in background
-  const stale = visible.filter(c => {
-    const cached = cityWeatherCache.get(`${c.lat.toFixed(2)},${c.lng.toFixed(2)}`);
+  // 2a. Missing — no data yet (blocks render until fetched)
+  const missing = allDefs.filter(c => !cityWeatherCache.has(cacheKey(c)));
+  // 2b. Stale — data exists but older than TTL (render immediately, refresh in background)
+  const stale = allDefs.filter(c => {
+    const cached = cityWeatherCache.get(cacheKey(c));
     return cached && now - cached.fetchedAt > CITY_CACHE_TTL;
   });
 
-  // 5. Block only for cities with no data yet
-  if (missing.length > 0) {
-    document.getElementById('liveDot').style.background = 'var(--cyan)';
-    await fetchCityWeatherBatch(missing);
+  // Helper: fetch a batch of defs and store results in cache
+  async function fetchAndCache(defs) {
+    const chunks = [];
+    for (let i = 0; i < defs.length; i += BATCH_SIZE) chunks.push(defs.slice(i, i + BATCH_SIZE));
+    const results = await Promise.all(chunks.map(fetchBatch));
+    results.filter(Boolean).flat().forEach(s => {
+      if (!s) return;
+      cityWeatherCache.set(`${s.la.toFixed(2)},${s.lo.toFixed(2)}`, { ...s, fetchedAt: Date.now() });
+    });
+    return results;
   }
 
-  // 6. Render — stale cities show their last-known data immediately (no flicker)
-  renderCitiesFromCache(visible);
-  document.getElementById('liveDot').style.background = 'var(--green)';
-  lastStationFetch = Date.now();
+  // Helper: rebuild stations array from cache and re-render everything
+  function rebuildAndDraw() {
+    stations = allDefs.map(c => cityWeatherCache.get(cacheKey(c))).filter(Boolean);
+    buildStationGrid();
+    drawStations();
+    if (lyr.temp) drawHeatmap();
+    renderNWS();
+    checkTh();
+    updateHomeDashboard();
+    document.getElementById('dataSource').textContent =
+      `Open-Meteo · NWS · ${stations.length} stations`;
+    document.getElementById('liveDot').style.background = 'var(--green)';
+    lastStationFetch = Date.now();
+  }
 
-  // 7. Background-refresh stale cities; quietly re-render when the new data arrives
+  const banner = document.getElementById('fetchErrorBanner');
+  const msgEl  = document.getElementById('fetchErrorMsg');
+
+  // 3. Block only on first load (no data at all yet)
+  if (missing.length > 0) {
+    document.getElementById('liveDot').style.background = 'var(--cyan)';
+    const results = await fetchAndCache(missing);
+    const failed  = results.filter(r => r === null).length;
+    if (failed === results.length && stations.length === 0) {
+      stationFetchFails++;
+      banner.style.display = 'flex';
+      msgEl.textContent = `⚠ Weather data unavailable — retrying in ${INTERVAL_STATIONS / 60000} min`;
+      document.getElementById('liveDot').style.background = 'var(--red)';
+      return;
+    }
+    if (failed > 0) {
+      banner.style.display = 'flex';
+      msgEl.textContent = `⚠ Partial data — ${failed} sources failed`;
+    } else {
+      banner.style.display = 'none';
+      stationFetchFails = 0;
+    }
+  }
+
+  // 4. Render — stale cities show last-known data immediately, no flicker
+  rebuildAndDraw();
+
+  // 5. Background-refresh stale — quietly re-render when fresh data arrives
   if (stale.length > 0) {
-    fetchCityWeatherBatch(stale).then(() => renderCitiesFromCache(visible));
+    fetchAndCache(stale).then(() => rebuildAndDraw());
   }
 }
 
