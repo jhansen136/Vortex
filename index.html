@@ -3489,7 +3489,7 @@ async function testPhoneCall() {
     const session = (await supa.auth.getSession()).data.session;
     if (!session) throw new Error('Not signed in');
     const res = await fetch(
-      `${SUPABASE_URL}/functions/v1/test-call`,
+      `${SUPA_URL}/functions/v1/test-call`,
       {
         method: 'POST',
         headers: {
