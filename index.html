@@ -1275,7 +1275,7 @@ async function saveUserSettings(updates) {
   }
   if (updates.profile) {
     const displayName = document.getElementById('setupDisplayName')?.value.trim();
-    const profileUpdate: Record<string, any> = { phone: cfg.phone || null };
+    const profileUpdate = { phone: cfg.phone || null };
     if (displayName) {
       profileUpdate.display_name = displayName;
       document.getElementById('userName').textContent = displayName;
