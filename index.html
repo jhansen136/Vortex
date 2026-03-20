@@ -436,7 +436,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <input type="password" id="authPassword" placeholder="Password" autocomplete="current-password"
         onkeydown="if(event.key==='Enter')authLogin()">
       <button id="authLoginBtn" onclick="authLogin()">Sign In</button>
-
+      <div id="authSwitch" style="display:flex;justify-content:space-between;">
+        <a href="#" onclick="showForgotPassword();return false;">Forgot password?</a>
+        <a href="#" onclick="showAuthRegister(null);return false;">Create account</a>
+      </div>
+    </div>
+    <div id="authFormForgot" style="display:none;flex-direction:column;gap:10px;">
+      <input type="email" id="authForgotEmail" placeholder="Email address" autocomplete="email"
+        onkeydown="if(event.key==='Enter')authForgotPassword()">
+      <button onclick="authForgotPassword()"
+        style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:11px;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:1px;cursor:pointer;margin-top:4px;">Send Reset Link</button>
+      <div style="text-align:center;font-size:12px;color:var(--text-dim);">
+        <a href="#" onclick="showAuthLogin();return false;" style="color:var(--amber);text-decoration:none;">Back to sign in</a>
+      </div>
     </div>
     <div id="authFormRegister" style="display:none;">
       <input type="text" id="authName" placeholder="Display name" autocomplete="name">
@@ -1172,23 +1184,47 @@ if (!AbortSignal.timeout) {
 const isMobile = () => window.innerWidth <= 768;
 
 // ── AUTH UI HELPERS ────────────────────────────────────────
-function showAuthLogin() {
-  document.getElementById('authFormLogin').style.display = 'flex';
-  document.getElementById('authFormRegister').style.display = 'none';
-  document.getElementById('authConfirmMsg').style.display = 'none';
+function _hideAllAuthForms() {
+  ['authFormLogin','authFormRegister','authFormForgot','authConfirmMsg'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
   document.getElementById('authError').textContent = '';
 }
+function showAuthLogin() {
+  _hideAllAuthForms();
+  document.getElementById('authFormLogin').style.display = 'flex';
+}
 function showAuthRegister(token) {
-  document.getElementById('authFormLogin').style.display = 'none';
+  _hideAllAuthForms();
   document.getElementById('authFormRegister').style.display = 'flex';
-  document.getElementById('authConfirmMsg').style.display = 'none';
-  document.getElementById('authError').textContent = '';
   if (token) document.getElementById('authInviteToken').value = token;
+}
+function showForgotPassword() {
+  _hideAllAuthForms();
+  document.getElementById('authFormForgot').style.display = 'flex';
+}
+async function authForgotPassword() {
+  const email = document.getElementById('authForgotEmail').value.trim();
+  if (!email) { authShowError('Enter your email address.'); return; }
+  const { error } = await supa.auth.resetPasswordForEmail(email, {
+    redirectTo: window.location.origin + window.location.pathname
+  });
+  if (error) { authShowError(error.message); return; }
+  document.getElementById('authError').style.color = 'var(--green)';
+  document.getElementById('authError').textContent = '✓ Reset link sent — check your email.';
 }
 function authSetLoading(on, form = 'login') {
   document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
-  document.getElementById('authFormLogin').style.display = (!on && form === 'login') ? 'flex' : 'none';
-  document.getElementById('authFormRegister').style.display = (!on && form === 'register') ? 'flex' : 'none';
+  if (!on) {
+    if (form === 'login') document.getElementById('authFormLogin').style.display = 'flex';
+    else if (form === 'register') document.getElementById('authFormRegister').style.display = 'flex';
+  } else {
+    ['authFormLogin','authFormRegister','authFormForgot'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+  }
   const lb = document.getElementById('authLoginBtn');
   const rb = document.getElementById('authRegisterBtn');
   if (lb) lb.disabled = on;
@@ -1226,20 +1262,19 @@ async function authRegister() {
 
   authSetLoading(true, 'register');
 
-  if (!token) { authSetLoading(false, 'register'); authShowError('Invalid or missing invite link. Please use the link from your invitation email.'); return; }
-
-  // Validate invite token against Supabase
-  const { data: invite, error: invErr } = await supa
-    .from('invites')
-    .select('*')
-    .eq('token', token)
-    .maybeSingle();
-
-  if (invErr || !invite) { authSetLoading(false, 'register'); authShowError('Invalid invite link.'); return; }
-  if (invite.revoked_at)  { authSetLoading(false, 'register'); authShowError('This invite has been revoked.'); return; }
-  if (invite.used_at)     { authSetLoading(false, 'register'); authShowError('This invite has already been used.'); return; }
-  if (new Date(invite.expires_at) < new Date()) { authSetLoading(false, 'register'); authShowError('This invite has expired. Please request a new one.'); return; }
-  if (invite.email.toLowerCase() !== email) { authSetLoading(false, 'register'); authShowError('This invite was sent to a different email address.'); return; }
+  // If an invite token is present, validate it (invite links still work)
+  if (token) {
+    const { data: invite, error: invErr } = await supa
+      .from('invites')
+      .select('*')
+      .eq('token', token)
+      .maybeSingle();
+    if (invErr || !invite) { authSetLoading(false, 'register'); authShowError('Invalid invite link.'); return; }
+    if (invite.revoked_at)  { authSetLoading(false, 'register'); authShowError('This invite has been revoked.'); return; }
+    if (invite.used_at)     { authSetLoading(false, 'register'); authShowError('This invite has already been used.'); return; }
+    if (new Date(invite.expires_at) < new Date()) { authSetLoading(false, 'register'); authShowError('This invite has expired.'); return; }
+    // Mark invite as used after signup succeeds (below)
+  }
 
   // Create the account — email confirmation required (Supabase will send the email)
   const { error: signUpError } = await supa.auth.signUp({
@@ -1248,8 +1283,8 @@ async function authRegister() {
   });
   if (signUpError) { authSetLoading(false, 'register'); authShowError(signUpError.message); return; }
 
-  // Mark invite as used
-  await supa.from('invites').update({ used_at: new Date().toISOString() }).eq('token', token).catch(() => {});
+  // Mark invite as used if one was provided
+  if (token) await supa.from('invites').update({ used_at: new Date().toISOString() }).eq('token', token).catch(() => {});
 
   // Show confirmation message — user must verify email before signing in
   authSetLoading(false, 'register');
