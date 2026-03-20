@@ -256,14 +256,21 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 /* ── MOBILE ── */
 @media (max-width: 768px) {
   body { height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
-  header { height: 44px; padding: 0 12px; }
-  .logo-text { font-size: 18px; letter-spacing: 2px; }
-  .logo-sub { display: none; }
-  .logo-icon { width: 24px; height: 24px; }
+  header {
+    height: calc(44px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+  }
+  /* Hide logo on mobile — free up horizontal space for status items */
+  .logo { display: none; }
   .header-status { gap: 10px; }
   .status-item { font-size: 9px; gap: 4px; }
-  .status-item:nth-child(3) { display: none; }
+  .status-item:nth-child(3) { display: none; }  /* hide NWS status */
   #clock { font-size: 11px; }
+  /* Condense MY LOCATION button — icon only */
+  #geoBtnLabel { display: none; }
+  /* Condense user pill — avatar only */
+  #userName { display: none; }
+  #userPill { padding: 4px 8px; }
   .main { position: relative; }
   .sidebar-left, .sidebar-right { display: none; }
   .map-wrap { position: absolute; inset: 0; }
@@ -332,7 +339,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     z-index: 20; backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
   }
   .home-chip-risk { font-family: var(--font-cond); font-weight: 700; font-size: 13px; }
-  .toast-container { top: 54px; left: 10px; right: 10px; }
+  .toast-container { top: calc(44px + env(safe-area-inset-top) + 10px); left: 10px; right: 10px; }
   .toast { min-width: unset; width: 100%; }
   #mapTooltip { font-size: 13px; padding: 13px 15px; min-width: 210px; }
   .tt-city { font-size: 18px; }
@@ -646,11 +653,11 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     </div>
     <button id="upgradeMonthlyBtn" onclick="openStripeCheckout('monthly')"
       style="width:100%;background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:14px;letter-spacing:1px;border:none;border-radius:4px;padding:12px;cursor:pointer;margin-bottom:8px;">
-      START FREE TRIAL — $5.99/mo
+      START FREE TRIAL — $4.99/mo
     </button>
     <button id="upgradeAnnualBtn" onclick="openStripeCheckout('annual')"
       style="width:100%;background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:1px;border-radius:4px;padding:11px;cursor:pointer;margin-bottom:16px;">
-      $47.99/yr — SAVE 33%
+      $39.99/yr — SAVE 33%
     </button>
     <div onclick="document.getElementById('upgradeModal').style.display='none'"
       style="font-family:var(--font-cond);font-size:12px;color:var(--text-dim);cursor:pointer;letter-spacing:1px;">
