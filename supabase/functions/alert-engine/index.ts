@@ -176,13 +176,53 @@ serve(async (req) => {
       .select('user_id, alert_key, sent_at')
       .gte('sent_at', cutoff48h);
 
-    // ── 4. Weather cache — deduplicated by rounded lat/lon ────────────────────
+    // ── 4. Weather cache — persistent in Supabase, 15-min TTL ────────────────
+    // Within a single run, also deduplicated in-memory to avoid redundant DB reads.
+    const WEATHER_TTL_MS = 15 * 60 * 1000;
     const wxCache = new Map<string, any>();
+
     async function getWeather(lat: number, lon: number) {
       const key = `${lat.toFixed(2)},${lon.toFixed(2)}`;
-      if (!wxCache.has(key)) wxCache.set(key, await fetchWeather(lat, lon));
-      return wxCache.get(key);
+      if (wxCache.has(key)) return wxCache.get(key);
+
+      // Check Supabase persistent cache
+      const { data: cached } = await supa
+        .from('weather_cache')
+        .select('data, fetched_at')
+        .eq('location_key', key)
+        .maybeSingle();
+
+      if (cached && (Date.now() - new Date(cached.fetched_at).getTime()) < WEATHER_TTL_MS) {
+        wxCache.set(key, cached.data);
+        return cached.data;
+      }
+
+      // Cache miss or stale — fetch from Open-Meteo
+      const wx = await fetchWeather(lat, lon);
+      wxCache.set(key, wx);
+
+      // Upsert back to Supabase (fire and forget)
+      supa.from('weather_cache')
+        .upsert({ location_key: key, data: wx, fetched_at: new Date().toISOString() })
+        .catch(() => {});
+
+      return wx;
     }
+
+    // Pre-fetch all unique user locations in parallel before the user loop.
+    // This means Open-Meteo is only called once per unique location per 15 min,
+    // regardless of how many users share that location.
+    const uniqueLocations = [...new Set(users.map((u: any) => {
+      const lat = u.home_lat ?? FALLBACK_LAT;
+      const lon = u.home_lng ?? FALLBACK_LON;
+      return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    }))];
+    await Promise.all(
+      uniqueLocations.map((locKey: string) => {
+        const [la, lo] = locKey.split(',').map(Number);
+        return getWeather(la, lo).catch(() => {});
+      })
+    );
 
     // ── 5. Process each user ──────────────────────────────────────────────────
     const newAlerts: { user_id: string; alert_key: string }[] = [];
