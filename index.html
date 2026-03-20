@@ -1158,8 +1158,10 @@ function showUpgradeModal(reason = '') {
 }
 
 function openStripeCheckout(plan) {
-  const url = plan === 'annual' ? STRIPE_ANNUAL_URL : STRIPE_MONTHLY_URL;
-  if (!url) { showToast('watch', 'Coming Soon', 'Stripe checkout not yet configured.'); return; }
+  const base = plan === 'annual' ? STRIPE_ANNUAL_URL : STRIPE_MONTHLY_URL;
+  if (!base) { showToast('watch', 'Coming Soon', 'Stripe checkout not yet configured.'); return; }
+  const email = currentUser?.email;
+  const url = email ? `${base}?prefilled_email=${encodeURIComponent(email)}` : base;
   window.open(url, '_blank');
 }
 
