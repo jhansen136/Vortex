@@ -283,7 +283,7 @@ serve(async (req) => {
             body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
             priority: isTornado ? 'max' : 'high',
             tags:     isTornado ? 'rotating_light,sos' : 'rain,warning',
-            call:     isTornado && !!phone,
+            call:     isTornado && !!phone && (pref?.call_tornado_enabled !== false),
             callType: 'warning',
           });
         }
@@ -304,7 +304,7 @@ serve(async (req) => {
           ];
           for (const c of checks) {
             if (c.value >= c.limit && !sentRecently(c.key)) {
-              const triggerCall = c.severe && !!phone && thresholdCallOk;
+              const triggerCall = c.severe && !!phone && thresholdCallOk && (pref?.call_threshold_enabled !== false);
               toSend.push({
                 key:      c.key,
                 title:    `VORTEX: ${c.label} Alert`,

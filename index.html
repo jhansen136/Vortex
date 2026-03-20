@@ -569,7 +569,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
             📞 TEST
           </button>
         </div>
-        <div class="hint">Called for tornado warnings + severe conditions (CAPE≥1500, SRH≥250, Risk≥70). Max 5 calls/day — you'll get a push notification if the limit is reached. Leave blank to disable.</div>
+        <div class="hint">Max 5 calls/day — you'll get a push notification if the limit is reached. Leave blank to disable.</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Tornado Warning Calls</div>
+              <div class="notif-sub">Call when a tornado warning is issued for your area</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="callTornado" data-sync-group="call-tornado" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Severe Threshold Calls</div>
+              <div class="notif-sub">Call when CAPE≥1500, SRH≥250, or Risk≥70</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="callThreshold" data-sync-group="call-threshold" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+        </div>
       </div>
       <div class="modal-field">
         <label>Philips Hue Bridge IP</label>
@@ -1361,9 +1377,11 @@ async function loadUserSettings(userId) {
     }
     if (prefRes.data) {
       const p = prefRes.data;
-      syncToggleGroup('push',  p.push_enabled);
-      syncToggleGroup('hue',   p.hue_enabled);
-      syncToggleGroup('audio', p.audio_enabled);
+      syncToggleGroup('push',           p.push_enabled);
+      syncToggleGroup('hue',            p.hue_enabled);
+      syncToggleGroup('audio',          p.audio_enabled);
+      syncToggleGroup('call-tornado',   p.call_tornado_enabled  ?? true);
+      syncToggleGroup('call-threshold', p.call_threshold_enabled ?? true);
     }
     const name = userProfile.display_name || currentUser?.email?.split('@')[0] || 'User';
     document.getElementById('userName').textContent = name;
@@ -1401,9 +1419,11 @@ async function saveUserSettings(updates) {
   if (updates.preferences) {
     await supa.from('preferences').upsert({
       user_id: uid,
-      push_enabled:  document.querySelector('[data-sync-group="push"]')?.checked  || false,
-      hue_enabled:   document.querySelector('[data-sync-group="hue"]')?.checked   || false,
-      audio_enabled: document.querySelector('[data-sync-group="audio"]')?.checked || true,
+      push_enabled:             document.querySelector('[data-sync-group="push"]')?.checked           || false,
+      hue_enabled:              document.querySelector('[data-sync-group="hue"]')?.checked            || false,
+      audio_enabled:            document.querySelector('[data-sync-group="audio"]')?.checked          || true,
+      call_tornado_enabled:     document.querySelector('[data-sync-group="call-tornado"]')?.checked   ?? true,
+      call_threshold_enabled:   document.querySelector('[data-sync-group="call-threshold"]')?.checked ?? true,
       updated_at: now
     }, { onConflict: 'user_id' });
   }
