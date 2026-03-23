@@ -452,6 +452,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .user-disable:hover{background:rgba(230,57,70,.15);}
 .user-enable{background:none;border:1px solid rgba(57,211,83,.4);color:var(--green);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
 .user-enable:hover{background:rgba(57,211,83,.15);}
+.user-make-pro{background:none;border:1px solid rgba(245,166,35,.4);color:var(--amber);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.user-make-pro:hover{background:rgba(245,166,35,.15);}
+.user-make-free{background:none;border:1px solid rgba(100,100,120,.4);color:var(--text-dim);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.user-make-free:hover{background:rgba(100,100,120,.15);}
 </style>
 </head>
 <body>
@@ -4126,7 +4130,7 @@ async function loadUserList() {
   listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
   const { data: users, error } = await supa
     .from('profiles')
-    .select('id, display_name, role, disabled')
+    .select('id, display_name, role, disabled, subscription_status')
     .order('role', { ascending: true });
   if (error || !users?.length) {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
@@ -4139,13 +4143,18 @@ async function loadUserList() {
   if (statD) statD.textContent = disabledCount;
   listEl.innerHTML = '';
   users.forEach(u => {
-    const isMe = u.id === currentUser?.id;
+    const isMe       = u.id === currentUser?.id;
     const isDisabled = u.disabled === true;
+    const isPro      = u.subscription_status === 'pro';
+    const subLabel   = u.subscription_status === 'pro' ? 'PRO' : u.subscription_status === 'trial' ? 'TRIAL' : 'FREE';
+    const subColor   = u.subscription_status === 'pro' ? 'var(--amber)' : u.subscription_status === 'trial' ? 'var(--cyan)' : 'var(--text-dim)';
     const row = document.createElement('div');
     row.className = 'user-row';
     row.innerHTML = `
       <div class="user-email" title="${u.display_name || u.id}">${u.display_name || '(no name)'}${isMe ? ' <span style="color:var(--cyan);font-size:9px;">YOU</span>' : ''}</div>
       <div class="user-role ${u.role === 'admin' ? '' : 'user'}">${(u.role || 'user').toUpperCase()}</div>
+      <span style="font-family:var(--font-mono);font-size:9px;color:${subColor};white-space:nowrap;">${subLabel}</span>
+      ${!isMe ? `<button class="${isPro ? 'user-make-free' : 'user-make-pro'}" onclick="toggleUserPro('${u.id}', ${isPro}, this)">${isPro ? 'MAKE FREE' : 'MAKE PRO'}</button>` : ''}
       ${!isMe ? `<button class="${isDisabled ? 'user-enable' : 'user-disable'}" onclick="toggleUserDisabled('${u.id}', ${isDisabled}, this)">${isDisabled ? 'ENABLE' : 'DISABLE'}</button>` : ''}
     `;
     listEl.appendChild(row);
@@ -4158,6 +4167,17 @@ async function toggleUserDisabled(id, currentlyDisabled, btn) {
     .update({ disabled: !currentlyDisabled })
     .eq('id', id);
   if (error) { btn.disabled = false; btn.textContent = currentlyDisabled ? 'ENABLE' : 'DISABLE'; showToast('watch','Error', error.message); return; }
+  loadUserList();
+}
+
+async function toggleUserPro(id, currentlyPro, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const newStatus = currentlyPro ? 'free' : 'pro';
+  const { error } = await supa.from('profiles')
+    .update({ subscription_status: newStatus, trial_ends_at: null })
+    .eq('id', id);
+  if (error) { btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE FREE' : 'MAKE PRO'; showToast('watch','Error', error.message); return; }
+  showToast('watch', currentlyPro ? 'Reverted to Free' : '⚡ Upgraded to Pro', 'User subscription updated.');
   loadUserList();
 }
 function updateCfgUI() {
