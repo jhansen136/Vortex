@@ -599,10 +599,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
           </div>
           <div class="notif-row" style="padding:4px 0;">
             <div>
-              <div class="notif-label">Severe Threshold Calls</div>
+              <div class="notif-label">Severe Threshold Calls <span id="callThresholdDefault" style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 5px;letter-spacing:1px;vertical-align:middle;">DEFAULT OFF</span></div>
               <div class="notif-sub">Call when CAPE≥1500, SRH≥250, or Risk≥70</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="callThreshold" data-sync-group="call-threshold" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+            <label class="toggle"><input type="checkbox" id="callThreshold" data-sync-group="call-threshold" onchange="onCallThresholdChange()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
         </div>
       </div>
@@ -617,6 +617,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       </div>
       <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
       <button class="btn-skip" onclick="closeSetup()">Close</button>
+      <div style="text-align:center;margin-top:8px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">
+        Questions? <a href="mailto:support@vortexintel.app" style="color:var(--amber);text-decoration:none;">support@vortexintel.app</a>
+      </div>
       <button class="btn-skip" onclick="authSignOut()" style="color:#ff6b6b;margin-top:4px;">Sign Out</button>
     </div>
 
@@ -1426,7 +1429,10 @@ async function loadUserSettings(userId) {
       syncToggleGroup('hue',            p.hue_enabled);
       syncToggleGroup('audio',          p.audio_enabled);
       syncToggleGroup('call-tornado',   p.call_tornado_enabled  ?? true);
-      syncToggleGroup('call-threshold', p.call_threshold_enabled ?? true);
+      syncToggleGroup('call-threshold', p.call_threshold_enabled ?? false);
+      // Show/hide DEFAULT OFF badge based on current state
+      const defBadge = document.getElementById('callThresholdDefault');
+      if (defBadge) defBadge.style.display = (p.call_threshold_enabled ?? false) ? 'none' : 'inline';
     }
     const name = userProfile.display_name || currentUser?.email?.split('@')[0] || 'User';
     document.getElementById('userName').textContent = name;
@@ -1444,6 +1450,13 @@ function syncToggleGroup(group, value) {
   document.querySelectorAll(`[data-sync-group="${group}"]`).forEach(el => {
     el.checked = !!value;
   });
+}
+
+function onCallThresholdChange() {
+  const checked = document.getElementById('callThreshold')?.checked;
+  const badge = document.getElementById('callThresholdDefault');
+  if (badge) badge.style.display = checked ? 'none' : 'inline';
+  saveUserSettings({preferences: true});
 }
 
 // ── SAVE USER SETTINGS ────────────────────────────────────
@@ -1468,7 +1481,7 @@ async function saveUserSettings(updates) {
       hue_enabled:              document.querySelector('[data-sync-group="hue"]')?.checked            || false,
       audio_enabled:            document.querySelector('[data-sync-group="audio"]')?.checked          || true,
       call_tornado_enabled:     document.querySelector('[data-sync-group="call-tornado"]')?.checked   ?? true,
-      call_threshold_enabled:   document.querySelector('[data-sync-group="call-threshold"]')?.checked ?? true,
+      call_threshold_enabled:   document.querySelector('[data-sync-group="call-threshold"]')?.checked ?? false,
       updated_at: now
     }, { onConflict: 'user_id' });
   }
