@@ -4173,10 +4173,18 @@ async function toggleUserDisabled(id, currentlyDisabled, btn) {
 async function toggleUserPro(id, currentlyPro, btn) {
   btn.disabled = true; btn.textContent = '…';
   const newStatus = currentlyPro ? 'free' : 'pro';
-  const { error } = await supa.from('profiles')
-    .update({ subscription_status: newStatus, trial_ends_at: null })
-    .eq('id', id);
-  if (error) { btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE FREE' : 'MAKE PRO'; showToast('watch','Error', error.message); return; }
+  const { data, error } = await supa.from('profiles')
+    .update({ subscription_status: newStatus })
+    .eq('id', id)
+    .select('id');
+  if (error) {
+    btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE FREE' : 'MAKE PRO';
+    showToast('watch', 'Error', error.message); return;
+  }
+  if (!data?.length) {
+    btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE FREE' : 'MAKE PRO';
+    showToast('watch', 'Error', 'Update blocked — check RLS policy or user ID.'); return;
+  }
   showToast('watch', currentlyPro ? 'Reverted to Free' : '⚡ Upgraded to Pro', 'User subscription updated.');
   loadUserList();
 }
