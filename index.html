@@ -58,6 +58,21 @@ function pwaBannerDismiss() {
   document.getElementById('pwaBanner').style.display = 'none';
   localStorage.setItem('pwaDismissed', '1');
 }
+
+// iOS PWA install prompt — Safari never fires beforeinstallprompt
+// Show manual instructions when: iOS device + Safari + not already installed as standalone
+function checkIOSInstallPrompt() {
+  const isIOS        = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true;
+  const isSafari     = /safari/i.test(navigator.userAgent) && !/chrome|crios|fxios|edgios/i.test(navigator.userAgent);
+  if (isIOS && isSafari && !isStandalone && !localStorage.getItem('iosPwaDismissed')) {
+    setTimeout(() => { const b = document.getElementById('iosPwaBanner'); if (b) b.style.display = 'flex'; }, 12000);
+  }
+}
+function iosPwaDismiss() {
+  document.getElementById('iosPwaBanner').style.display = 'none';
+  localStorage.setItem('iosPwaDismissed', '1');
+}
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
@@ -437,6 +452,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .user-disable:hover{background:rgba(230,57,70,.15);}
 .user-enable{background:none;border:1px solid rgba(57,211,83,.4);color:var(--green);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
 .user-enable:hover{background:rgba(57,211,83,.15);}
+.user-make-pro{background:none;border:1px solid rgba(245,166,35,.4);color:var(--amber);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.user-make-pro:hover{background:rgba(245,166,35,.15);}
+.user-make-free{background:none;border:1px solid rgba(100,100,120,.4);color:var(--text-dim);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
+.user-make-free:hover{background:rgba(100,100,120,.15);}
 </style>
 </head>
 <body>
@@ -704,14 +723,28 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 </div>
 
 <!-- PWA Install Banner -->
+<!-- Android PWA install banner (Chrome fires beforeinstallprompt) -->
 <div id="pwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;align-items:center;gap:12px;backdrop-filter:blur(8px);">
-  <div style="font-size:22px;">⟳</div>
+  <div style="font-size:22px;">📱</div>
   <div style="flex:1;">
     <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--amber);letter-spacing:1px;">ADD VORTEX TO HOME SCREEN</div>
-    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px;">Get instant access to storm intelligence</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:2px;">App-like alerts — no app store required</div>
   </div>
   <button onclick="pwaBannerInstall()" style="background:var(--amber);color:#000;border:none;border-radius:4px;padding:7px 12px;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;letter-spacing:1px;cursor:pointer;white-space:nowrap;">INSTALL</button>
   <button onclick="pwaBannerDismiss()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;">✕</button>
+</div>
+
+<!-- iOS PWA install banner (Safari doesn't fire beforeinstallprompt — manual instructions) -->
+<div id="iosPwaBanner" style="display:none;position:fixed;bottom:70px;left:12px;right:12px;z-index:9000;background:rgba(10,13,18,.96);border:1px solid var(--amber);border-radius:6px;padding:12px 14px;align-items:flex-start;gap:12px;backdrop-filter:blur(8px);">
+  <div style="font-size:22px;padding-top:2px;">📱</div>
+  <div style="flex:1;">
+    <div style="font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;color:var(--amber);letter-spacing:1px;">ADD VORTEX TO HOME SCREEN</div>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text-dim);margin-top:4px;line-height:1.6;">
+      Tap <span style="color:var(--text);">Share</span> <span style="font-size:12px;">⎙</span> → <span style="color:var(--text);">"Add to Home Screen"</span><br>
+      Get app-like alerts without the App Store
+    </div>
+  </div>
+  <button onclick="iosPwaDismiss()" style="background:none;border:none;color:var(--text-dim);font-size:18px;cursor:pointer;padding:0 2px;line-height:1;flex-shrink:0;">✕</button>
 </div>
 
 <header>
@@ -850,16 +883,22 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="panel-section">
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
-        <div><div class="notif-label">Phone Push</div><div class="notif-sub" id="pushSub">ntfy.sh</div></div>
+        <div>
+          <div class="notif-label">Phone Push <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-sub" id="pushSub">Background alerts via ntfy.sh</div>
+        </div>
         <!-- FIX(medium): data-sync-group replaces hardcoded peer ID mapping -->
         <label class="toggle"><input type="checkbox" id="togglePush" data-sync-group="push" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row">
-        <div><div class="notif-label">Smart Lights</div><div class="notif-sub" id="hueSub">Philips Hue</div></div>
+        <div>
+          <div class="notif-label">Smart Lights <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-sub" id="hueSub">Philips Hue</div>
+        </div>
         <label class="toggle"><input type="checkbox" id="toggleHue" data-sync-group="hue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row">
-        <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren</div></div>
+        <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren — works while app is open</div></div>
         <label class="toggle"><input type="checkbox" id="toggleAudio" data-sync-group="audio"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row" style="border:none;padding-top:10px;gap:8px;flex-wrap:wrap;">
@@ -998,15 +1037,21 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="panel-section">
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
-        <div><div class="notif-label">Phone Push</div><div class="notif-sub" id="pushSubM">ntfy.sh</div></div>
+        <div>
+          <div class="notif-label">Phone Push <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-sub" id="pushSubM">Background alerts via ntfy.sh</div>
+        </div>
         <label class="toggle"><input type="checkbox" id="togglePushM" data-sync-group="push" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row">
-        <div><div class="notif-label">Smart Lights</div><div class="notif-sub" id="hueSubM">Philips Hue</div></div>
+        <div>
+          <div class="notif-label">Smart Lights <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-sub" id="hueSubM">Philips Hue</div>
+        </div>
         <label class="toggle"><input type="checkbox" id="toggleHueM" data-sync-group="hue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
       <div class="notif-row" style="border:none;">
-        <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren</div></div>
+        <div><div class="notif-label">Audio Alarm</div><div class="notif-sub">Browser siren — works while app is open</div></div>
         <label class="toggle"><input type="checkbox" id="toggleAudioM" data-sync-group="audio"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
       </div>
     </div>
@@ -1160,8 +1205,8 @@ let userProfile  = null;
 let cfg = { push: '', hueIP: '', hueT: '', phone: '' };
 
 // ── STRIPE CHECKOUT URLS — fill in after Stripe setup ────────────────────────
-const STRIPE_MONTHLY_URL = 'https://buy.stripe.com/test_eVqbJ1gaS8zKdOmbVN5Ne00';
-const STRIPE_ANNUAL_URL  = 'https://buy.stripe.com/test_4gMdR96AieY89y63ph5Ne01';
+const STRIPE_MONTHLY_URL = 'https://buy.stripe.com/aFa8wOfPX6eM7SXe0NbV600';
+const STRIPE_ANNUAL_URL  = 'https://buy.stripe.com/aFa5kC7jrfPm60T09XbV601';
 
 // Returns true if the user has an active Pro or trial subscription
 function isProUser() {
@@ -1509,6 +1554,8 @@ async function resolveAuth(session, source) {
     authReady = true;
     console.log('[VORTEX] authReady=true (pre-settings), mapReady=', mapReady, 'dataInitialized=', dataInitialized);
     checkReadyToLoad();
+    // Show iOS install prompt once user is logged in (non-fatal, no-op on non-iOS)
+    checkIOSInstallPrompt();
     // Load settings in background — failure is non-fatal
     loadUserSettings(session.user.id).catch(err => {
       console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
@@ -3533,6 +3580,7 @@ function siren(warn) {
 }
 
 async function testPush() {
+  if (!isProUser()) { showUpgradeModal('Background push notifications require VORTEX Pro.'); return; }
   if (!cfg.push) { showToast('watch','Not Configured','Add ntfy.sh URL in Configure.'); return; }
   const top = stations.sort((a,b) => b.risk-a.risk)[0];
   const msg = top ? `${top.n} — Risk ${top.risk}/100 | CAPE ${top.cape} J/kg` : 'Test from VORTEX';
@@ -3544,6 +3592,7 @@ async function testPush() {
 }
 
 function testHue() {
+  if (!isProUser()) { showUpgradeModal('Smart light alerts require VORTEX Pro.'); return; }
   if (!cfg.hueIP || !cfg.hueT) { showToast('watch','Not Configured','Add Hue Bridge IP and token first.'); return; }
   hueFlash('#e63946'); showToast('tornado','🔴 Hue Test',`Red flash → ${cfg.hueIP}`);
 }
@@ -4081,7 +4130,7 @@ async function loadUserList() {
   listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
   const { data: users, error } = await supa
     .from('profiles')
-    .select('id, display_name, role, disabled')
+    .select('id, display_name, role, disabled, subscription_status')
     .order('role', { ascending: true });
   if (error || !users?.length) {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
@@ -4094,13 +4143,18 @@ async function loadUserList() {
   if (statD) statD.textContent = disabledCount;
   listEl.innerHTML = '';
   users.forEach(u => {
-    const isMe = u.id === currentUser?.id;
+    const isMe       = u.id === currentUser?.id;
     const isDisabled = u.disabled === true;
+    const isPro      = u.subscription_status === 'pro';
+    const subLabel   = u.subscription_status === 'pro' ? 'PRO' : u.subscription_status === 'trial' ? 'TRIAL' : 'FREE';
+    const subColor   = u.subscription_status === 'pro' ? 'var(--amber)' : u.subscription_status === 'trial' ? 'var(--cyan)' : 'var(--text-dim)';
     const row = document.createElement('div');
     row.className = 'user-row';
     row.innerHTML = `
       <div class="user-email" title="${u.display_name || u.id}">${u.display_name || '(no name)'}${isMe ? ' <span style="color:var(--cyan);font-size:9px;">YOU</span>' : ''}</div>
       <div class="user-role ${u.role === 'admin' ? '' : 'user'}">${(u.role || 'user').toUpperCase()}</div>
+      <span style="font-family:var(--font-mono);font-size:9px;color:${subColor};white-space:nowrap;">${subLabel}</span>
+      ${!isMe ? `<button class="${isPro ? 'user-make-free' : 'user-make-pro'}" onclick="toggleUserPro('${u.id}', ${isPro}, this)">${isPro ? 'MAKE FREE' : 'MAKE PRO'}</button>` : ''}
       ${!isMe ? `<button class="${isDisabled ? 'user-enable' : 'user-disable'}" onclick="toggleUserDisabled('${u.id}', ${isDisabled}, this)">${isDisabled ? 'ENABLE' : 'DISABLE'}</button>` : ''}
     `;
     listEl.appendChild(row);
@@ -4113,6 +4167,25 @@ async function toggleUserDisabled(id, currentlyDisabled, btn) {
     .update({ disabled: !currentlyDisabled })
     .eq('id', id);
   if (error) { btn.disabled = false; btn.textContent = currentlyDisabled ? 'ENABLE' : 'DISABLE'; showToast('watch','Error', error.message); return; }
+  loadUserList();
+}
+
+async function toggleUserPro(id, currentlyPro, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const newStatus = currentlyPro ? 'free' : 'pro';
+  const { data, error } = await supa.from('profiles')
+    .update({ subscription_status: newStatus })
+    .eq('id', id)
+    .select('id');
+  if (error) {
+    btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE FREE' : 'MAKE PRO';
+    showToast('watch', 'Error', error.message); return;
+  }
+  if (!data?.length) {
+    btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE FREE' : 'MAKE PRO';
+    showToast('watch', 'Error', 'Update blocked — check RLS policy or user ID.'); return;
+  }
+  showToast('watch', currentlyPro ? 'Reverted to Free' : '⚡ Upgraded to Pro', 'User subscription updated.');
   loadUserList();
 }
 function updateCfgUI() {
@@ -4142,6 +4215,12 @@ function syncLayerBtn(name, srcBtn) {
 
 // FIX(medium): toggleNotif uses data-sync-group instead of hardcoded peer map
 function toggleNotif(type, cb) {
+  // Push and Hue are Pro features — gate before checking config
+  if ((type === 'push' || type === 'hue') && cb.checked && !isProUser()) {
+    const label = type === 'push' ? 'Background push notifications' : 'Smart light alerts';
+    showUpgradeModal(`${label} require VORTEX Pro. Get alerts even when your phone is asleep.`);
+    syncToggleGroup(type, false); return;
+  }
   if (type === 'push' && cb.checked && !cfg.push) {
     showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');
     syncToggleGroup('push', false); return;
