@@ -404,6 +404,57 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .sheet-body::-webkit-scrollbar{width:3px;}
 .sheet-body::-webkit-scrollbar-thumb{background:var(--border-bright);border-radius:2px;}
 
+/* ── LANDING PAGE ── */
+#landingPage{position:fixed;inset:0;z-index:9998;background:#0a0b0d;overflow-y:auto;display:none;}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid rgba(255,255,255,.06);}
+.lp-logo{font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--amber);letter-spacing:4px;}
+.lp-nav-links{display:flex;gap:16px;align-items:center;}
+.lp-nav-links a{font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);text-decoration:none;transition:color .15s;}
+.lp-nav-links a:hover{color:var(--text);}
+.lp-signin-btn{background:transparent;border:1px solid var(--border-bright);color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:8px 18px;border-radius:4px;cursor:pointer;transition:border-color .15s,color .15s;}
+.lp-signin-btn:hover{border-color:var(--amber);color:var(--amber);}
+.lp-hero{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:90px 24px 70px;max-width:720px;margin:0 auto;}
+.lp-eyebrow{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--amber);margin-bottom:20px;}
+.lp-headline{font-family:'Barlow Condensed',sans-serif;font-size:clamp(48px,8vw,84px);font-weight:800;letter-spacing:2px;text-transform:uppercase;color:#e8edf5;line-height:1;margin-bottom:24px;}
+.lp-headline span{color:var(--amber);}
+.lp-subhead{font-family:'Barlow',sans-serif;font-size:17px;color:var(--text-dim);line-height:1.7;margin-bottom:40px;max-width:520px;}
+.lp-ctas{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;}
+.lp-cta-primary{background:var(--amber);color:#000;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px 32px;border-radius:4px;border:none;cursor:pointer;transition:opacity .15s;}
+.lp-cta-primary:hover{opacity:.88;}
+.lp-cta-secondary{background:transparent;color:var(--text);font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:14px 32px;border-radius:4px;border:1px solid var(--border-bright);cursor:pointer;transition:border-color .15s,color .15s;}
+.lp-cta-secondary:hover{border-color:var(--amber);color:var(--amber);}
+.lp-stats{display:flex;justify-content:center;gap:0;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);}
+.lp-stat{flex:1;max-width:220px;padding:28px 20px;text-align:center;border-right:1px solid rgba(255,255,255,.06);}
+.lp-stat:last-child{border-right:none;}
+.lp-stat-val{font-family:'Share Tech Mono',monospace;font-size:28px;color:var(--amber);margin-bottom:6px;}
+.lp-stat-label{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);}
+.lp-features{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.06);margin:0;}
+.lp-feature{background:#0a0b0d;padding:40px 32px;}
+.lp-feature-icon{font-size:28px;margin-bottom:16px;}
+.lp-feature-title{font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:#e8edf5;margin-bottom:10px;}
+.lp-feature-desc{font-family:'Barlow',sans-serif;font-size:14px;color:var(--text-dim);line-height:1.7;}
+.lp-pricing{display:flex;flex-direction:column;align-items:center;padding:80px 24px;text-align:center;}
+.lp-pricing-label{font-family:'Barlow Condensed',sans-serif;font-size:11px;font-weight:700;letter-spacing:4px;text-transform:uppercase;color:var(--text-dim);margin-bottom:16px;}
+.lp-pricing-card{background:#0f1114;border:1px solid var(--border-bright);border-radius:12px;padding:40px 48px;max-width:360px;width:100%;}
+.lp-price{font-family:'Share Tech Mono',monospace;font-size:48px;color:#e8edf5;margin-bottom:4px;}
+.lp-price span{font-size:18px;color:var(--text-dim);}
+.lp-price-period{font-family:'Barlow Condensed',sans-serif;font-size:12px;letter-spacing:2px;color:var(--text-dim);text-transform:uppercase;margin-bottom:28px;}
+.lp-pricing-features{list-style:none;padding:0;margin:0 0 32px;text-align:left;display:flex;flex-direction:column;gap:10px;}
+.lp-pricing-features li{font-family:'Barlow',sans-serif;font-size:14px;color:var(--text-dim);padding-left:20px;position:relative;}
+.lp-pricing-features li::before{content:'✓';position:absolute;left:0;color:var(--amber);}
+.lp-trial-note{font-family:'Barlow',sans-serif;font-size:12px;color:var(--text-dim);margin-top:16px;}
+.lp-footer{border-top:1px solid rgba(255,255,255,.06);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;}
+.lp-footer-copy{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);}
+@media(max-width:768px){
+  .lp-nav{padding:16px 20px;}
+  .lp-hero{padding:60px 20px 50px;}
+  .lp-features{grid-template-columns:1fr;}
+  .lp-stats{flex-wrap:wrap;}
+  .lp-stat{min-width:140px;border-right:none;border-bottom:1px solid rgba(255,255,255,.06);}
+  .lp-pricing-card{padding:32px 24px;}
+  .lp-footer{flex-direction:column;gap:8px;text-align:center;}
+}
+
 /* ── AUTH OVERLAY ── */
 #authOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0a0b0d 0%,#0d1420 100%);display:flex;align-items:center;justify-content:center;}
 #authBox{background:var(--panel);border:1px solid var(--border-bright);border-radius:12px;padding:40px 36px;width:340px;max-width:90vw;display:flex;flex-direction:column;gap:14px;}
@@ -461,6 +512,80 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 <body>
 
 <!-- AUTH OVERLAY -->
+<div id="landingPage">
+  <nav class="lp-nav">
+    <div class="lp-logo">⟳ VORTEX</div>
+    <div class="lp-nav-links">
+      <button class="lp-signin-btn" onclick="showLoginFromLanding()">Sign In</button>
+    </div>
+  </nav>
+
+  <section class="lp-hero">
+    <div class="lp-eyebrow">Storm Intelligence Platform</div>
+    <h1 class="lp-headline">KNOW BEFORE<br>THE <span>STORM</span></h1>
+    <p class="lp-subhead">Real-time NWS tornado warnings, live weather maps, and risk scoring — delivered to your phone before the sirens sound.</p>
+    <div class="lp-ctas">
+      <button class="lp-cta-primary" onclick="showTrialSignup()">Start Free Trial →</button>
+      <button class="lp-cta-secondary" onclick="showLoginFromLanding()">Sign In</button>
+    </div>
+  </section>
+
+  <div class="lp-stats">
+    <div class="lp-stat">
+      <div class="lp-stat-val">&lt; 60s</div>
+      <div class="lp-stat-label">Alert Delivery</div>
+    </div>
+    <div class="lp-stat">
+      <div class="lp-stat-val">0–100</div>
+      <div class="lp-stat-label">Risk Score</div>
+    </div>
+    <div class="lp-stat">
+      <div class="lp-stat-val">24/7</div>
+      <div class="lp-stat-label">Monitoring</div>
+    </div>
+  </div>
+
+  <div class="lp-features">
+    <div class="lp-feature">
+      <div class="lp-feature-icon">⚡</div>
+      <div class="lp-feature-title">Instant NWS Alerts</div>
+      <div class="lp-feature-desc">Tornado warnings, severe thunderstorm alerts, and flash flood notices pushed to your phone within 60 seconds of NWS issuance.</div>
+    </div>
+    <div class="lp-feature">
+      <div class="lp-feature-icon">🗺</div>
+      <div class="lp-feature-title">Live Weather Map</div>
+      <div class="lp-feature-desc">Interactive US map with real-time temperature, wind speed, and active severe weather overlays updated every minute.</div>
+    </div>
+    <div class="lp-feature">
+      <div class="lp-feature-icon">📊</div>
+      <div class="lp-feature-title">Storm Risk Scoring</div>
+      <div class="lp-feature-desc">A 0–100 risk index for your exact location, calculated every minute from live conditions so you always know your exposure.</div>
+    </div>
+  </div>
+
+  <div class="lp-pricing">
+    <div class="lp-pricing-label">Pricing</div>
+    <div class="lp-pricing-card">
+      <div class="lp-price">$4.99<span>/mo</span></div>
+      <div class="lp-price-period">or $39.99 / year — save 33%</div>
+      <ul class="lp-pricing-features">
+        <li>Real-time NWS push notifications</li>
+        <li>Live weather map + overlays</li>
+        <li>Storm risk scoring 0–100</li>
+        <li>Tornado & severe weather alerts</li>
+        <li>Cancel anytime</li>
+      </ul>
+      <button class="lp-cta-primary" style="width:100%;font-size:15px;padding:16px;" onclick="showTrialSignup()">Start 14-Day Free Trial →</button>
+      <div class="lp-trial-note">No charge for 14 days. Cancel anytime.</div>
+    </div>
+  </div>
+
+  <footer class="lp-footer">
+    <div class="lp-footer-copy">© 2026 Vortex Intel LLC</div>
+    <div class="lp-footer-copy">vortexintel.app</div>
+  </footer>
+</div>
+
 <div id="authOverlay" style="display:flex;">
   <div id="authBox">
     <div id="authLogo">⟳ VORTEX</div>
@@ -1364,6 +1489,17 @@ function _hideAllAuthForms() {
   });
   document.getElementById('authError').textContent = '';
 }
+function showLoginFromLanding() {
+  document.getElementById('landingPage').style.display = 'none';
+  document.getElementById('authOverlay').style.display = 'flex';
+  showAuthLogin();
+}
+function showTrialSignup() {
+  document.getElementById('landingPage').style.display = 'none';
+  document.getElementById('authOverlay').style.display = 'flex';
+  showAuthRegister(null);
+}
+
 function showAuthLogin() {
   _hideAllAuthForms();
   document.getElementById('authFormLogin').style.display = 'flex';
@@ -1684,6 +1820,7 @@ async function resolveAuth(session, source) {
   if (session?.user) {
     currentUser = session.user;
     document.getElementById('authOverlay').style.display = 'none';
+    document.getElementById('landingPage').style.display = 'none';
     // FIX(bug): mark authReady BEFORE awaiting loadUserSettings
     // loadUserSettings does 4 Supabase queries via Promise.all — if any hangs,
     // the whole chain stalls and authReady never gets set, blocking the app forever.
@@ -1698,14 +1835,21 @@ async function resolveAuth(session, source) {
       console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
     });
   } else {
-    console.log('[VORTEX] resolveAuth: no session — showing login');
+    console.log('[VORTEX] resolveAuth: no session — showing landing/login');
     currentUser = null;
     authReady = false;
     dataInitialized = false;
-    document.getElementById('authOverlay').style.display = 'flex';
+    if (window._pendingInviteToken || _isRecovery) {
+      // Direct link — skip landing page, go straight to auth
+      document.getElementById('authOverlay').style.display = 'flex';
+      document.getElementById('landingPage').style.display = 'none';
+    } else {
+      document.getElementById('landingPage').style.display = 'block';
+      document.getElementById('authOverlay').style.display = 'none';
+    }
     if (window._pendingInviteToken) {
       showAuthRegister(window._pendingInviteToken);
-    } else {
+    } else if (!_isRecovery) {
       showAuthLogin();
     }
   }
