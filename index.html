@@ -1733,8 +1733,7 @@ supa.auth.onAuthStateChange(async (event, session) => {
     return;
   }
   if (event === 'SIGNED_IN') {
-    // Only delay if a PKCE code is in the URL — could be a recovery link
-    // Normal email/password logins never have ?code= so they are not delayed
+    if (passwordRecoveryMode) return; // PASSWORD_RECOVERY already fired — don't override
     if (_hasPKCECode) {
       signedInTimer = setTimeout(async () => {
         signedInTimer = null;
