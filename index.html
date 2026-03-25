@@ -1712,18 +1712,27 @@ async function resolveAuth(session, source) {
 }
 
 let passwordRecoveryMode = false;
+let signedInTimer = null;
 
 supa.auth.onAuthStateChange(async (event, session) => {
   console.log('[VORTEX] onAuthStateChange event:', event, 'user:', session?.user?.email);
   if (event === 'PASSWORD_RECOVERY') {
     passwordRecoveryMode = true;
-    authReady = true; // block 3s fallback from overriding
+    authReady = true;
+    if (signedInTimer) { clearTimeout(signedInTimer); signedInTimer = null; }
     _hideAllAuthForms();
     document.getElementById('authFormNewPassword').style.display = 'flex';
     document.getElementById('authScreen').style.display = 'flex';
     return;
   }
-  if (passwordRecoveryMode && event === 'SIGNED_IN') return; // don't auto-login during recovery
+  if (event === 'SIGNED_IN') {
+    // Delay to let PASSWORD_RECOVERY fire first if this is a recovery link
+    signedInTimer = setTimeout(async () => {
+      signedInTimer = null;
+      if (!passwordRecoveryMode) await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
+    }, 300);
+    return;
+  }
   await resolveAuth(session, 'onAuthStateChange:' + event);
 });
 
