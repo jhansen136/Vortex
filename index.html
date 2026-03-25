@@ -580,6 +580,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <div id="proStatusText" style="font-family:var(--font-mono);font-size:10px;color:var(--text);line-height:1.4;"></div>
         <button onclick="showUpgradeModal()" style="background:var(--amber);color:#000;font-family:var(--font-cond);font-weight:700;font-size:11px;letter-spacing:1px;border:none;border-radius:3px;padding:5px 10px;cursor:pointer;white-space:nowrap;">UPGRADE</button>
       </div>
+      <!-- Manage subscription — shown for Pro users only -->
+      <div id="manageSubRow" style="display:none;margin-bottom:14px;text-align:center;">
+        <button onclick="openStripePortal()" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:1px;border-radius:3px;padding:7px 16px;cursor:pointer;">⚡ MANAGE SUBSCRIPTION</button>
+      </div>
 
       <div class="modal-field">
         <label>ntfy.sh Channel URL <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></label>
@@ -1256,6 +1260,29 @@ function openStripeCheckout(plan) {
   const email = currentUser?.email;
   const url = email ? `${base}?prefilled_email=${encodeURIComponent(email)}` : base;
   window.open(url, '_blank');
+}
+
+async function openStripePortal() {
+  const session = await supa.auth.getSession();
+  const token = session?.data?.session?.access_token;
+  if (!token) { showToast('watch', 'Error', 'Not logged in.'); return; }
+
+  showToast('watch', 'Opening...', 'Redirecting to billing portal.');
+  try {
+    const res = await fetch(`${SUPA_URL}/functions/v1/stripe-portal`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ return_url: window.location.href }),
+    });
+    const data = await res.json();
+    if (data.url) {
+      window.location.href = data.url;
+    } else {
+      showToast('warning', 'Error', data.error || 'Could not open billing portal.');
+    }
+  } catch (e) {
+    showToast('warning', 'Error', e.message);
+  }
 }
 
 // FIX(security): track active polling interval IDs so signOut can stop them
@@ -3967,10 +3994,13 @@ async function openSetup() {
   // Pro status banner
   const banner   = document.getElementById('proStatusBanner');
   const bannerTxt = document.getElementById('proStatusText');
+  const manageRow = document.getElementById('manageSubRow');
   const pro = isProUser();
   if (pro) {
     banner.style.display = 'none';
+    if (manageRow) manageRow.style.display = 'block';
   } else {
+    if (manageRow) manageRow.style.display = 'none';
     const days = trialDaysLeft();
     banner.style.display = 'flex';
     if (days !== null && days > 0) {
