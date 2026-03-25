@@ -1729,7 +1729,7 @@ supa.auth.onAuthStateChange(async (event, session) => {
     if (signedInTimer) { clearTimeout(signedInTimer); signedInTimer = null; }
     _hideAllAuthForms();
     document.getElementById('authFormNewPassword').style.display = 'flex';
-    document.getElementById('authScreen').style.display = 'flex';
+    document.getElementById('authOverlay').style.display = 'flex';
     return;
   }
   if (event === 'SIGNED_IN') {
