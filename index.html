@@ -1471,6 +1471,13 @@ async function authRegister() {
   });
   if (signUpError) { authSetLoading(false, 'register'); authShowError(signUpError.message); return; }
 
+  // Fire welcome email (non-blocking — don't await)
+  fetch(`${SUPA_URL}/functions/v1/send-welcome`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${SUPA_KEY}` },
+    body: JSON.stringify({ email, name }),
+  }).catch(() => {});
+
   // Mark invite as used if one was provided
   if (token) await supa.from('invites').update({ used_at: new Date().toISOString() }).eq('token', token).catch(() => {});
 
