@@ -1711,8 +1711,15 @@ async function resolveAuth(session, source) {
   }
 }
 
-let passwordRecoveryMode = false;
+// Detect recovery redirect from URL before Supabase initializes
+const _hashParams = new URLSearchParams(window.location.hash.slice(1));
+const _searchParams = new URLSearchParams(window.location.search);
+const _isImplicitRecovery = _hashParams.get('type') === 'recovery';
+const _hasPKCECode = _searchParams.has('code');
+
+let passwordRecoveryMode = _isImplicitRecovery;
 let signedInTimer = null;
+if (_isImplicitRecovery) authReady = true; // block 3s fallback
 
 supa.auth.onAuthStateChange(async (event, session) => {
   console.log('[VORTEX] onAuthStateChange event:', event, 'user:', session?.user?.email);
@@ -1726,11 +1733,16 @@ supa.auth.onAuthStateChange(async (event, session) => {
     return;
   }
   if (event === 'SIGNED_IN') {
-    // Delay to let PASSWORD_RECOVERY fire first if this is a recovery link
-    signedInTimer = setTimeout(async () => {
-      signedInTimer = null;
-      if (!passwordRecoveryMode) await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
-    }, 300);
+    // Only delay if a PKCE code is in the URL — could be a recovery link
+    // Normal email/password logins never have ?code= so they are not delayed
+    if (_hasPKCECode) {
+      signedInTimer = setTimeout(async () => {
+        signedInTimer = null;
+        if (!passwordRecoveryMode) await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
+      }, 600);
+    } else {
+      await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
+    }
     return;
   }
   await resolveAuth(session, 'onAuthStateChange:' + event);
