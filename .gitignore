@@ -1,3 +1,7 @@
 .DS_Store
 .claude/
 supabase/.temp/
+node_modules/
+package-lock.json
+*.docx
+cities.csv
