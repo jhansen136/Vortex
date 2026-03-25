@@ -16,7 +16,18 @@ const FALLBACK_LON  = -94.20;
 const FALLBACK_SAME = ['005007', '005143', '005087', '005015', '005009'];
 
 // NWS event types to monitor
-const NWS_EVENTS = ['Tornado Warning', 'Flash Flood Warning', 'Flood Warning'];
+const NWS_EVENTS = [
+  'Tornado Warning',
+  'Tornado Watch',
+  'Severe Thunderstorm Warning',
+  'Flash Flood Warning',
+  'Flood Warning',
+  'Winter Storm Warning',
+  'Blizzard Warning',
+  'Ice Storm Warning',
+  'High Wind Warning',
+  'Extreme Wind Warning',
+];
 
 // Push cooldown — suppress repeated threshold pushes within 30 min
 const THRESHOLD_COOLDOWN_MS = 30 * 60 * 1000;
@@ -85,7 +96,7 @@ async function fetchWeather(lat: number, lon: number) {
 // ── Twilio voice call ──────────────────────────────────────────────────────────
 // Plays the NWS EAS audio (if TWILIO_ALERT_AUDIO_URL is set) then a TTS message.
 // When you have the NWS recording: npx supabase secrets set TWILIO_ALERT_AUDIO_URL=https://...
-async function makeCall(phone: string, type: 'warning' | 'threshold'): Promise<void> {
+async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood'): Promise<void> {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return;
 
   const audioTag = TWILIO_AUDIO_URL
@@ -94,6 +105,8 @@ async function makeCall(phone: string, type: 'warning' | 'threshold'): Promise<v
 
   const tts = type === 'warning'
     ? 'This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active for your home area. Open the Vortex app immediately.'
+    : type === 'flood'
+    ? 'This is an emergency alert from Vortex Storm Intelligence. A flash flood warning is active for your home area. Move to higher ground immediately.'
     : 'This is a Vortex weather alert. Severe storm conditions are developing near your home area. Check the Vortex app for current conditions.';
 
   // Message repeated twice — second repetition helps iOS DND repeated-calls bypass
@@ -270,23 +283,52 @@ serve(async (req) => {
 
       // ── NWS alerts ───────────────────────────────────────────────────────────
       // Trigger logic:
-      //   Tornado Warning → push (max priority) + call
-      //   Tornado Watch   → push only (early warning, no call)
-      //   Flood Warning   → push only
+      //   Tornado Warning          → push (max) + call (if call_tornado_enabled)
+      //   Tornado Watch            → push only (if push_tornado_watch_enabled)
+      //   Severe Thunderstorm Warn → push only (if push_tstorm_enabled)
+      //   Flash Flood Warning      → push (if push_flood_enabled) + call (if call_flood_enabled)
+      //   Flood Warning            → push only (if push_flood_enabled)
+      //   Winter Storm / Blizzard / Ice Storm → push only (if push_winter_enabled)
+      //   High Wind / Extreme Wind → push only (if push_wind_enabled)
       for (const alert of userAlerts) {
-        const key       = `nws:${alert.properties.id}`;
-        const isTornado = alert.properties.event === 'Tornado Warning';
-        if (!hasSent(key)) {
-          toSend.push({
-            key,
-            title:    `⚠️ ${alert.properties.event}`,
-            body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
-            priority: isTornado ? 'max' : 'high',
-            tags:     isTornado ? 'rotating_light,sos' : 'rain,warning',
-            call:     isTornado && !!phone && (pref?.call_tornado_enabled !== false),
-            callType: 'warning',
-          });
-        }
+        const key          = `nws:${alert.properties.id}`;
+        const event        = alert.properties.event;
+        const isTornado    = event === 'Tornado Warning';
+        const isTorWatch   = event === 'Tornado Watch';
+        const isTstorm     = event === 'Severe Thunderstorm Warning';
+        const isFlashFlood = event === 'Flash Flood Warning';
+        const isFlood      = event === 'Flood Warning';
+        const isWinter     = ['Winter Storm Warning', 'Blizzard Warning', 'Ice Storm Warning'].includes(event);
+        const isWind       = ['High Wind Warning', 'Extreme Wind Warning'].includes(event);
+
+        if (hasSent(key)) continue;
+
+        // Preference gates
+        if (isTorWatch   && pref?.push_tornado_watch_enabled === false) continue;
+        if (isTstorm     && pref?.push_tstorm_enabled        === false) continue;
+        if ((isFlashFlood || isFlood) && pref?.push_flood_enabled  === false) continue;
+        if (isWinter     && pref?.push_winter_enabled        === false) continue;
+        if (isWind       && pref?.push_wind_enabled          === false) continue;
+
+        const priority = (isTornado || isFlashFlood) ? 'max'
+                       : (isTorWatch || isTstorm)    ? 'high'
+                       : 'default';
+        const tags     = isTornado                   ? 'rotating_light,sos'
+                       : (isFlashFlood || isFlood)   ? 'rain,warning'
+                       : (isWinter)                  ? 'snowflake,warning'
+                       : (isWind)                    ? 'wind_face,warning'
+                       : 'warning';
+
+        toSend.push({
+          key,
+          title:    `⚠️ ${event}`,
+          body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
+          priority,
+          tags,
+          call:     (isTornado    && !!phone && (pref?.call_tornado_enabled !== false)) ||
+                    (isFlashFlood && !!phone && (pref?.call_flood_enabled === true)),
+          callType: isFlashFlood ? 'flood' : 'warning',
+        });
       }
 
       // ── Threshold alerts ─────────────────────────────────────────────────────
