@@ -191,7 +191,7 @@ serve(async (req) => {
 
     // ── 4. Weather cache — persistent in Supabase, 15-min TTL ────────────────
     // Within a single run, also deduplicated in-memory to avoid redundant DB reads.
-    const WEATHER_TTL_MS = 15 * 60 * 1000;
+    const WEATHER_TTL_MS = 5 * 60 * 1000;
     const wxCache = new Map<string, any>();
 
     async function getWeather(lat: number, lon: number) {
