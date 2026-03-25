@@ -1733,15 +1733,23 @@ supa.auth.onAuthStateChange(async (event, session) => {
     return;
   }
   if (event === 'SIGNED_IN') {
-    if (passwordRecoveryMode) return; // PASSWORD_RECOVERY already fired — don't override
+    if (passwordRecoveryMode) return;
+    // For PKCE flow, PASSWORD_RECOVERY may not fire — check session directly
     if (_hasPKCECode) {
-      signedInTimer = setTimeout(async () => {
-        signedInTimer = null;
-        if (!passwordRecoveryMode) await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
-      }, 600);
-    } else {
-      await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
+      const { data: { user } } = await supa.auth.getUser();
+      const recoverySentAt = user?.recovery_sent_at;
+      const isRecentRecovery = recoverySentAt &&
+        (Date.now() - new Date(recoverySentAt).getTime()) < 10 * 60 * 1000;
+      if (isRecentRecovery) {
+        passwordRecoveryMode = true;
+        authReady = true;
+        _hideAllAuthForms();
+        document.getElementById('authFormNewPassword').style.display = 'flex';
+        document.getElementById('authOverlay').style.display = 'flex';
+        return;
+      }
     }
+    await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
     return;
   }
   if (!passwordRecoveryMode) await resolveAuth(session, 'onAuthStateChange:' + event);
