@@ -592,10 +592,38 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
           <div class="notif-row" style="padding:4px 0;">
             <div>
+              <div class="notif-label">Tornado Watch Push</div>
+              <div class="notif-sub">Push when a tornado watch is issued for your area</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushTornadoWatch" data-sync-group="push-tornado-watch" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Severe Thunderstorm Warning Push</div>
+              <div class="notif-sub">Push when a severe thunderstorm warning is issued for your area</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushTstorm" data-sync-group="push-tstorm" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
               <div class="notif-label">Flood Warning Push</div>
-              <div class="notif-sub">Push notification for flash flood &amp; flood warnings in your area</div>
+              <div class="notif-sub">Push for flash flood &amp; flood warnings in your area</div>
             </div>
             <label class="toggle"><input type="checkbox" id="pushFlood" data-sync-group="push-flood" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Winter Storm Push</div>
+              <div class="notif-sub">Push for winter storm, blizzard &amp; ice storm warnings</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushWinter" data-sync-group="push-winter" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">High Wind Warning Push</div>
+              <div class="notif-sub">Push for high wind &amp; extreme wind warnings</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushWind" data-sync-group="push-wind" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
         </div>
       </div>
@@ -1483,10 +1511,14 @@ async function loadUserSettings(userId) {
       syncToggleGroup('push',            p.push_enabled);
       syncToggleGroup('hue',             p.hue_enabled);
       syncToggleGroup('audio',           p.audio_enabled);
-      syncToggleGroup('call-tornado',    p.call_tornado_enabled   ?? true);
-      syncToggleGroup('call-flood',      p.call_flood_enabled     ?? false);
-      syncToggleGroup('push-flood',      p.push_flood_enabled     ?? true);
-      syncToggleGroup('call-threshold',  p.call_threshold_enabled ?? false);
+      syncToggleGroup('call-tornado',         p.call_tornado_enabled          ?? true);
+      syncToggleGroup('call-flood',           p.call_flood_enabled            ?? false);
+      syncToggleGroup('push-flood',           p.push_flood_enabled            ?? true);
+      syncToggleGroup('push-tornado-watch',   p.push_tornado_watch_enabled    ?? true);
+      syncToggleGroup('push-tstorm',          p.push_tstorm_enabled           ?? true);
+      syncToggleGroup('push-winter',          p.push_winter_enabled           ?? true);
+      syncToggleGroup('push-wind',            p.push_wind_enabled             ?? true);
+      syncToggleGroup('call-threshold',       p.call_threshold_enabled        ?? false);
       // Show/hide DEFAULT OFF badge based on current state
       const defBadge = document.getElementById('callThresholdDefault');
       if (defBadge) defBadge.style.display = (p.call_threshold_enabled ?? false) ? 'none' : 'inline';
@@ -1537,10 +1569,14 @@ async function saveUserSettings(updates) {
       push_enabled:             document.querySelector('[data-sync-group="push"]')?.checked            || false,
       hue_enabled:              document.querySelector('[data-sync-group="hue"]')?.checked             || false,
       audio_enabled:            document.querySelector('[data-sync-group="audio"]')?.checked           || true,
-      call_tornado_enabled:     document.querySelector('[data-sync-group="call-tornado"]')?.checked    ?? true,
-      call_flood_enabled:       document.querySelector('[data-sync-group="call-flood"]')?.checked      ?? false,
-      push_flood_enabled:       document.querySelector('[data-sync-group="push-flood"]')?.checked      ?? true,
-      call_threshold_enabled:   document.querySelector('[data-sync-group="call-threshold"]')?.checked  ?? false,
+      call_tornado_enabled:          document.querySelector('[data-sync-group="call-tornado"]')?.checked        ?? true,
+      call_flood_enabled:            document.querySelector('[data-sync-group="call-flood"]')?.checked          ?? false,
+      push_flood_enabled:            document.querySelector('[data-sync-group="push-flood"]')?.checked          ?? true,
+      push_tornado_watch_enabled:    document.querySelector('[data-sync-group="push-tornado-watch"]')?.checked  ?? true,
+      push_tstorm_enabled:           document.querySelector('[data-sync-group="push-tstorm"]')?.checked         ?? true,
+      push_winter_enabled:           document.querySelector('[data-sync-group="push-winter"]')?.checked         ?? true,
+      push_wind_enabled:             document.querySelector('[data-sync-group="push-wind"]')?.checked           ?? true,
+      call_threshold_enabled:        document.querySelector('[data-sync-group="call-threshold"]')?.checked      ?? false,
       updated_at: now
     }, { onConflict: 'user_id' });
   }
