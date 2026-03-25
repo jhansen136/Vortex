@@ -493,6 +493,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <a href="#" onclick="showAuthLogin();return false;" style="color:var(--amber);text-decoration:none;">Back to sign in</a>
       </div>
     </div>
+    <div id="authFormNewPassword" style="display:none;flex-direction:column;gap:10px;">
+      <p style="margin:0 0 4px;font-size:13px;color:var(--text-dim);text-align:center;">Choose a new password</p>
+      <input type="password" id="authNewPassword" placeholder="New password (min 8 chars)" autocomplete="new-password"
+        onkeydown="if(event.key==='Enter')authSetNewPassword()">
+      <button onclick="authSetNewPassword()"
+        style="background:var(--amber);color:#000;border:none;border-radius:6px;padding:11px;font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;letter-spacing:1px;cursor:pointer;margin-top:4px;">Set New Password</button>
+    </div>
     <div id="authFormRegister" style="display:none;">
       <input type="text" id="authName" placeholder="Display name" autocomplete="name">
       <input type="email" id="authRegEmail" placeholder="Email address" autocomplete="email">
@@ -1358,7 +1365,7 @@ const isMobile = () => window.innerWidth <= 768;
 
 // ── AUTH UI HELPERS ────────────────────────────────────────
 function _hideAllAuthForms() {
-  ['authFormLogin','authFormRegister','authFormForgot','authConfirmMsg'].forEach(id => {
+  ['authFormLogin','authFormRegister','authFormForgot','authFormNewPassword','authConfirmMsg'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -1386,6 +1393,14 @@ async function authForgotPassword() {
   if (error) { authShowError(error.message); return; }
   document.getElementById('authError').style.color = 'var(--green)';
   document.getElementById('authError').textContent = '✓ Reset link sent — check your email.';
+}
+async function authSetNewPassword() {
+  const pw = document.getElementById('authNewPassword').value.trim();
+  if (!pw || pw.length < 8) { authShowError('Password must be at least 8 characters.'); return; }
+  const { error } = await supa.auth.updateUser({ password: pw });
+  if (error) { authShowError(error.message); return; }
+  document.getElementById('authError').style.color = 'var(--green)';
+  document.getElementById('authError').textContent = '✓ Password updated — signing you in…';
 }
 function authSetLoading(on, form = 'login') {
   document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
@@ -1694,6 +1709,12 @@ async function resolveAuth(session, source) {
 
 supa.auth.onAuthStateChange(async (event, session) => {
   console.log('[VORTEX] onAuthStateChange event:', event, 'user:', session?.user?.email);
+  if (event === 'PASSWORD_RECOVERY') {
+    _hideAllAuthForms();
+    document.getElementById('authFormNewPassword').style.display = 'flex';
+    document.getElementById('authScreen').style.display = 'flex';
+    return;
+  }
   await resolveAuth(session, 'onAuthStateChange:' + event);
 });
 
