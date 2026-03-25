@@ -1388,7 +1388,7 @@ async function authForgotPassword() {
   const email = document.getElementById('authForgotEmail').value.trim();
   if (!email) { authShowError('Enter your email address.'); return; }
   const { error } = await supa.auth.resetPasswordForEmail(email, {
-    redirectTo: window.location.origin + window.location.pathname
+    redirectTo: window.location.origin + '/?recovery=true'
   });
   if (error) { authShowError(error.message); return; }
   document.getElementById('authError').style.color = 'var(--green)';
@@ -1711,46 +1711,21 @@ async function resolveAuth(session, source) {
   }
 }
 
-// Detect recovery redirect from URL before Supabase initializes
-const _hashParams = new URLSearchParams(window.location.hash.slice(1));
-const _searchParams = new URLSearchParams(window.location.search);
-const _isImplicitRecovery = _hashParams.get('type') === 'recovery';
-const _hasPKCECode = _searchParams.has('code');
+// Simple recovery detection — redirectTo includes ?recovery=true
+const _isRecovery = new URLSearchParams(window.location.search).get('recovery') === 'true';
+let passwordRecoveryMode = false;
 
-let passwordRecoveryMode = _isImplicitRecovery;
-let signedInTimer = null;
-if (_isImplicitRecovery) authReady = true; // block 3s fallback
+if (_isRecovery) {
+  passwordRecoveryMode = true;
+  authReady = true;
+  _hideAllAuthForms();
+  document.getElementById('authFormNewPassword').style.display = 'flex';
+  document.getElementById('authOverlay').style.display = 'flex';
+}
 
 supa.auth.onAuthStateChange(async (event, session) => {
-  console.log('[VORTEX] onAuthStateChange event:', event, 'user:', session?.user?.email);
-  if (event === 'PASSWORD_RECOVERY') {
-    passwordRecoveryMode = true;
-    authReady = true;
-    if (signedInTimer) { clearTimeout(signedInTimer); signedInTimer = null; }
-    _hideAllAuthForms();
-    document.getElementById('authFormNewPassword').style.display = 'flex';
-    document.getElementById('authOverlay').style.display = 'flex';
-    return;
-  }
-  if (event === 'SIGNED_IN') {
-    if (passwordRecoveryMode) return;
-    // PASSWORD_RECOVERY may not fire in all Supabase flows — check session directly
-    const { data: { user } } = await supa.auth.getUser();
-    const recoverySentAt = user?.recovery_sent_at;
-    const isRecentRecovery = recoverySentAt &&
-      (Date.now() - new Date(recoverySentAt).getTime()) < 10 * 60 * 1000;
-    if (isRecentRecovery) {
-      passwordRecoveryMode = true;
-      authReady = true;
-      _hideAllAuthForms();
-      document.getElementById('authFormNewPassword').style.display = 'flex';
-      document.getElementById('authOverlay').style.display = 'flex';
-      return;
-    }
-    await resolveAuth(session, 'onAuthStateChange:SIGNED_IN');
-    return;
-  }
-  if (!passwordRecoveryMode) await resolveAuth(session, 'onAuthStateChange:' + event);
+  if (passwordRecoveryMode) return; // never override reset form
+  await resolveAuth(session, 'onAuthStateChange:' + event);
 });
 
 setTimeout(async () => {
