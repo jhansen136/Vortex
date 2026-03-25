@@ -8,6 +8,10 @@ const TWILIO_TOKEN         = Deno.env.get('TWILIO_AUTH_TOKEN')  || '';
 const TWILIO_FROM          = Deno.env.get('TWILIO_FROM_NUMBER') || '';
 const TWILIO_AUDIO_URL     = Deno.env.get('TWILIO_ALERT_AUDIO_URL') || '';
 
+// Rate limit: 1 test call per user per 5 minutes
+const TEST_CALL_COOLDOWN_MS = 5 * 60 * 1000;
+const TEST_CALL_KEY = 'test-call';
+
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, content-type',
@@ -30,6 +34,39 @@ serve(async (req) => {
     return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: CORS });
   }
 
+  // Load profile — need subscription status and phone
+  const { data: profile } = await supa
+    .from('profiles')
+    .select('phone, subscription_status, trial_ends_at')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  // Pro/trial gate — calls are a Pro feature
+  const now = new Date().toISOString();
+  const isPro = profile?.subscription_status === 'pro' ||
+    (profile?.subscription_status === 'trial' && profile?.trial_ends_at && profile.trial_ends_at > now);
+  if (!isPro) {
+    return new Response(JSON.stringify({ error: 'Phone call alerts are a Pro feature. Upgrade to access test calls.' }), {
+      status: 403, headers: { ...CORS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Rate limit — 1 test call per 5 minutes
+  const cooldownCutoff = new Date(Date.now() - TEST_CALL_COOLDOWN_MS).toISOString();
+  const { data: recentTest } = await supa
+    .from('sent_alerts')
+    .select('sent_at')
+    .eq('user_id', user.id)
+    .eq('alert_key', TEST_CALL_KEY)
+    .gte('sent_at', cooldownCutoff)
+    .maybeSingle();
+
+  if (recentTest) {
+    return new Response(JSON.stringify({ error: 'Please wait 5 minutes between test calls.' }), {
+      status: 429, headers: { ...CORS, 'Content-Type': 'application/json' },
+    });
+  }
+
   // Get phone from request body, fall back to profile
   let phone = '';
   try {
@@ -37,14 +74,7 @@ serve(async (req) => {
     phone = (body.phone || '').trim();
   } catch { /* no body */ }
 
-  if (!phone) {
-    const { data: profile } = await supa
-      .from('profiles')
-      .select('phone')
-      .eq('id', user.id)
-      .maybeSingle();
-    phone = (profile?.phone || '').trim();
-  }
+  if (!phone) phone = (profile?.phone || '').trim();
 
   if (!phone) {
     return new Response(JSON.stringify({ error: 'No phone number on file. Add one in Settings first.' }), {
@@ -89,6 +119,11 @@ serve(async (req) => {
         status: 500, headers: { ...CORS, 'Content-Type': 'application/json' },
       });
     }
+
+    // Record in sent_alerts for rate limiting
+    await supa.from('sent_alerts')
+      .insert({ user_id: user.id, alert_key: TEST_CALL_KEY })
+      .catch(() => {});
 
     return new Response(JSON.stringify({ ok: true, phone }), {
       headers: { ...CORS, 'Content-Type': 'application/json' },
