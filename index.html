@@ -1399,8 +1399,12 @@ async function authSetNewPassword() {
   if (!pw || pw.length < 8) { authShowError('Password must be at least 8 characters.'); return; }
   const { error } = await supa.auth.updateUser({ password: pw });
   if (error) { authShowError(error.message); return; }
+  passwordRecoveryMode = false;
+  authReady = false;
   document.getElementById('authError').style.color = 'var(--green)';
   document.getElementById('authError').textContent = '✓ Password updated — signing you in…';
+  const { data: { session } } = await supa.auth.getSession();
+  await resolveAuth(session, 'passwordReset');
 }
 function authSetLoading(on, form = 'login') {
   document.getElementById('authSpinner').style.display = on ? 'block' : 'none';
@@ -1707,14 +1711,19 @@ async function resolveAuth(session, source) {
   }
 }
 
+let passwordRecoveryMode = false;
+
 supa.auth.onAuthStateChange(async (event, session) => {
   console.log('[VORTEX] onAuthStateChange event:', event, 'user:', session?.user?.email);
   if (event === 'PASSWORD_RECOVERY') {
+    passwordRecoveryMode = true;
+    authReady = true; // block 3s fallback from overriding
     _hideAllAuthForms();
     document.getElementById('authFormNewPassword').style.display = 'flex';
     document.getElementById('authScreen').style.display = 'flex';
     return;
   }
+  if (passwordRecoveryMode && event === 'SIGNED_IN') return; // don't auto-login during recovery
   await resolveAuth(session, 'onAuthStateChange:' + event);
 });
 
