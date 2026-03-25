@@ -85,7 +85,7 @@ async function fetchWeather(lat: number, lon: number) {
 // ── Twilio voice call ──────────────────────────────────────────────────────────
 // Plays the NWS EAS audio (if TWILIO_ALERT_AUDIO_URL is set) then a TTS message.
 // When you have the NWS recording: npx supabase secrets set TWILIO_ALERT_AUDIO_URL=https://...
-async function makeCall(phone: string, type: 'warning' | 'threshold'): Promise<void> {
+async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood'): Promise<void> {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return;
 
   const audioTag = TWILIO_AUDIO_URL
@@ -94,6 +94,8 @@ async function makeCall(phone: string, type: 'warning' | 'threshold'): Promise<v
 
   const tts = type === 'warning'
     ? 'This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active for your home area. Open the Vortex app immediately.'
+    : type === 'flood'
+    ? 'This is an emergency alert from Vortex Storm Intelligence. A flash flood warning is active for your home area. Move to higher ground immediately.'
     : 'This is a Vortex weather alert. Severe storm conditions are developing near your home area. Check the Vortex app for current conditions.';
 
   // Message repeated twice — second repetition helps iOS DND repeated-calls bypass
@@ -270,23 +272,31 @@ serve(async (req) => {
 
       // ── NWS alerts ───────────────────────────────────────────────────────────
       // Trigger logic:
-      //   Tornado Warning → push (max priority) + call
-      //   Tornado Watch   → push only (early warning, no call)
-      //   Flood Warning   → push only
+      //   Tornado Warning     → push (max priority) + call (if call_tornado_enabled)
+      //   Flash Flood Warning → push (if push_flood_enabled) + call (if call_flood_enabled)
+      //   Flood Warning       → push (if push_flood_enabled), no call
       for (const alert of userAlerts) {
-        const key       = `nws:${alert.properties.id}`;
-        const isTornado = alert.properties.event === 'Tornado Warning';
-        if (!hasSent(key)) {
-          toSend.push({
-            key,
-            title:    `⚠️ ${alert.properties.event}`,
-            body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
-            priority: isTornado ? 'max' : 'high',
-            tags:     isTornado ? 'rotating_light,sos' : 'rain,warning',
-            call:     isTornado && !!phone && (pref?.call_tornado_enabled !== false),
-            callType: 'warning',
-          });
-        }
+        const key          = `nws:${alert.properties.id}`;
+        const event        = alert.properties.event;
+        const isTornado    = event === 'Tornado Warning';
+        const isFlashFlood = event === 'Flash Flood Warning';
+        const isFlood      = event === 'Flood Warning';
+
+        if (hasSent(key)) continue;
+
+        // Flood events respect push_flood_enabled preference
+        if ((isFlashFlood || isFlood) && pref?.push_flood_enabled === false) continue;
+
+        toSend.push({
+          key,
+          title:    `⚠️ ${event}`,
+          body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
+          priority: isTornado || isFlashFlood ? 'max' : 'high',
+          tags:     isTornado ? 'rotating_light,sos' : 'rain,warning',
+          call:     (isTornado    && !!phone && (pref?.call_tornado_enabled !== false)) ||
+                    (isFlashFlood && !!phone && (pref?.call_flood_enabled === true)),
+          callType: isFlashFlood ? 'flood' : 'warning',
+        });
       }
 
       // ── Threshold alerts ─────────────────────────────────────────────────────

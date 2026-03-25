@@ -589,6 +589,15 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <label>ntfy.sh Channel URL <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></label>
         <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
         <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Flood Warning Push</div>
+              <div class="notif-sub">Push notification for flash flood &amp; flood warnings in your area</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushFlood" data-sync-group="push-flood" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+        </div>
       </div>
       <div class="modal-field">
         <label>Phone Number <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span> <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
@@ -608,6 +617,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
               <div class="notif-sub">Call when a tornado warning is issued for your area</div>
             </div>
             <label class="toggle"><input type="checkbox" id="callTornado" data-sync-group="call-tornado" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Flash Flood Warning Calls <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 5px;letter-spacing:1px;vertical-align:middle;">DEFAULT OFF</span></div>
+              <div class="notif-sub">Call when a flash flood warning is issued for your area</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="callFlood" data-sync-group="call-flood" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
           <div class="notif-row" style="padding:4px 0;">
             <div>
@@ -1464,11 +1480,13 @@ async function loadUserSettings(userId) {
     }
     if (prefRes.data) {
       const p = prefRes.data;
-      syncToggleGroup('push',           p.push_enabled);
-      syncToggleGroup('hue',            p.hue_enabled);
-      syncToggleGroup('audio',          p.audio_enabled);
-      syncToggleGroup('call-tornado',   p.call_tornado_enabled  ?? true);
-      syncToggleGroup('call-threshold', p.call_threshold_enabled ?? false);
+      syncToggleGroup('push',            p.push_enabled);
+      syncToggleGroup('hue',             p.hue_enabled);
+      syncToggleGroup('audio',           p.audio_enabled);
+      syncToggleGroup('call-tornado',    p.call_tornado_enabled   ?? true);
+      syncToggleGroup('call-flood',      p.call_flood_enabled     ?? false);
+      syncToggleGroup('push-flood',      p.push_flood_enabled     ?? true);
+      syncToggleGroup('call-threshold',  p.call_threshold_enabled ?? false);
       // Show/hide DEFAULT OFF badge based on current state
       const defBadge = document.getElementById('callThresholdDefault');
       if (defBadge) defBadge.style.display = (p.call_threshold_enabled ?? false) ? 'none' : 'inline';
@@ -1516,11 +1534,13 @@ async function saveUserSettings(updates) {
   if (updates.preferences) {
     await supa.from('preferences').upsert({
       user_id: uid,
-      push_enabled:             document.querySelector('[data-sync-group="push"]')?.checked           || false,
-      hue_enabled:              document.querySelector('[data-sync-group="hue"]')?.checked            || false,
-      audio_enabled:            document.querySelector('[data-sync-group="audio"]')?.checked          || true,
-      call_tornado_enabled:     document.querySelector('[data-sync-group="call-tornado"]')?.checked   ?? true,
-      call_threshold_enabled:   document.querySelector('[data-sync-group="call-threshold"]')?.checked ?? false,
+      push_enabled:             document.querySelector('[data-sync-group="push"]')?.checked            || false,
+      hue_enabled:              document.querySelector('[data-sync-group="hue"]')?.checked             || false,
+      audio_enabled:            document.querySelector('[data-sync-group="audio"]')?.checked           || true,
+      call_tornado_enabled:     document.querySelector('[data-sync-group="call-tornado"]')?.checked    ?? true,
+      call_flood_enabled:       document.querySelector('[data-sync-group="call-flood"]')?.checked      ?? false,
+      push_flood_enabled:       document.querySelector('[data-sync-group="push-flood"]')?.checked      ?? true,
+      call_threshold_enabled:   document.querySelector('[data-sync-group="call-threshold"]')?.checked  ?? false,
       updated_at: now
     }, { onConflict: 'user_id' });
   }
