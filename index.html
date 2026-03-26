@@ -2711,14 +2711,18 @@ function isHomeCity(c) {
 }
 
 // rAF-debounced rescale — batches all per-frame zoom events into one DOM pass
-let rescaleRafId = null, pendingK = 1;
+let rescaleRafId = null, pendingK = 1, rescaleFrameCount = 0;
 function scheduleRescale(k) {
   pendingK = k;
   if (rescaleRafId) return;
   rescaleRafId = requestAnimationFrame(() => {
     rescaleRafId = null;
-    rescaleStations(pendingK);
-    rescaleHazards();
+    rescaleFrameCount++;
+    // Run full rescale every 2nd frame — halves DOM writes, imperceptible to user
+    if (rescaleFrameCount % 2 === 0) {
+      rescaleStations(pendingK);
+      rescaleHazards();
+    }
   });
 }
 
@@ -4873,13 +4877,14 @@ function addSheetSwipe(sheet) {
   sheet.addEventListener('touchend',   onEnd,   {passive:true, once:true});
 }
 
-// iOS pinch-to-zoom
-let touchStartDist = 0, touchStartScale = 1;
+// iOS pinch-to-zoom — rect cached on touchstart to avoid per-frame reflow
+let touchStartDist = 0, touchStartScale = 1, touchSvgRect = null;
 document.getElementById('mapSvg').addEventListener('touchstart', e => {
   if (e.touches.length === 2) {
     e.preventDefault();
     touchStartDist  = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
     touchStartScale = currentTransform.k;
+    touchSvgRect    = svgEl.getBoundingClientRect(); // cache once, not per frame
   }
 }, {passive:false});
 document.getElementById('mapSvg').addEventListener('touchmove', e => {
@@ -4889,7 +4894,7 @@ document.getElementById('mapSvg').addEventListener('touchmove', e => {
     const factor = dist / touchStartDist;
     const newK   = Math.min(Math.max(touchStartScale * factor, 0.5), 12);
     const mx = (e.touches[0].clientX+e.touches[1].clientX)/2, my = (e.touches[0].clientY+e.touches[1].clientY)/2;
-    const rect = svgEl.getBoundingClientRect();
+    const rect = touchSvgRect || svgEl.getBoundingClientRect();
     const cx = mx-rect.left, cy = my-rect.top;
     const ratio = newK / currentTransform.k;
     svg.call(zoom.transform, d3.zoomIdentity.translate(cx-ratio*(cx-currentTransform.x), cy-ratio*(cy-currentTransform.y)).scale(newK));
