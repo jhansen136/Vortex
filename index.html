@@ -1580,6 +1580,8 @@ async function openStripePortal() {
 
 // FIX(security): track active polling interval IDs so signOut can stop them
 let pollingIntervals = [];
+let isZooming = false;
+let zoomEndTimer = null;
 // Build timestamp injected at deploy time — used to detect stale tabs
 const BUILD_TS = Date.now(); // replaced by build step; good enough as a unique-per-load marker
 let dataInitialized  = false;
@@ -2039,8 +2041,14 @@ function initMap(us) {
       gStations.attr('transform', event.transform);
       gHazard.attr('transform', event.transform);
       scheduleRescale(k);
-      if (windOn) initParts();
-      if (lyr.temp) drawHeatmap();
+      // Defer expensive redraws until zoom settles — prevents mobile freeze
+      isZooming = true;
+      clearTimeout(zoomEndTimer);
+      zoomEndTimer = setTimeout(() => {
+        isZooming = false;
+        if (windOn) initParts();
+        if (lyr.temp) drawHeatmap();
+      }, 150);
       if (lyr.radar) {
         // During drag/zoom: move canvas with CSS transform — GPU composited, zero CPU cost
         // The canvas was last painted relative to radarPaintedTransform
@@ -2061,8 +2069,11 @@ function initMap(us) {
       if (geoActive) updateGPSDot();
     })
     .on('end', () => {
+      clearTimeout(zoomEndTimer);
+      isZooming = false;
+      if (windOn) initParts();
+      if (lyr.temp) drawHeatmap();
       if (lyr.radar) scheduleRadarRepaint();
-      // rescaleStations handles all label visibility on zoom — no city reload needed
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -2752,6 +2763,7 @@ function rescaleStations(k) {
 // FIX(perf): D3 enter/update/exit instead of full remove/redraw every cycle
 function drawStations() {
   if (!gStations) return;
+  if (isZooming) return;
 
   const stationData = stations.filter(s => !!projection([s.lo, s.la]));
 
