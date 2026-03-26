@@ -121,9 +121,9 @@ serve(async (req) => {
     }
 
     // Record in sent_alerts for rate limiting
-    await supa.from('sent_alerts')
-      .insert({ user_id: user.id, alert_key: TEST_CALL_KEY })
-      .catch(() => {});
+    try {
+      await supa.from('sent_alerts').insert({ user_id: user.id, alert_key: TEST_CALL_KEY });
+    } catch { /* non-fatal */ }
 
     return new Response(JSON.stringify({ ok: true, phone }), {
       headers: { ...CORS, 'Content-Type': 'application/json' },

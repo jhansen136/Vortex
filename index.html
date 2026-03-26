@@ -61,6 +61,42 @@ function pwaBannerDismiss() {
 
 // iOS PWA install prompt — Safari never fires beforeinstallprompt
 // Show manual instructions when: iOS device + Safari + not already installed as standalone
+function checkOnboarding(user) {
+  if (localStorage.getItem('vortex_onboarded')) return;
+  const name = user?.user_metadata?.display_name || user?.email?.split('@')[0] || '';
+  if (name) {
+    const el = document.getElementById('obWelcomeName');
+    if (el) el.textContent = 'Welcome, ' + name.split(' ')[0].toUpperCase();
+  }
+  setTimeout(() => {
+    document.getElementById('onboardingOverlay').style.display = 'flex';
+  }, 800);
+}
+function obGoTo(step) {
+  [1,2,3].forEach(i => {
+    document.getElementById('obPane' + i).style.display = i === step ? 'block' : 'none';
+    const s = document.getElementById('obStep' + i);
+    if (s) s.classList.toggle('active', i <= step);
+  });
+}
+async function obSaveNotifications() {
+  const url = (document.getElementById('obNtfyUrl').value || '').trim();
+  if (url) {
+    // Sync to main settings field and save
+    const mainField = document.getElementById('pushToken');
+    if (mainField) mainField.value = url;
+    cfg.push = url;
+    await saveUserSettings({ integrations: true }).catch(() => {});
+  }
+  const readyPush = document.getElementById('obReadyPush');
+  if (readyPush) readyPush.style.display = url ? 'flex' : 'none';
+  obGoTo(3);
+}
+function obComplete() {
+  localStorage.setItem('vortex_onboarded', '1');
+  document.getElementById('onboardingOverlay').style.display = 'none';
+}
+
 function checkIOSInstallPrompt() {
   const isIOS        = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone = window.navigator.standalone === true;
@@ -114,7 +150,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .map-wrap{flex:1;position:relative;overflow:hidden;background:#05070a;}
 
 /* ── MAP ── */
-#mapSvg{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none;}
+#mapSvg{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;}
 #mapSvg:active{cursor:grabbing;}
 .state-fill{fill:#0c1018;stroke:#1c2535;stroke-width:.6;transition:fill .2s;}
 .state-fill:hover{fill:#131b26;stroke:#2a3c54;}
@@ -455,6 +491,33 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   .lp-footer{flex-direction:column;gap:8px;text-align:center;}
 }
 
+/* ── ONBOARDING ── */
+#onboardingOverlay{position:fixed;inset:0;z-index:9997;background:#0a0b0d;display:none;align-items:center;justify-content:center;padding:24px;}
+.ob-box{background:#0f1114;border:1px solid var(--border-bright);border-radius:12px;width:100%;max-width:420px;padding:40px 36px;display:flex;flex-direction:column;gap:0;}
+.ob-steps{display:flex;gap:6px;margin-bottom:32px;}
+.ob-step{height:3px;flex:1;border-radius:2px;background:var(--border-bright);transition:background .3s;}
+.ob-step.active{background:var(--amber);}
+.ob-icon{font-size:36px;margin-bottom:16px;}
+.ob-title{font-family:'Barlow Condensed',sans-serif;font-size:22px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:#e8edf5;margin-bottom:10px;}
+.ob-sub{font-family:'Barlow',sans-serif;font-size:14px;color:var(--text-dim);line-height:1.7;margin-bottom:24px;}
+.ob-features{display:flex;flex-direction:column;gap:10px;margin-bottom:28px;}
+.ob-feature{display:flex;gap:12px;align-items:flex-start;font-family:'Barlow',sans-serif;font-size:13px;color:var(--text-dim);line-height:1.5;}
+.ob-feature-icon{font-size:16px;flex-shrink:0;margin-top:1px;}
+.ob-feature strong{color:#e8edf5;}
+.ob-input{background:#0a0b0d;border:1px solid var(--border-bright);border-radius:6px;padding:10px 12px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:13px;outline:none;transition:border-color .2s;width:100%;box-sizing:border-box;margin-bottom:8px;}
+.ob-input:focus{border-color:var(--amber);}
+.ob-hint{font-family:'Barlow',sans-serif;font-size:11px;color:var(--text-dim);line-height:1.6;margin-bottom:24px;}
+.ob-hint a{color:var(--cyan);text-decoration:none;}
+.ob-btn{background:var(--amber);color:#000;font-family:'Barlow Condensed',sans-serif;font-size:14px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:13px;border-radius:4px;border:none;cursor:pointer;width:100%;transition:opacity .15s;}
+.ob-btn:hover{opacity:.88;}
+.ob-skip{text-align:center;margin-top:12px;font-family:'Barlow',sans-serif;font-size:12px;color:var(--text-dim);}
+.ob-skip a{color:var(--text-dim);text-decoration:underline;cursor:pointer;}
+.ob-skip a:hover{color:var(--text);}
+.ob-check{font-size:48px;margin-bottom:16px;}
+.ob-ready-list{display:flex;flex-direction:column;gap:8px;margin-bottom:28px;}
+.ob-ready-item{display:flex;gap:10px;align-items:center;font-family:'Barlow',sans-serif;font-size:13px;color:var(--text-dim);}
+.ob-ready-item .ok{color:var(--green);font-size:14px;}
+
 /* ── AUTH OVERLAY ── */
 #authOverlay{position:fixed;inset:0;z-index:9999;background:linear-gradient(135deg,#0a0b0d 0%,#0d1420 100%);display:flex;align-items:center;justify-content:center;}
 #authBox{background:var(--panel);border:1px solid var(--border-bright);border-radius:12px;padding:40px 36px;width:340px;max-width:90vw;display:flex;flex-direction:column;gap:14px;}
@@ -510,6 +573,60 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 </style>
 </head>
 <body>
+
+<!-- ONBOARDING OVERLAY -->
+<div id="onboardingOverlay">
+  <div class="ob-box">
+    <div class="ob-steps">
+      <div class="ob-step active" id="obStep1"></div>
+      <div class="ob-step" id="obStep2"></div>
+      <div class="ob-step" id="obStep3"></div>
+    </div>
+
+    <!-- Step 1: Welcome -->
+    <div id="obPane1">
+      <div class="ob-icon">⟳</div>
+      <div class="ob-title" id="obWelcomeName">Welcome to VORTEX</div>
+      <div class="ob-sub">Your storm intelligence platform is active. Here's what you now have access to:</div>
+      <div class="ob-features">
+        <div class="ob-feature"><span class="ob-feature-icon">⚡</span><span><strong>Instant NWS alerts</strong> — tornado warnings pushed to your phone in under 60 seconds</span></div>
+        <div class="ob-feature"><span class="ob-feature-icon">📊</span><span><strong>Live risk scoring</strong> — 0–100 storm risk index updated every minute for your area</span></div>
+        <div class="ob-feature"><span class="ob-feature-icon">🗺</span><span><strong>Interactive weather map</strong> — real-time temperature, wind, and severe weather overlays</span></div>
+      </div>
+      <button class="ob-btn" onclick="obGoTo(2)">Set Up Notifications →</button>
+      <div class="ob-skip"><a onclick="obComplete()">Skip setup, take me to the map</a></div>
+    </div>
+
+    <!-- Step 2: Push Notifications -->
+    <div id="obPane2" style="display:none;">
+      <div class="ob-icon">📱</div>
+      <div class="ob-title">Stay Ahead of the Storm</div>
+      <div class="ob-sub">Get alerted the moment a tornado warning is issued for your area — before the sirens sound.</div>
+      <input class="ob-input" id="obNtfyUrl" type="url" placeholder="https://ntfy.sh/your-topic-name">
+      <div class="ob-hint">
+        Free push notifications via <a href="https://ntfy.sh" target="_blank">ntfy.sh</a>.<br>
+        1. Install the <strong style="color:var(--text);">ntfy app</strong> on your phone<br>
+        2. Create a topic (any name) → copy the URL<br>
+        3. Paste it above
+      </div>
+      <button class="ob-btn" onclick="obSaveNotifications()">Save &amp; Continue →</button>
+      <div class="ob-skip"><a onclick="obGoTo(3)">Skip for now</a></div>
+    </div>
+
+    <!-- Step 3: Ready -->
+    <div id="obPane3" style="display:none;">
+      <div class="ob-check">✅</div>
+      <div class="ob-title">You're All Set</div>
+      <div class="ob-sub">VORTEX is now monitoring your area 24/7. Here's what's active:</div>
+      <div class="ob-ready-list">
+        <div class="ob-ready-item"><span class="ok">✓</span> Real-time NWS alert monitoring</div>
+        <div class="ob-ready-item"><span class="ok">✓</span> Live weather map + risk scoring</div>
+        <div class="ob-ready-item" id="obReadyPush"><span class="ok">✓</span> Push notifications configured</div>
+      </div>
+      <button class="ob-btn" onclick="obComplete()">Open VORTEX →</button>
+    </div>
+  </div>
+</div>
 
 <!-- AUTH OVERLAY -->
 <div id="landingPage">
@@ -1463,6 +1580,8 @@ async function openStripePortal() {
 
 // FIX(security): track active polling interval IDs so signOut can stop them
 let pollingIntervals = [];
+let isZooming = false;
+let zoomEndTimer = null;
 // Build timestamp injected at deploy time — used to detect stale tabs
 const BUILD_TS = Date.now(); // replaced by build step; good enough as a unique-per-load marker
 let dataInitialized  = false;
@@ -1830,6 +1949,7 @@ async function resolveAuth(session, source) {
     checkReadyToLoad();
     // Show iOS install prompt once user is logged in (non-fatal, no-op on non-iOS)
     checkIOSInstallPrompt();
+    checkOnboarding(session.user);
     // Load settings in background — failure is non-fatal
     loadUserSettings(session.user.id).catch(err => {
       console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
@@ -1921,8 +2041,14 @@ function initMap(us) {
       gStations.attr('transform', event.transform);
       gHazard.attr('transform', event.transform);
       scheduleRescale(k);
-      if (windOn) initParts();
-      if (lyr.temp) drawHeatmap();
+      // Defer expensive redraws until zoom settles — prevents mobile freeze
+      isZooming = true;
+      clearTimeout(zoomEndTimer);
+      zoomEndTimer = setTimeout(() => {
+        isZooming = false;
+        if (windOn) initParts();
+        if (lyr.temp) drawHeatmap();
+      }, 150);
       if (lyr.radar) {
         // During drag/zoom: move canvas with CSS transform — GPU composited, zero CPU cost
         // The canvas was last painted relative to radarPaintedTransform
@@ -1943,8 +2069,11 @@ function initMap(us) {
       if (geoActive) updateGPSDot();
     })
     .on('end', () => {
+      clearTimeout(zoomEndTimer);
+      isZooming = false;
+      if (windOn) initParts();
+      if (lyr.temp) drawHeatmap();
       if (lyr.radar) scheduleRadarRepaint();
-      // rescaleStations handles all label visibility on zoom — no city reload needed
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -2634,6 +2763,7 @@ function rescaleStations(k) {
 // FIX(perf): D3 enter/update/exit instead of full remove/redraw every cycle
 function drawStations() {
   if (!gStations) return;
+  if (isZooming) return;
 
   const stationData = stations.filter(s => !!projection([s.lo, s.la]));
 
@@ -4000,8 +4130,11 @@ async function testPhoneCall() {
         body: JSON.stringify({ phone }),
       }
     );
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Call failed');
+    if (!res.ok) {
+      let errMsg = 'Call failed';
+      try { errMsg = (await res.json()).error || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
     showToast('watch', '📞 Test Call Sent', `Calling ${phone} — should ring within 15 seconds.`);
   } catch (e) {
     showToast('alert', 'Call Failed', e.message);
@@ -4740,29 +4873,7 @@ function addSheetSwipe(sheet) {
   sheet.addEventListener('touchend',   onEnd,   {passive:true, once:true});
 }
 
-// iOS pinch-to-zoom
-let touchStartDist = 0, touchStartScale = 1;
-document.getElementById('mapSvg').addEventListener('touchstart', e => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    touchStartDist  = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    touchStartScale = currentTransform.k;
-  }
-}, {passive:false});
-document.getElementById('mapSvg').addEventListener('touchmove', e => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    const dist   = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    const factor = dist / touchStartDist;
-    const newK   = Math.min(Math.max(touchStartScale * factor, 0.5), 12);
-    const mx = (e.touches[0].clientX+e.touches[1].clientX)/2, my = (e.touches[0].clientY+e.touches[1].clientY)/2;
-    const rect = svgEl.getBoundingClientRect();
-    const cx = mx-rect.left, cy = my-rect.top;
-    const ratio = newK / currentTransform.k;
-    svg.call(zoom.transform, d3.zoomIdentity.translate(cx-ratio*(cx-currentTransform.x), cy-ratio*(cy-currentTransform.y)).scale(newK));
-  }
-}, {passive:false});
-document.getElementById('mapSvg').addEventListener('touchmove', e => { if (e.touches.length===1) e.preventDefault(); }, {passive:false});
+// touch-action:none on #mapSvg hands all touch handling to D3 zoom — no custom handlers needed
 // FIX(ux): hide tooltip on tap-end (mobile)
 let lastTap = 0;
 document.getElementById('mapSvg').addEventListener('touchend', e => {

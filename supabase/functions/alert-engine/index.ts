@@ -217,7 +217,7 @@ serve(async (req) => {
       // Upsert back to Supabase (fire and forget)
       supa.from('weather_cache')
         .upsert({ location_key: key, data: wx, fetched_at: new Date().toISOString() })
-        .catch(() => {});
+        .then(() => {}, () => {});
 
       return wx;
     }
