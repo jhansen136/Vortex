@@ -239,6 +239,7 @@ serve(async (req) => {
 
     // ── 5. Process each user ──────────────────────────────────────────────────
     const newAlerts: { user_id: string; alert_key: string }[] = [];
+    const historyAlerts: { user_id: string; event: string; area: string; alert_key: string; notified_push: boolean; notified_call: boolean; }[] = [];
     const profileUpdates: { id: string; last_threshold_call_at: string }[] = [];
 
     for (const user of users) {
@@ -277,6 +278,7 @@ serve(async (req) => {
       type AlertItem = {
         key: string; title: string; body: string;
         priority: string; tags: string;
+        event?: string; area?: string;
         call?: boolean; callType?: 'warning' | 'threshold';
       };
       const toSend: AlertItem[] = [];
@@ -325,6 +327,8 @@ serve(async (req) => {
           body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
           priority,
           tags,
+          event,
+          area:     alert.properties.areaDesc || '',
           call:     (isTornado    && !!phone && (pref?.call_tornado_enabled !== false)) ||
                     (isFlashFlood && !!phone && (pref?.call_flood_enabled === true)),
           callType: isFlashFlood ? 'flood' : 'warning',
@@ -353,6 +357,8 @@ serve(async (req) => {
                 body:     `${c.label} is ${Math.round(c.value)}${c.unit} — your threshold is ${c.limit}${c.unit}`,
                 priority: c.severe ? 'max' : 'high',
                 tags:     'warning,chart_increasing',
+                event:    `${c.label} Alert`,
+                area:     'Your Location',
                 call:     triggerCall,
                 callType: 'threshold',
               });
@@ -366,6 +372,9 @@ serve(async (req) => {
       // ── Send notifications ────────────────────────────────────────────────────
       let calledForThreshold = false;
       for (const alert of toSend) {
+        let pushSent = false;
+        let callSent = false;
+
         // ntfy.sh push notification
         if (pref?.push_enabled && intg?.ntfy_url?.startsWith('https://ntfy.sh/')) {
           try {
@@ -379,6 +388,7 @@ serve(async (req) => {
               },
               body: alert.body,
             });
+            pushSent = true;
           } catch (e: any) {
             results.errors.push(`ntfy:${user.id}: ${e.message}`);
           }
@@ -411,6 +421,7 @@ serve(async (req) => {
               await makeCall(phone, alert.callType!);
               results.called++;
               dailyCallCount++;
+              callSent = true;
               newAlerts.push({ user_id: user.id, alert_key: `call:${alert.key}` });
               if (alert.callType === 'threshold') calledForThreshold = true;
             } catch (e: any) {
@@ -420,6 +431,14 @@ serve(async (req) => {
         }
 
         newAlerts.push({ user_id: user.id, alert_key: alert.key });
+        historyAlerts.push({
+          user_id:       user.id,
+          event:         alert.event || alert.title,
+          area:          alert.area  || '',
+          alert_key:     alert.key,
+          notified_push: pushSent,
+          notified_call: callSent,
+        });
         results.notified++;
       }
 
@@ -433,6 +452,14 @@ serve(async (req) => {
     if (newAlerts.length) {
       await supa.from('sent_alerts').insert(newAlerts);
     }
+
+    // ── 7b. Persist alert_history ─────────────────────────────────────────────
+    if (historyAlerts.length) {
+      await supa.from('alert_history').insert(historyAlerts);
+    }
+    // Clean up history older than 30 days
+    const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    await supa.from('alert_history').delete().lt('sent_at', cutoff30d);
 
     // ── 8. Update last_threshold_call_at for users who were called ────────────
     for (const u of profileUpdates) {
