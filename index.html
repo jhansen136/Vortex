@@ -1755,7 +1755,7 @@ async function authRegister() {
 async function authSignOut() {
   // FIX(security): stop all data polling before clearing session
   stopDataPolling();
-  if (window.Sentry) Sentry.setUser(null);
+  if (window.Sentry) Sentry.onLoad(() => Sentry.setUser(null));
   await supa.auth.signOut();
   currentUser = null; userProfile = null;
   document.getElementById('authOverlay').style.display = 'flex';
@@ -1953,7 +1953,7 @@ async function resolveAuth(session, source) {
     // Show iOS install prompt once user is logged in (non-fatal, no-op on non-iOS)
     checkIOSInstallPrompt();
     checkOnboarding(session.user);
-    if (window.Sentry) Sentry.setUser({ id: session.user.id, email: session.user.email });
+    if (window.Sentry) Sentry.onLoad(() => Sentry.setUser({ id: session.user.id, email: session.user.email }));
     // Load settings in background — failure is non-fatal
     loadUserSettings(session.user.id).catch(err => {
       console.warn('[VORTEX] resolveAuth loadUserSettings failed:', err);
