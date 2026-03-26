@@ -4118,8 +4118,11 @@ async function testPhoneCall() {
         body: JSON.stringify({ phone }),
       }
     );
-    const json = await res.json();
-    if (!res.ok) throw new Error(json.error || 'Call failed');
+    if (!res.ok) {
+      let errMsg = 'Call failed';
+      try { errMsg = (await res.json()).error || errMsg; } catch {}
+      throw new Error(errMsg);
+    }
     showToast('watch', '📞 Test Call Sent', `Calling ${phone} — should ring within 15 seconds.`);
   } catch (e) {
     showToast('alert', 'Call Failed', e.message);
