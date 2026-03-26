@@ -1202,6 +1202,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div id="alertsList"><div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">Loading NWS alerts…</div></div>
     </div>
     <div class="panel-section">
+      <div class="panel-label">Alert History</div>
+      <div id="alertHistoryList"><div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">No alerts in the last 30 days.</div></div>
+    </div>
+    <div class="panel-section">
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
         <div>
@@ -1346,6 +1350,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <div class="sheet-body">
     <div class="panel-section" id="alertsListM" style="border:none;">
       <div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">Loading NWS alerts…</div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-label">Alert History</div>
+      <div id="alertHistoryListM"><div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">No alerts in the last 30 days.</div></div>
     </div>
   </div>
 </div>
@@ -1826,6 +1834,7 @@ async function loadUserSettings(userId) {
     document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
     document.getElementById('setupUserInfo').textContent = `Signed in as ${currentUser?.email || ''}`;
     updateCfgUI();
+    loadAlertHistory();
   } catch (err) {
     // Settings failed to load — log it but don't block data polling
     console.warn('[VORTEX] loadUserSettings error (non-fatal):', err);
@@ -3697,6 +3706,48 @@ let nwsAlerts = [], seenAlertIds = new Set();
 let nwsFetchFails = 0;
 // Track which alert IDs are currently rendered on the map
 let renderedAlertIds = new Set();
+
+async function loadAlertHistory() {
+  if (!currentUser) return;
+  try {
+    const { data, error } = await supa
+      .from('alert_history')
+      .select('event, area, notified_push, notified_call, sent_at')
+      .eq('user_id', currentUser.id)
+      .order('sent_at', { ascending: false })
+      .limit(50);
+    if (error || !data) return;
+    const render = (containerId) => {
+      const el = document.getElementById(containerId);
+      if (!el) return;
+      if (!data.length) {
+        el.innerHTML = '<div style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);padding:8px 0;">No alerts in the last 30 days.</div>';
+        return;
+      }
+      el.innerHTML = data.map(a => {
+        const d    = new Date(a.sent_at);
+        const date = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const time = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        const icons = (a.notified_push ? '📱' : '') + (a.notified_call ? '📞' : '');
+        const area  = a.area ? a.area.split(';')[0].split(',')[0].trim() : '';
+        return `<div style="padding:7px 0;border-bottom:1px solid var(--border);display:flex;flex-direction:column;gap:2px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+            <span style="font-family:var(--font-cond);font-size:12px;font-weight:700;letter-spacing:.5px;color:var(--amber);">${a.event}</span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);white-space:nowrap;">${icons || '–'}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;">
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">${area}</span>
+            <span style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);">${date} ${time}</span>
+          </div>
+        </div>`;
+      }).join('');
+    };
+    render('alertHistoryList');
+    render('alertHistoryListM');
+  } catch (e) {
+    console.warn('[VORTEX] loadAlertHistory failed:', e);
+  }
+}
 
 async function fetchNWS() {
   const urls = [
