@@ -150,7 +150,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .map-wrap{flex:1;position:relative;overflow:hidden;background:#05070a;}
 
 /* ── MAP ── */
-#mapSvg{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none;}
+#mapSvg{width:100%;height:100%;display:block;cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;}
 #mapSvg:active{cursor:grabbing;}
 .state-fill{fill:#0c1018;stroke:#1c2535;stroke-width:.6;transition:fill .2s;}
 .state-fill:hover{fill:#131b26;stroke:#2a3c54;}
@@ -2711,18 +2711,14 @@ function isHomeCity(c) {
 }
 
 // rAF-debounced rescale — batches all per-frame zoom events into one DOM pass
-let rescaleRafId = null, pendingK = 1, rescaleFrameCount = 0;
+let rescaleRafId = null, pendingK = 1;
 function scheduleRescale(k) {
   pendingK = k;
   if (rescaleRafId) return;
   rescaleRafId = requestAnimationFrame(() => {
     rescaleRafId = null;
-    rescaleFrameCount++;
-    // Run full rescale every 2nd frame — halves DOM writes, imperceptible to user
-    if (rescaleFrameCount % 2 === 0) {
-      rescaleStations(pendingK);
-      rescaleHazards();
-    }
+    rescaleStations(pendingK);
+    rescaleHazards();
   });
 }
 
@@ -4877,30 +4873,7 @@ function addSheetSwipe(sheet) {
   sheet.addEventListener('touchend',   onEnd,   {passive:true, once:true});
 }
 
-// iOS pinch-to-zoom — rect cached on touchstart to avoid per-frame reflow
-let touchStartDist = 0, touchStartScale = 1, touchSvgRect = null;
-document.getElementById('mapSvg').addEventListener('touchstart', e => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    touchStartDist  = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    touchStartScale = currentTransform.k;
-    touchSvgRect    = svgEl.getBoundingClientRect(); // cache once, not per frame
-  }
-}, {passive:false});
-document.getElementById('mapSvg').addEventListener('touchmove', e => {
-  if (e.touches.length === 2) {
-    e.preventDefault();
-    const dist   = Math.hypot(e.touches[0].clientX-e.touches[1].clientX, e.touches[0].clientY-e.touches[1].clientY);
-    const factor = dist / touchStartDist;
-    const newK   = Math.min(Math.max(touchStartScale * factor, 0.5), 12);
-    const mx = (e.touches[0].clientX+e.touches[1].clientX)/2, my = (e.touches[0].clientY+e.touches[1].clientY)/2;
-    const rect = touchSvgRect || svgEl.getBoundingClientRect();
-    const cx = mx-rect.left, cy = my-rect.top;
-    const ratio = newK / currentTransform.k;
-    svg.call(zoom.transform, d3.zoomIdentity.translate(cx-ratio*(cx-currentTransform.x), cy-ratio*(cy-currentTransform.y)).scale(newK));
-  }
-}, {passive:false});
-document.getElementById('mapSvg').addEventListener('touchmove', e => { if (e.touches.length===1) e.preventDefault(); }, {passive:false});
+// touch-action:none on #mapSvg hands all touch handling to D3 zoom — no custom handlers needed
 // FIX(ux): hide tooltip on tap-end (mobile)
 let lastTap = 0;
 document.getElementById('mapSvg').addEventListener('touchend', e => {
