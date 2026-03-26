@@ -97,6 +97,13 @@ async function obSaveNotifications() {
 function obComplete() {
   localStorage.setItem('vortex_onboarded', '1');
   document.getElementById('onboardingOverlay').style.display = 'none';
+  if (currentUser) {
+    supa.from('preferences').upsert({
+      user_id: currentUser.id,
+      onboarding_complete: true,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' }).catch(() => {});
+  }
 }
 
 function checkIOSInstallPrompt() {
@@ -1809,7 +1816,11 @@ async function loadUserSettings(userId) {
       // Show/hide DEFAULT OFF badge based on current state
       const defBadge = document.getElementById('callThresholdDefault');
       if (defBadge) defBadge.style.display = (p.call_threshold_enabled ?? false) ? 'none' : 'inline';
+      // Sync onboarding completion from DB → localStorage
+      if (p.onboarding_complete) localStorage.setItem('vortex_onboarded', '1');
     }
+    // Check onboarding here — AFTER DB is read, so we don't flash for returning users
+    checkOnboarding(currentUser);
     const name = userProfile.display_name || currentUser?.email?.split('@')[0] || 'User';
     document.getElementById('userName').textContent = name;
     document.getElementById('userAvatar').textContent = name.charAt(0).toUpperCase();
@@ -1952,7 +1963,6 @@ async function resolveAuth(session, source) {
     checkReadyToLoad();
     // Show iOS install prompt once user is logged in (non-fatal, no-op on non-iOS)
     checkIOSInstallPrompt();
-    checkOnboarding(session.user);
     if (window.Sentry) Sentry.onLoad(() => Sentry.setUser({ id: session.user.id, email: session.user.email }));
     // Load settings in background — failure is non-fatal
     loadUserSettings(session.user.id).catch(err => {
