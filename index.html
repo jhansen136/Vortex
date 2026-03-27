@@ -2164,7 +2164,7 @@ function initMap(us) {
   resizeCanvases();
   setTimeout(zoomHome, 600);
   if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
-  if (lyr.wildfires   && wildfireData.length)   renderWildfires();
+  if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); renderFirePerimeters(); }
   // Signal that map is ready — triggers data load if auth already resolved
   mapReady = true;
   console.log('[VORTEX] mapReady=true, authReady=', authReady);
@@ -3484,7 +3484,7 @@ window.addEventListener('resize', () => {
     drawStations();
     buildStationGrid();
     if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
-    if (lyr.wildfires   && wildfireData.length)   renderWildfires();
+    if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); renderFirePerimeters(); }
     if (lyr.warnings) {
       renderedAlertIds.clear();
       gWarn.selectAll('.warn-path').remove();
@@ -5102,7 +5102,7 @@ function checkPersonalAlerts() {
 // ══════════════════════════════════════════════════════════
 // MULTI-HAZARD
 // ══════════════════════════════════════════════════════════
-let earthquakeData = [], wildfireData = [];
+let earthquakeData = [], wildfireData = [], wildfirePerimData = [];
 function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
 function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
 function fireRadius(acres) { return !acres||acres<10?4:acres<100?5:acres<1000?7:acres<10000?9:12; }
@@ -5152,11 +5152,13 @@ async function fetchWildfires() {
     wildfireData = ((await r.json()).features||[]).filter(f=>f.geometry?.type==='Point');
     renderWildfires();
     if (pendingHazardHash) checkHazardHash();
+    fetchAllFirePerimeters();
   } catch(e) { console.error('[Vortex] fetchWildfires error:', e); }
 }
 function renderWildfires() {
   if (!gHazard || !projection) return;
   gHazard.selectAll('.fire-marker').remove();
+  gHazard.selectAll('.fire-perimeter').remove();
   if (!lyr.wildfires || !wildfireData.length) return;
   const k = currentTransform ? currentTransform.k : 1;
   wildfireData.forEach(feat => {
@@ -5189,7 +5191,10 @@ function rescaleHazards() {
     if(isEq){ g.selectAll('text').attr('x',cx+(baseR+2)/k); }
     else { g.selectAll('text').attr('x',cx); }
   });
-  gHazard.selectAll('.fire-perimeter').attr('stroke-width', 1.5/k);
+  gHazard.selectAll('.fire-perimeter').each(function(){
+    const isHl=+d3.select(this).attr('opacity')>=1;
+    d3.select(this).attr('stroke-width',(isHl?2.5:1.5)/k);
+  });
 }
 
 // ══════════════════════════════════════════════════════════
@@ -5241,7 +5246,10 @@ function clearSelectedHazard(){
     selectedHazardGroup.select('.hazard-outer').classed('hazard-outer-pulse',false);
     selectedHazardGroup=null;
   }
-  if(gHazard) gHazard.selectAll('.fire-perimeter').remove();
+  if(gHazard){
+    const k=currentTransform?.k||1;
+    gHazard.selectAll('.fire-perimeter').attr('stroke-width',1.5/k).attr('opacity',.7);
+  }
 }
 
 function setSelectedHazard(gSel){
@@ -5329,7 +5337,6 @@ async function openFireCard(feat,clientX,clientY){
   if(cost>0){const cs=cost>=1e6?`$${(cost/1e6).toFixed(1)}M`:`$${Math.round(cost/1000)}K`; html+=`<div class="hc-row"><span class="hc-key">EST. COST</span><span class="hc-val">${cs}</span></div>`;}
   html+=`<div class="hc-divider"></div>`;
   prox.forEach(pr=>{ html+=`<div class="hc-row"><span class="hc-key">DISTANCE</span><span class="hc-val" style="color:rgba(200,220,255,.55);">${pr}</span></div>`; });
-  html+=`<div id="hcPerimeterStatus" class="hc-loading"></div>`;
   html+=`</div>`;
   html+=`<div class="hc-actions">
     <a href="${inciUrl}" target="_blank" rel="noopener" class="hc-btn">InciWeb →</a>
@@ -5338,31 +5345,56 @@ async function openFireCard(feat,clientX,clientY){
   </div>`;
 
   openHazardCard(html,clientX,clientY);
-  if(uid) fetchFirePerimeter(uid);
+  if(uid) highlightFirePerimeter(uid);
 }
 
-// ── Fire perimeter ─────────────────────────────────────────
-async function fetchFirePerimeter(uid){
-  const el=document.getElementById('hcPerimeterStatus');
-  if(el) el.textContent='Loading perimeter…';
+// ── Fire perimeters — bulk fetch on layer enable ───────────
+async function fetchAllFirePerimeters(){
+  if(!lyr.wildfires||!gHazard||!projection) return;
   try{
-    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/1/query?where=UniqueFireIdentifier%3D'${encodeURIComponent(uid)}'&outFields=*&f=geojson&resultRecordCount=1`;
-    const r=await fetch(url,{signal:AbortSignal.timeout(10000)});
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/1/query?where=1%3D1&outFields=UniqueFireIdentifier,DailyAcres&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
     if(!r.ok) throw new Error(r.status);
-    const feats=((await r.json()).features||[]).filter(f=>f.geometry);
-    if(el) el.textContent='';
-    if(!feats.length||!gHazard||!projection) return;
-    gHazard.selectAll('.fire-perimeter').remove();
-    const pg=d3.geoPath().projection(projection);
-    const k=currentTransform?.k||1;
-    feats.forEach(f=>{
-      gHazard.insert('path','.fire-marker')
-        .datum(f).attr('class','fire-perimeter').attr('d',pg)
-        .attr('fill','rgba(255,109,0,.1)').attr('stroke','#ff6d00')
-        .attr('stroke-width',1.5/k).attr('stroke-dasharray','5,3')
-        .style('pointer-events','none');
-    });
-  }catch(e){ if(el) el.textContent=''; }
+    wildfirePerimData=((await r.json()).features||[]).filter(f=>f.geometry);
+    renderFirePerimeters();
+  }catch(e){ console.error('[Vortex] fetchAllFirePerimeters error:',e); }
+}
+
+function renderFirePerimeters(){
+  if(!gHazard||!projection) return;
+  gHazard.selectAll('.fire-perimeter').remove();
+  if(!lyr.wildfires||!wildfirePerimData.length) return;
+  const pg=d3.geoPath().projection(projection);
+  const k=currentTransform?.k||1;
+  wildfirePerimData.forEach(f=>{
+    const uid=f.properties?.UniqueFireIdentifier||'';
+    const acres=f.properties?.DailyAcres||0;
+    const col=fireColor(acres);
+    gHazard.insert('path','.fire-marker')
+      .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
+      .attr('d',pg)
+      .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.13)':col==='#ff6d00'?'rgba(255,109,0,.1)':'rgba(255,152,0,.08)')
+      .attr('stroke',col).attr('stroke-width',1.5/k).attr('stroke-dasharray','5,3')
+      .attr('opacity',.7).style('cursor','pointer')
+      .on('click',(event)=>{
+        event.stopPropagation();
+        const fireFeat=wildfireData.find(pt=>pt.properties.UniqueFireIdentifier===uid);
+        if(!fireFeat) return;
+        gHazard.selectAll('.fire-marker').each(function(){
+          if(d3.select(this).attr('data-hazard-id')===uid) setSelectedHazard(d3.select(this));
+        });
+        if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`);
+        openFireCard(fireFeat,event.clientX,event.clientY);
+      });
+  });
+}
+
+function highlightFirePerimeter(uid){
+  const k=currentTransform?.k||1;
+  gHazard.selectAll('.fire-perimeter')
+    .attr('stroke-width',1.5/k).attr('opacity',.7);
+  gHazard.selectAll('.fire-perimeter').filter(`[data-fire-uid="${CSS.escape(uid)}"]`)
+    .attr('stroke-width',2.5/k).attr('opacity',1);
 }
 
 // ── EARTHQUAKE CARD ───────────────────────────────────────
