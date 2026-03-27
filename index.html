@@ -579,9 +579,43 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .user-make-pro:hover{background:rgba(245,166,35,.15);}
 .user-make-free{background:none;border:1px solid rgba(100,100,120,.4);color:var(--text-dim);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
 .user-make-free:hover{background:rgba(100,100,120,.15);}
+/* ── Hazard detail card ──────────────────────────────────────── */
+#hazardCard{position:fixed;z-index:8500;width:308px;max-height:72vh;overflow-y:auto;background:#0d1420;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.75);display:none;font-family:'Share Tech Mono',monospace;transition:opacity .15s;}
+#hazardCard.hc-open{display:block;}
+.hc-header{padding:14px 38px 10px 14px;border-bottom:1px solid rgba(255,255,255,.08);position:relative;}
+.hc-title{font-size:12px;font-weight:700;letter-spacing:.6px;line-height:1.35;margin-bottom:3px;}
+.hc-subtitle{font-size:10px;color:rgba(255,255,255,.45);letter-spacing:.3px;}
+.hc-body{padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
+.hc-row{display:flex;justify-content:space-between;align-items:flex-start;font-size:10px;gap:8px;}
+.hc-key{color:rgba(255,255,255,.4);letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;flex-shrink:0;}
+.hc-val{color:rgba(255,255,255,.82);text-align:right;}
+.hc-bar-wrap{margin:2px 0 6px;}
+.hc-bar-label{display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;}
+.hc-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;}
+.hc-bar-fill{height:100%;border-radius:3px;}
+.hc-banner{margin:8px 14px 0;padding:7px 10px;border-radius:6px;font-size:10px;line-height:1.5;letter-spacing:.2px;}
+.hc-divider{height:1px;background:rgba(255,255,255,.07);margin:4px 0;}
+.hc-actions{padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.08);}
+.hc-btn{flex:1;padding:7px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.65);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.4px;cursor:pointer;text-align:center;text-decoration:none;display:block;}
+.hc-btn:hover{background:rgba(255,255,255,.12);color:#fff;}
+.hc-close{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.55);cursor:pointer;font-size:11px;line-height:22px;text-align:center;padding:0;}
+.hc-close:hover{background:rgba(255,255,255,.2);}
+.hc-loading{padding:6px 14px;color:rgba(255,255,255,.35);font-size:10px;letter-spacing:.3px;}
+@keyframes hazardPulse{0%,100%{opacity:.25;}50%{opacity:.75;}}
+.hazard-outer-pulse{animation:hazardPulse 1.2s ease-in-out infinite;}
+@media(max-width:640px){
+  #hazardCard{position:fixed!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;width:100%!important;border-radius:16px 16px 0 0;max-height:62vh;transform:translateY(102%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:block;pointer-events:none;}
+  #hazardCard.hc-open{transform:translateY(0);pointer-events:all;}
+}
 </style>
 </head>
 <body>
+
+<!-- HAZARD DETAIL CARD -->
+<div id="hazardCard">
+  <button class="hc-close" onclick="closeHazardCard()">✕</button>
+  <div id="hazardCardContent"></div>
+</div>
 
 <!-- ONBOARDING OVERLAY -->
 <div id="onboardingOverlay">
@@ -2228,6 +2262,7 @@ function handleMapHover(event) {
 // FIX(bug): always use svgEl as reference — pointer() coords relative to SVG, not event.target
 let clickDeb = null;
 function handleMapClick(event) {
+  closeHazardCard();
   // Pointer coords relative to the SVG element (not event.target which may be a child circle)
   const [x, y] = d3.pointer(event, svgEl);
   const t  = currentTransform;
@@ -5071,24 +5106,30 @@ function renderEarthquakes() {
     const [lon,lat] = feat.geometry.coordinates, mag = feat.properties.mag;
     const place = feat.properties.place||'Unknown';
     const time  = new Date(feat.properties.time).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+    const id = feat.id || '';
     const pt = projection([lon,lat]); if (!pt) return;
     const [px,py] = pt, baseR = eqRadius(mag), col = eqColor(mag);
-    const g = gHazard.append('g').attr('class','eq-marker').attr('data-base-r',baseR).style('cursor','pointer');
-    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*1.9/k).attr('fill','none').attr('stroke',col).attr('stroke-width',.8/k).attr('opacity',.4);
+    const g = gHazard.append('g').attr('class','eq-marker').attr('data-base-r',baseR).attr('data-hazard-id',id).style('cursor','pointer');
+    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR*1.9/k).attr('fill','none').attr('stroke',col).attr('stroke-width',.8/k).attr('opacity',.4);
     g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.85);
     g.append('text').attr('x',px+(baseR+2)/k).attr('y',py+3/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace").attr('font-size',7/k).attr('font-weight','700').style('pointer-events','none').text(`M${mag.toFixed(1)}`);
-    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div><div class="tt-row"><span class="tt-key">LOCATION</span><span class="tt-val">${place}</span></div><div class="tt-row"><span class="tt-key">TIME</span><span class="tt-val">${time}</span></div><div class="tt-row"><span class="tt-key">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; }).on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div><div class="tt-row"><span class="tt-key">LOCATION</span><span class="tt-val">${place}</span></div><div class="tt-row"><span class="tt-key">TIME</span><span class="tt-val">${time}</span></div><div class="tt-row"><span class="tt-key">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+     .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; setSelectedHazard(g); if(id) history.replaceState(null,'',`#eq=${encodeURIComponent(id)}`); openEqCard(feat, event.clientX, event.clientY); });
   });
+  if (pendingHazardHash) checkHazardHash();
 }
 
 async function fetchWildfires() {
   if (!lyr.wildfires || !gHazard || !projection) return;
   try {
-    const url='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects';
+    const fields = 'IncidentName,DailyAcres,PercentContained,POOState,POOCity,POOCounty,FireCause,FireCauseGeneral,FireDiscoveryDateTime,TotalIncidentPersonnel,EstimatedCostToDate,UniqueFireIdentifier';
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=${fields}&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
     const r = await fetch(url,{signal:AbortSignal.timeout(12000)});
     if (!r.ok) throw new Error(r.status);
     wildfireData = ((await r.json()).features||[]).filter(f=>f.geometry?.type==='Point');
     renderWildfires();
+    if (pendingHazardHash) checkHazardHash();
   } catch(e) {}
 }
 function renderWildfires() {
@@ -5099,14 +5140,19 @@ function renderWildfires() {
   wildfireData.forEach(feat => {
     const [lon,lat]=feat.geometry.coordinates, p=feat.properties;
     const name=p.IncidentName||'Unknown Fire', acres=p.DailyAcres||0;
-    const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown', state=p.POOState||'';
+    const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown';
+    const state=(p.POOState||'').replace('US-','');
+    const uid=p.UniqueFireIdentifier||'';
     const pt=projection([lon,lat]); if (!pt) return;
     const [px,py]=pt, baseR=fireRadius(acres), col=fireColor(acres);
-    const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).style('cursor','pointer');
-    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*2/k).attr('fill',col).attr('opacity',.15);
+    const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).attr('data-hazard-id',uid).style('cursor','pointer');
+    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR*2/k).attr('fill',col).attr('opacity',.15);
     g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.9);
     g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(baseR*1.2)/k).style('pointer-events','none').text('🔥');
-    g.on('mouseenter',(event)=>{ const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`; const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state.replace('US-','')}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; }).on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
+    const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`;
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+     .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; setSelectedHazard(g); if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`); openFireCard(feat, event.clientX, event.clientY); });
   });
 }
 function rescaleHazards() {
@@ -5117,8 +5163,301 @@ function rescaleHazards() {
     g.selectAll('circle').filter((d,i)=>i===0).attr('r',baseR*(isEq?1.9:2)/k);
     g.selectAll('circle').filter((d,i)=>i===1).attr('r',baseR/k);
     g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k);
+    if(isEq) g.selectAll('text').attr('x', function(){ const cx=+d3.select(this.parentNode).select('circle:last-of-type').attr('cx'); return cx+(baseR+2)/k; });
+  });
+  gHazard.selectAll('.fire-perimeter').attr('stroke-width', 1.5/k);
+}
+
+// ══════════════════════════════════════════════════════════
+// HAZARD CLICK CARDS — fires + earthquakes
+// ══════════════════════════════════════════════════════════
+
+// ── Utilities ─────────────────────────────────────────────
+function haversineMiles(lat1,lon1,lat2,lon2){
+  const R=3958.8,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function buildProximityInfo(lat,lng){
+  const parts=[];
+  const homeLat=userProfile?.home_lat??HOME.lat, homeLng=userProfile?.home_lng??HOME.lon;
+  const homeDist=Math.round(haversineMiles(lat,lng,homeLat,homeLng));
+  const homeName=stations.find(s=>s.home)?.n?.split(',')[0]||'Home';
+  parts.push(`${homeDist} mi from ${homeName}`);
+  const nearby=pinnedCityDefs
+    .map(c=>({name:c.n.split(',')[0],dist:Math.round(haversineMiles(lat,lng,c.la,c.lo))}))
+    .filter(c=>c.dist<=250).sort((a,b)=>a.dist-b.dist).slice(0,2);
+  nearby.forEach(c=>parts.push(`${c.dist} mi from ${c.name}`));
+  return parts;
+}
+
+function intensityLabel(v){
+  return ['','Not Felt','Weak','Weak','Light','Moderate','Strong','Very Strong','Severe','Violent','Extreme'][Math.min(Math.round(v||0),10)]||'';
+}
+
+function pagerBadge(alert){
+  const map={green:{bg:'rgba(27,94,32,.5)',col:'#69f0ae',txt:'Little or no impact expected'},yellow:{bg:'rgba(245,127,23,.35)',col:'#ffee58',txt:'Some impact possible'},orange:{bg:'rgba(191,54,12,.4)',col:'#ffcc80',txt:'Significant impact possible'},red:{bg:'rgba(183,28,28,.5)',col:'#ff8a80',txt:'Critical impact expected'}};
+  return map[alert]||null;
+}
+
+function formatTimeAgo(ms){
+  const d=Date.now()-ms,h=Math.floor(d/3600000),m=Math.floor(d/60000);
+  if(h>48)return`${Math.floor(h/24)}d ago`;
+  if(h>0)return`${h}h ago`;
+  return`${m||1}m ago`;
+}
+
+// ── Selected marker state ─────────────────────────────────
+let selectedHazardGroup=null;
+let pendingHazardHash=null;
+
+function clearSelectedHazard(){
+  if(selectedHazardGroup){
+    selectedHazardGroup.select('.hazard-outer').classed('hazard-outer-pulse',false);
+    selectedHazardGroup=null;
+  }
+  if(gHazard) gHazard.selectAll('.fire-perimeter').remove();
+}
+
+function setSelectedHazard(gSel){
+  clearSelectedHazard();
+  selectedHazardGroup=gSel;
+  gSel.select('.hazard-outer').classed('hazard-outer-pulse',true);
+}
+
+// ── Card open/close ───────────────────────────────────────
+function closeHazardCard(){
+  const card=document.getElementById('hazardCard');
+  if(!card) return;
+  card.classList.remove('hc-open');
+  clearSelectedHazard();
+  history.replaceState(null,'',window.location.pathname+window.location.search);
+}
+
+function openHazardCard(html,clientX,clientY){
+  const card=document.getElementById('hazardCard');
+  document.getElementById('hazardCardContent').innerHTML=html;
+  if(window.innerWidth>640){
+    const w=316,pad=16,h=460;
+    let left=clientX+22, top=clientY-120;
+    if(left+w>window.innerWidth-pad) left=clientX-w-22;
+    if(top<pad) top=pad;
+    if(top+h>window.innerHeight-pad) top=window.innerHeight-h-pad;
+    card.style.left=left+'px'; card.style.top=top+'px';
+  }
+  card.classList.add('hc-open');
+}
+
+// ── Share ─────────────────────────────────────────────────
+function shareHazardLink(hash){
+  const url=`${location.origin}${location.pathname}#${hash}`;
+  (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>{
+    showToast('check','Link Copied','Share this URL to open this event directly.');
+  }).catch(()=>{
+    const ta=Object.assign(document.createElement('textarea'),{value:url});
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('check','Link Copied','Share this URL to open this event directly.');
   });
 }
+
+// ── FIRE CARD ─────────────────────────────────────────────
+async function openFireCard(feat,clientX,clientY){
+  const p=feat.properties, [lon,lat]=feat.geometry.coordinates;
+  const name=p.IncidentName||'Unknown Fire';
+  const acres=p.DailyAcres||0;
+  const pct=p.PercentContained;
+  const state=(p.POOState||'').replace('US-','');
+  const county=p.POOCounty||'';
+  const city=p.POOCity||'';
+  const cause=p.FireCauseGeneral||p.FireCause||'';
+  const personnel=p.TotalIncidentPersonnel;
+  const cost=p.EstimatedCostToDate;
+  const uid=p.UniqueFireIdentifier||'';
+  const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k`:(Math.round(acres)||'<1').toLocaleString();
+  const acreNote=acres>=640?` · ~${Math.round(acres/640)} sq mi`:'';
+  const pctNum=pct??0;
+  const barCol=pctNum>=75?'#69f0ae':pctNum>=35?'#f5a623':'#e63946';
+  const causeIcon=cause.toLowerCase().includes('lightning')?'⚡':cause.toLowerCase().includes('human')?'👤':cause?'❓':'';
+  let daysBurning=null;
+  if(p.FireDiscoveryDateTime){
+    daysBurning=Math.max(0,Math.floor((Date.now()-p.FireDiscoveryDateTime)/86400000));
+  }
+  const prox=buildProximityInfo(lat,lon);
+  const hash=uid?`fire=${encodeURIComponent(uid)}`:'';
+  const inciUrl=uid?`https://inciweb.wildfire.gov/incident-information/${uid}`:'https://inciweb.wildfire.gov';
+
+  let html=`<div class="hc-header">
+    <div class="hc-title" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div>
+    <div class="hc-subtitle">${state}${county?` · ${county} Co.`:''}${city?` · ${city}`:''}</div>
+  </div>`;
+
+  html+=`<div class="hc-body">`;
+  // Containment bar
+  html+=`<div class="hc-bar-wrap">
+    <div class="hc-bar-label"><span class="hc-key">CONTAINMENT</span><span style="color:${barCol};font-weight:700;">${pct!=null?pct+'%':'Unknown'}</span></div>
+    <div class="hc-bar"><div class="hc-bar-fill" style="width:${pctNum}%;background:${barCol};"></div></div>
+  </div>`;
+  html+=`<div class="hc-row"><span class="hc-key">SIZE</span><span class="hc-val">${acreStr} acres${acreNote}</span></div>`;
+  if(daysBurning!==null) html+=`<div class="hc-row"><span class="hc-key">BURNING</span><span class="hc-val">${daysBurning===0?'Discovered today':daysBurning+' day'+(daysBurning!==1?'s':'')}</span></div>`;
+  if(cause) html+=`<div class="hc-row"><span class="hc-key">CAUSE</span><span class="hc-val">${causeIcon} ${cause}</span></div>`;
+  if(personnel) html+=`<div class="hc-row"><span class="hc-key">PERSONNEL</span><span class="hc-val">${parseInt(personnel).toLocaleString()} firefighters</span></div>`;
+  if(cost>0){const cs=cost>=1e6?`$${(cost/1e6).toFixed(1)}M`:`$${Math.round(cost/1000)}K`; html+=`<div class="hc-row"><span class="hc-key">EST. COST</span><span class="hc-val">${cs}</span></div>`;}
+  html+=`<div class="hc-divider"></div>`;
+  prox.forEach(pr=>{ html+=`<div class="hc-row"><span class="hc-key">DISTANCE</span><span class="hc-val" style="color:rgba(200,220,255,.55);">${pr}</span></div>`; });
+  html+=`<div id="hcPerimeterStatus" class="hc-loading"></div>`;
+  html+=`</div>`;
+  html+=`<div class="hc-actions">
+    <a href="${inciUrl}" target="_blank" rel="noopener" class="hc-btn">InciWeb →</a>
+    <a href="https://www.wpc.ncep.noaa.gov/kml/nws_wwa/fire/" target="_blank" rel="noopener" class="hc-btn">🔴 Red Flag</a>
+    ${hash?`<button class="hc-btn" onclick="shareHazardLink('${hash}')">Share 🔗</button>`:''}
+  </div>`;
+
+  openHazardCard(html,clientX,clientY);
+  if(uid) fetchFirePerimeter(uid);
+}
+
+// ── Fire perimeter ─────────────────────────────────────────
+async function fetchFirePerimeter(uid){
+  const el=document.getElementById('hcPerimeterStatus');
+  if(el) el.textContent='Loading perimeter…';
+  try{
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/1/query?where=UniqueFireIdentifier%3D'${encodeURIComponent(uid)}'&outFields=*&f=geojson&resultRecordCount=1`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(10000)});
+    if(!r.ok) throw new Error(r.status);
+    const feats=((await r.json()).features||[]).filter(f=>f.geometry);
+    if(el) el.textContent='';
+    if(!feats.length||!gHazard||!projection) return;
+    gHazard.selectAll('.fire-perimeter').remove();
+    const pg=d3.geoPath().projection(projection);
+    const k=currentTransform?.k||1;
+    feats.forEach(f=>{
+      gHazard.insert('path','.fire-marker')
+        .datum(f).attr('class','fire-perimeter').attr('d',pg)
+        .attr('fill','rgba(255,109,0,.1)').attr('stroke','#ff6d00')
+        .attr('stroke-width',1.5/k).attr('stroke-dasharray','5,3')
+        .style('pointer-events','none');
+    });
+  }catch(e){ if(el) el.textContent=''; }
+}
+
+// ── EARTHQUAKE CARD ───────────────────────────────────────
+async function openEqCard(feat,clientX,clientY){
+  const p=feat.properties,[lon,lat,depth]=feat.geometry.coordinates;
+  const mag=p.mag||0, place=p.place||'Unknown location';
+  const id=feat.id||'';
+  const time=new Date(p.time);
+  const timeStr=time.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+  const ago=formatTimeAgo(p.time);
+  const depthCls=depth<70?'Shallow (<70 km)':depth<300?'Intermediate':'Deep';
+  const col=eqColor(mag);
+  const type=(p.type||'earthquake');
+  const isQuake=type==='earthquake';
+  const magType=(p.magType||'').toUpperCase();
+  const felt=p.felt, cdi=p.cdi, mmi=p.mmi, alert=p.alert, tsunami=p.tsunami;
+  const usgsUrl=p.url||'https://earthquake.usgs.gov';
+  const hash=id?`eq=${encodeURIComponent(id)}`:'';
+  const prox=buildProximityInfo(lat,lon);
+  const alertStyle=pagerBadge(alert);
+
+  let html=`<div class="hc-header">
+    <div class="hc-title" style="color:${col};">🟣 M${mag.toFixed(1)} ${isQuake?'EARTHQUAKE':type.toUpperCase()}</div>
+    <div class="hc-subtitle">${place}</div>
+  </div>`;
+
+  if(tsunami===1){
+    html+=`<div class="hc-banner" style="background:rgba(0,150,255,.15);border:1px solid rgba(0,150,255,.4);color:#80d8ff;">🌊 TSUNAMI ADVISORY — check tsunami.gov</div>`;
+  }
+  if(alertStyle){
+    html+=`<div class="hc-banner" style="background:${alertStyle.bg};border:1px solid ${alertStyle.col}55;color:${alertStyle.col};"><strong>PAGER ${alert?.toUpperCase()}:</strong> ${alertStyle.txt}</div>`;
+  }
+
+  html+=`<div class="hc-body">`;
+  html+=`<div class="hc-row"><span class="hc-key">DEPTH</span><span class="hc-val">${depth.toFixed(1)} km · <span style="color:rgba(200,220,255,.5);">${depthCls}</span></span></div>`;
+  html+=`<div class="hc-row"><span class="hc-key">TIME</span><span class="hc-val">${timeStr}</span></div>`;
+  html+=`<div class="hc-row"><span class="hc-key"></span><span class="hc-val" style="color:rgba(255,255,255,.4);">${ago}</span></div>`;
+  if(magType) html+=`<div class="hc-row"><span class="hc-key">MAG TYPE</span><span class="hc-val">${magType}</span></div>`;
+  html+=`<div class="hc-divider"></div>`;
+  if(felt>0) html+=`<div class="hc-row"><span class="hc-key">FELT REPORTS</span><span class="hc-val">${felt.toLocaleString()} people</span></div>`;
+  if(cdi!=null){const lb=intensityLabel(cdi); html+=`<div class="hc-row"><span class="hc-key">COMMUNITY CDI</span><span class="hc-val">${cdi.toFixed(1)}${lb?' · '+lb:''}</span></div>`;}
+  if(mmi!=null){const lb=intensityLabel(mmi); html+=`<div class="hc-row"><span class="hc-key">SHAKEMAP MMI</span><span class="hc-val">${mmi.toFixed(1)}${lb?' · '+lb:''}</span></div>`;}
+  html+=`<div class="hc-divider"></div>`;
+  prox.forEach(pr=>{ html+=`<div class="hc-row"><span class="hc-key">DISTANCE</span><span class="hc-val" style="color:rgba(200,220,255,.55);">${pr}</span></div>`; });
+  html+=`<div id="hcAftershocks" class="hc-loading">Checking for aftershocks…</div>`;
+  html+=`</div>`;
+  html+=`<div class="hc-actions">
+    <a href="${usgsUrl}" target="_blank" rel="noopener" class="hc-btn">USGS →</a>
+    ${hash?`<button class="hc-btn" onclick="shareHazardLink('${hash}')">Share 🔗</button>`:''}
+  </div>`;
+
+  openHazardCard(html,clientX,clientY);
+  if(p.detail) fetchEqDetail(p.detail,lat,lon,mag,p.time);
+  else { const el=document.getElementById('hcAftershocks'); if(el) el.textContent=''; }
+}
+
+// ── Earthquake aftershocks ────────────────────────────────
+async function fetchEqDetail(detailUrl,lat,lon,mainMag,mainTime){
+  try{
+    const start=new Date(mainTime+60000).toISOString().slice(0,19);
+    const end=new Date(Math.min(Date.now(),mainTime+7*86400000)).toISOString().slice(0,19);
+    if(end<=start){ const el=document.getElementById('hcAftershocks'); if(el) el.textContent=''; return; }
+    const radius=Math.min(150,Math.max(30,mainMag*12));
+    const minMag=Math.max(1.0,mainMag-3.5);
+    const url=`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${start}&endtime=${end}&latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&maxradiuskm=${Math.round(radius)}&minmagnitude=${minMag.toFixed(1)}&orderby=magnitude`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error(r.status);
+    const feats=(await r.json()).features||[];
+    const el=document.getElementById('hcAftershocks');
+    if(!el) return;
+    if(!feats.length){ el.textContent=''; return; }
+    const largest=feats[0]?.properties?.mag?.toFixed(1);
+    el.innerHTML=`<div class="hc-divider"></div>
+      <div class="hc-row"><span class="hc-key">AFTERSHOCKS</span><span class="hc-val">${feats.length} detected (≥M${minMag.toFixed(1)})</span></div>
+      ${largest?`<div class="hc-row"><span class="hc-key">LARGEST</span><span class="hc-val">M${largest}</span></div>`:''}`;
+  }catch(e){ const el=document.getElementById('hcAftershocks'); if(el) el.textContent=''; }
+}
+
+// ── URL routing — deep links to specific events ───────────
+function checkHazardHash(){
+  const hash=decodeURIComponent(location.hash.slice(1));
+  if(!hash) return;
+
+  if(hash.startsWith('eq=')){
+    const id=hash.slice(3);
+    const feat=earthquakeData.find(f=>f.id===id);
+    if(!feat){ pendingHazardHash=hash; return; }
+    pendingHazardHash=null;
+    const [lon,lat]=feat.geometry.coordinates;
+    const pt=projection([lon,lat]);
+    if(!pt) return;
+    const targetK=10, tx=window.innerWidth/2-pt[0]*targetK, ty=window.innerHeight/2-pt[1]*targetK;
+    svg.transition().duration(700).call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(targetK));
+    setTimeout(()=>{
+      gHazard.selectAll('.eq-marker').each(function(){
+        if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
+      });
+      openEqCard(feat,window.innerWidth/2,window.innerHeight/2);
+    },750);
+
+  } else if(hash.startsWith('fire=')){
+    const id=hash.slice(5);
+    const feat=wildfireData.find(f=>f.properties.UniqueFireIdentifier===id);
+    if(!feat){ pendingHazardHash=hash; return; }
+    pendingHazardHash=null;
+    const [lon,lat]=feat.geometry.coordinates;
+    const pt=projection([lon,lat]);
+    if(!pt) return;
+    const targetK=10, tx=window.innerWidth/2-pt[0]*targetK, ty=window.innerHeight/2-pt[1]*targetK;
+    svg.transition().duration(700).call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(targetK));
+    setTimeout(()=>{
+      gHazard.selectAll('.fire-marker').each(function(){
+        if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
+      });
+      openFireCard(feat,window.innerWidth/2,window.innerHeight/2);
+    },750);
+  }
+}
+window.addEventListener('hashchange',checkHazardHash);
 
 // ══════════════════════════════════════════════════════════
 // INIT
@@ -5127,6 +5466,7 @@ updateCfgUI();
 updateLegend();
 // NOTE: startDataPolling() is now called from onAuthStateChange only — not here
 // This prevents unauthenticated data fetches (FIX security: auth race condition)
+if(location.hash) checkHazardHash(); // handle deep links on page load
 
 // ══════════════════════════════════════════════════════════
 // MOBILE
