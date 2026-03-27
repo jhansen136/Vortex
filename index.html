@@ -5485,7 +5485,8 @@ function openClusterCard(cluster, clientX, clientY) {
 function openFireFromCluster(uid) {
   const feat = wildfireData.find(f=>f.properties.UniqueFireIdentifier===uid);
   if (!feat) return;
-  if (uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`);
+  // Don't set URL hash — this view came from a cluster card, not a direct map click,
+  // so persisting the hash would cause the card to re-open unexpectedly on reload.
   openFireCard(feat, window.innerWidth/2, window.innerHeight/2, true);
 }
 
