@@ -5228,7 +5228,9 @@ function renderFireClusters(clusters) {
       .attr('font-size',8/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace")
       .attr('font-weight','700').style('pointer-events','none').text(`×${cl.fires.length}`);
     const acreStr = cl.totalAcres>=1000?`${(cl.totalAcres/1000).toFixed(0)}k ac total`:`${Math.round(cl.totalAcres)} ac total`;
-    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${cl.fires.length} ACTIVE FIRES</div><div class="tt-row"><span class="tt-key">TOTAL</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">UNCONTAINED</span><span class="tt-val">${cl.uncontained}</span></div><div style="margin-top:6px;font-size:9px;color:rgba(255,109,0,.6);letter-spacing:.5px;">Click to see all fires →</div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+    const mapEl=document.getElementById('map')||document.querySelector('svg');
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); const r=mapEl.getBoundingClientRect(); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${cl.fires.length} ACTIVE FIRES</div><div class="tt-row"><span class="tt-key">TOTAL</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">UNCONTAINED</span><span class="tt-val">${cl.uncontained}</span></div>`; tt.style.display='block'; tt.style.left=(event.clientX-r.left+14)+'px'; tt.style.top=(event.clientY-r.top-10)+'px'; })
+     .on('mousemove',(event)=>{ const tt=document.getElementById('mapTooltip'); const r=mapEl.getBoundingClientRect(); tt.style.left=(event.clientX-r.left+14)+'px'; tt.style.top=(event.clientY-r.top-10)+'px'; })
      .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
      .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; openClusterCard(cl, event.clientX, event.clientY); });
   });
@@ -5564,8 +5566,6 @@ function renderFirePerimeters(){
     const uid=f.properties?.UniqueFireIdentifier||f.properties?.OBJECTID||'';
     const acres=f.properties?.DailyAcres||f.properties?.GISAcres||0;
     perimUids.add(uid);
-    // At national/cluster zoom, only draw large fires so the map stays readable
-    if (k < CLUSTER_ZOOM_THRESHOLD && acres < 5000) return;
     const col=fireColor(acres);
     gHazard.insert('path','.fire-marker')
       .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
@@ -5576,10 +5576,10 @@ function renderFirePerimeters(){
       .on('click',onPerimClick(uid));
   });
 
-  // ── 2. Approximate circles — only at individual zoom (not cluster mode) ─
-  // At cluster zoom, approx circles would draw for every fire inside a badge,
-  // making the map extremely cluttered. Only show them when fires are individual.
-  if (k >= CLUSTER_ZOOM_THRESHOLD) {
+  // ── 2. Approximate circles — show at mid-zoom and above ──
+  // Threshold lower than CLUSTER_ZOOM_THRESHOLD so geographic context appears
+  // while cluster badges are still active, without waiting until full individual mode.
+  if (k >= 2.5) {
     wildfireData.forEach(fireFeat=>{
       const uid=fireFeat.properties.UniqueFireIdentifier||'';
       if(perimUids.has(uid)) return;
