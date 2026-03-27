@@ -5107,6 +5107,7 @@ function checkPersonalAlerts() {
 let earthquakeData = [], wildfireData = [], wildfirePerimData = [], fireClusters = [];
 let lastOpenCluster = null;
 const CLUSTER_ZOOM_THRESHOLD = 2.5; // below this k-value, fires cluster into badges
+const CLUSTER_PIXEL_RADIUS = 110;   // screen-px radius for grouping fires into one badge
 function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
 function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
 function fireRadius(acres) { return !acres||acres<10?4:acres<100?5:acres<1000?7:acres<10000?9:12; }
@@ -5194,7 +5195,7 @@ function computeFireClusters() {
     pts.forEach((other, j) => {
       if (assigned.has(j)) return;
       const dx=pt.sx-other.sx, dy=pt.sy-other.sy;
-      if (Math.sqrt(dx*dx+dy*dy) <= PIXEL_RADIUS) { members.push(other); assigned.add(j); }
+      if (Math.sqrt(dx*dx+dy*dy) <= CLUSTER_PIXEL_RADIUS) { members.push(other); assigned.add(j); }
     });
     const cx = members.reduce((s,m)=>s+m.sx,0)/members.length;
     const cy = members.reduce((s,m)=>s+m.sy,0)/members.length;
@@ -5571,29 +5572,31 @@ function renderFirePerimeters(){
       .on('click',onPerimClick(uid));
   });
 
-  // ── 2. Approximate circles for fires without NIFC polygons ─
-  // SVG-space circles sized at 3.5× the dot radius so they're always visibly larger
-  // than the fire pin and scale correctly with zoom via the group transform.
-  wildfireData.forEach(fireFeat=>{
-    const uid=fireFeat.properties.UniqueFireIdentifier||'';
-    if(perimUids.has(uid)) return;
-    const acres=fireFeat.properties.DailyAcres||0;
-    if(acres<10) return; // skip tiny fires
-    const [lon,lat]=fireFeat.geometry.coordinates;
-    const svgPt=projection([lon,lat]); if(!svgPt) return;
-    const [svgX,svgY]=svgPt;
-    const baseR=fireRadius(acres), col=fireColor(acres);
-    const fill=col==='#dd2c00'?'rgba(221,44,0,.15)':col==='#ff6d00'?'rgba(255,109,0,.11)':'rgba(255,152,0,.08)';
-    gHazard.insert('circle','.fire-marker')
-      .attr('class','fire-perimeter fire-perim-approx').attr('data-fire-uid',uid)
-      .attr('data-base-r',baseR)
-      .attr('cx',svgX).attr('cy',svgY)
-      .attr('r',baseR*3.5/k)
-      .attr('fill',fill)
-      .attr('stroke',col).attr('stroke-width',1.5/k).attr('stroke-dasharray','4,3')
-      .attr('opacity',.7).style('cursor','pointer')
-      .on('click',onPerimClick(uid));
-  });
+  // ── 2. Approximate circles — only at individual zoom (not cluster mode) ─
+  // At cluster zoom, approx circles would draw for every fire inside a badge,
+  // making the map extremely cluttered. Only show them when fires are individual.
+  if (k >= CLUSTER_ZOOM_THRESHOLD) {
+    wildfireData.forEach(fireFeat=>{
+      const uid=fireFeat.properties.UniqueFireIdentifier||'';
+      if(perimUids.has(uid)) return;
+      const acres=fireFeat.properties.DailyAcres||0;
+      if(acres<10) return; // skip tiny fires
+      const [lon,lat]=fireFeat.geometry.coordinates;
+      const svgPt=projection([lon,lat]); if(!svgPt) return;
+      const [svgX,svgY]=svgPt;
+      const baseR=fireRadius(acres), col=fireColor(acres);
+      const fill=col==='#dd2c00'?'rgba(221,44,0,.15)':col==='#ff6d00'?'rgba(255,109,0,.11)':'rgba(255,152,0,.08)';
+      gHazard.insert('circle','.fire-marker')
+        .attr('class','fire-perimeter fire-perim-approx').attr('data-fire-uid',uid)
+        .attr('data-base-r',baseR)
+        .attr('cx',svgX).attr('cy',svgY)
+        .attr('r',baseR*3.5/k)
+        .attr('fill',fill)
+        .attr('stroke',col).attr('stroke-width',1.5/k).attr('stroke-dasharray','4,3')
+        .attr('opacity',.7).style('cursor','pointer')
+        .on('click',onPerimClick(uid));
+    });
+  }
 }
 
 function highlightFirePerimeter(uid){
