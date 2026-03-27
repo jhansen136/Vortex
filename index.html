@@ -5106,7 +5106,7 @@ function checkPersonalAlerts() {
 // ══════════════════════════════════════════════════════════
 let earthquakeData = [], wildfireData = [], wildfirePerimData = [], fireClusters = [];
 let lastOpenCluster = null;
-const CLUSTER_ZOOM_THRESHOLD = 4.0; // below this k-value, fires cluster into badges
+const CLUSTER_ZOOM_THRESHOLD = 8.0; // below this k-value, fires cluster into badges (county-level zoom)
 const CLUSTER_PIXEL_RADIUS = 110;   // screen-px radius for grouping fires into one badge
 function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
 function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
