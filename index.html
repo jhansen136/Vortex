@@ -5106,7 +5106,7 @@ function checkPersonalAlerts() {
 // ══════════════════════════════════════════════════════════
 let earthquakeData = [], wildfireData = [], wildfirePerimData = [], fireClusters = [];
 let lastOpenCluster = null;
-const CLUSTER_ZOOM_THRESHOLD = 2.5; // below this k-value, fires cluster into badges
+const CLUSTER_ZOOM_THRESHOLD = 4.0; // below this k-value, fires cluster into badges
 const CLUSTER_PIXEL_RADIUS = 110;   // screen-px radius for grouping fires into one badge
 function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
 function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
@@ -5228,7 +5228,7 @@ function renderFireClusters(clusters) {
       .attr('font-size',8/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace")
       .attr('font-weight','700').style('pointer-events','none').text(`×${cl.fires.length}`);
     const acreStr = cl.totalAcres>=1000?`${(cl.totalAcres/1000).toFixed(0)}k ac total`:`${Math.round(cl.totalAcres)} ac total`;
-    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${cl.fires.length} FIRES</div><div class="tt-row"><span class="tt-key">TOTAL</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">UNCONTAINED</span><span class="tt-val">${cl.uncontained}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${cl.fires.length} ACTIVE FIRES</div><div class="tt-row"><span class="tt-key">TOTAL</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">UNCONTAINED</span><span class="tt-val">${cl.uncontained}</span></div><div style="margin-top:6px;font-size:9px;color:rgba(255,109,0,.6);letter-spacing:.5px;">Click to see all fires →</div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
      .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
      .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; openClusterCard(cl, event.clientX, event.clientY); });
   });
@@ -5557,12 +5557,16 @@ function renderFirePerimeters(){
   }
 
   // ── 1. Official NIFC perimeter polygons ─────────────────
+  // At cluster zoom, only show large fires (>5k acres) so the national view
+  // isn't covered in polygon outlines; all perimeters show when zoomed in.
   const perimUids=new Set();
   wildfirePerimData.forEach(f=>{
     const uid=f.properties?.UniqueFireIdentifier||f.properties?.OBJECTID||'';
     const acres=f.properties?.DailyAcres||f.properties?.GISAcres||0;
-    const col=fireColor(acres);
     perimUids.add(uid);
+    // At national/cluster zoom, only draw large fires so the map stays readable
+    if (k < CLUSTER_ZOOM_THRESHOLD && acres < 5000) return;
+    const col=fireColor(acres);
     gHazard.insert('path','.fire-marker')
       .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
       .attr('d',pg)
