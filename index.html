@@ -5567,7 +5567,8 @@ function renderFirePerimeters(){
     const acres=f.properties?.DailyAcres||f.properties?.GISAcres||0;
     perimUids.add(uid);
     const col=fireColor(acres);
-    gHazard.insert('path','.fire-marker')
+    // Insert before cluster badges AND fire markers so perimeters are always behind clickable elements
+    gHazard.insert('path','.fire-cluster, .fire-marker')
       .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
       .attr('d',pg)
       .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.14)':col==='#ff6d00'?'rgba(255,109,0,.10)':'rgba(255,152,0,.08)')
@@ -5576,10 +5577,10 @@ function renderFirePerimeters(){
       .on('click',onPerimClick(uid));
   });
 
-  // ── 2. Approximate circles — show at mid-zoom and above ──
-  // Threshold lower than CLUSTER_ZOOM_THRESHOLD so geographic context appears
-  // while cluster badges are still active, without waiting until full individual mode.
-  if (k >= 2.5) {
+  // ── 2. Approximate circles — only after clusters fully dissolve ──
+  // At cluster zoom NIFC polygons provide geographic context. Approx circles
+  // only appear in individual marker mode to avoid layering chaos.
+  if (k >= CLUSTER_ZOOM_THRESHOLD) {
     wildfireData.forEach(fireFeat=>{
       const uid=fireFeat.properties.UniqueFireIdentifier||'';
       if(perimUids.has(uid)) return;
