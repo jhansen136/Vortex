@@ -2164,7 +2164,7 @@ function initMap(us) {
   resizeCanvases();
   setTimeout(zoomHome, 600);
   if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
-  if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); renderFirePerimeters(); }
+  if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); if(wildfireData.length) renderFirePerimeters(); }
   // Signal that map is ready — triggers data load if auth already resolved
   mapReady = true;
   console.log('[VORTEX] mapReady=true, authReady=', authReady);
@@ -3484,7 +3484,7 @@ window.addEventListener('resize', () => {
     drawStations();
     buildStationGrid();
     if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
-    if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); renderFirePerimeters(); }
+    if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); if(wildfireData.length) renderFirePerimeters(); }
     if (lyr.warnings) {
       renderedAlertIds.clear();
       gWarn.selectAll('.warn-path').remove();
@@ -5352,40 +5352,69 @@ async function openFireCard(feat,clientX,clientY){
 async function fetchAllFirePerimeters(){
   if(!lyr.wildfires||!gHazard||!projection) return;
   try{
-    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/1/query?where=1%3D1&outFields=UniqueFireIdentifier,DailyAcres&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/1/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
     const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
     if(!r.ok) throw new Error(r.status);
     wildfirePerimData=((await r.json()).features||[]).filter(f=>f.geometry);
-    renderFirePerimeters();
   }catch(e){ console.error('[Vortex] fetchAllFirePerimeters error:',e); }
+  renderFirePerimeters(); // always render — fallback circles even if fetch failed
 }
 
 function renderFirePerimeters(){
-  if(!gHazard||!projection) return;
+  if(!gHazard||!projection||!lyr.wildfires) return;
   gHazard.selectAll('.fire-perimeter').remove();
-  if(!lyr.wildfires||!wildfirePerimData.length) return;
   const pg=d3.geoPath().projection(projection);
   const k=currentTransform?.k||1;
+
+  // Helper — attach click handler to open fire card for this uid
+  function onPerimClick(uid){
+    return (event)=>{
+      event.stopPropagation();
+      const fireFeat=wildfireData.find(pt=>pt.properties.UniqueFireIdentifier===uid);
+      if(!fireFeat) return;
+      gHazard.selectAll('.fire-marker').each(function(){
+        if(d3.select(this).attr('data-hazard-id')===uid) setSelectedHazard(d3.select(this));
+      });
+      if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`);
+      openFireCard(fireFeat,event.clientX,event.clientY);
+    };
+  }
+
+  // ── 1. Official NIFC perimeter polygons ─────────────────
+  const perimUids=new Set();
   wildfirePerimData.forEach(f=>{
-    const uid=f.properties?.UniqueFireIdentifier||'';
-    const acres=f.properties?.DailyAcres||0;
+    const uid=f.properties?.UniqueFireIdentifier||f.properties?.OBJECTID||'';
+    const acres=f.properties?.DailyAcres||f.properties?.GISAcres||0;
     const col=fireColor(acres);
+    perimUids.add(uid);
     gHazard.insert('path','.fire-marker')
       .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
       .attr('d',pg)
-      .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.13)':col==='#ff6d00'?'rgba(255,109,0,.1)':'rgba(255,152,0,.08)')
+      .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.14)':col==='#ff6d00'?'rgba(255,109,0,.10)':'rgba(255,152,0,.08)')
       .attr('stroke',col).attr('stroke-width',1.5/k).attr('stroke-dasharray','5,3')
-      .attr('opacity',.7).style('cursor','pointer')
-      .on('click',(event)=>{
-        event.stopPropagation();
-        const fireFeat=wildfireData.find(pt=>pt.properties.UniqueFireIdentifier===uid);
-        if(!fireFeat) return;
-        gHazard.selectAll('.fire-marker').each(function(){
-          if(d3.select(this).attr('data-hazard-id')===uid) setSelectedHazard(d3.select(this));
-        });
-        if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`);
-        openFireCard(fireFeat,event.clientX,event.clientY);
-      });
+      .attr('opacity',.75).style('cursor','pointer')
+      .on('click',onPerimClick(uid));
+  });
+
+  // ── 2. Approximate circles for fires without NIFC polygons ─
+  // Radius formula: r_deg = sqrt(acres * 4047 m² / (π × 111320 m/°²))
+  wildfireData.forEach(fireFeat=>{
+    const uid=fireFeat.properties.UniqueFireIdentifier||'';
+    if(perimUids.has(uid)) return;
+    const acres=fireFeat.properties.DailyAcres||0;
+    if(acres<50) return; // skip tiny dots — not worth approximating
+    const [lon,lat]=fireFeat.geometry.coordinates;
+    const col=fireColor(acres);
+    const rDeg=Math.min(0.5,Math.max(0.01,Math.sqrt(acres*4047/(Math.PI*111320*111320))));
+    const circle=d3.geoCircle().center([lon,lat]).radius(rDeg)();
+    gHazard.insert('path','.fire-marker')
+      .datum(circle)
+      .attr('class','fire-perimeter fire-perim-approx').attr('data-fire-uid',uid)
+      .attr('d',pg)
+      .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.12)':col==='#ff6d00'?'rgba(255,109,0,.09)':'rgba(255,152,0,.07)')
+      .attr('stroke',col).attr('stroke-width',1/k).attr('stroke-dasharray','3,4')
+      .attr('opacity',.6).style('cursor','pointer')
+      .on('click',onPerimClick(uid));
   });
 }
 
