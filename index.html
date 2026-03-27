@@ -5170,8 +5170,11 @@ function renderWildfires() {
     const pt=projection([lon,lat]); if (!pt) return;
     const [px,py]=pt, baseR=fireRadius(acres), col=fireColor(acres);
     const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).attr('data-hazard-id',uid).style('cursor','pointer');
-    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.9);
-    g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(baseR*1.2)/k).style('pointer-events','none').text('🔥');
+    // Fires ≥10 acres always get a shape (NIFC polygon or approx circle) — dot is hidden,
+    // kept as a transparent pulse/click target. Tiny fires (<10ac, no shape) show the dot.
+    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',acres>=10?0:.85);
+    // Emoji label: smaller centroid marker for shape-backed fires, normal size for tiny dots
+    g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(acres>=10?Math.min(baseR*1.2,10):baseR*1.2)/k).style('pointer-events','none').text('🔥');
     const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`;
     g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
      .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
@@ -5359,7 +5362,9 @@ async function fetchAllFirePerimeters(){
     const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
     if(!r.ok) throw new Error(r.status);
     wildfirePerimData=((await r.json()).features||[]).filter(f=>f.geometry);
+    if(!lyr.wildfires) return; // layer toggled off while fetch was in-flight
   }catch(e){ console.error('[Vortex] fetchAllFirePerimeters error:',e); }
+  if(!lyr.wildfires) return;
   renderFirePerimeters(); // always render — fallback circles even if fetch failed
 }
 
