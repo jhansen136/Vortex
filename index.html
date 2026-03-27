@@ -5530,10 +5530,8 @@ async function openFireCard(feat,clientX,clientY,fromCluster=false){
   }
   const prox=buildProximityInfo(lat,lon);
   const hash=uid?`fire=${encodeURIComponent(uid)}`:'';
-  // InciWeb uses custom slugs unrelated to NIFC IDs — link to a name search instead of guessing the slug
-  const inciUrl=name&&name!=='Unknown Fire'
-    ?`https://inciweb.wildfire.gov/accessible-view?combine=${encodeURIComponent(name)}`
-    :'https://inciweb.wildfire.gov';
+  // Google search always surfaces InciWeb, news, and NIFC data for the fire
+  const searchUrl=`https://www.google.com/search?q=${encodeURIComponent((name+' '+state+' wildfire 2026').trim())}`;
 
   const backBtn = fromCluster&&lastOpenCluster
     ? `<div style="padding:7px 14px 0;font-size:9px;color:rgba(255,109,0,.7);cursor:pointer;letter-spacing:.5px;"
@@ -5559,7 +5557,7 @@ async function openFireCard(feat,clientX,clientY,fromCluster=false){
   prox.forEach(pr=>{ html+=`<div class="hc-row"><span class="hc-key">DISTANCE</span><span class="hc-val" style="color:rgba(200,220,255,.55);">${pr}</span></div>`; });
   html+=`</div>`;
   html+=`<div class="hc-actions">
-    <a href="${inciUrl}" target="_blank" rel="noopener" class="hc-btn">InciWeb →</a>
+    <a href="${searchUrl}" target="_blank" rel="noopener" class="hc-btn">🔍 Search</a>
     <a href="https://www.wpc.ncep.noaa.gov/kml/nws_wwa/fire/" target="_blank" rel="noopener" class="hc-btn">🔴 Red Flag</a>
     ${hash?`<button class="hc-btn" onclick="shareHazardLink('${hash}')">Share 🔗</button>`:''}
   </div>`;
