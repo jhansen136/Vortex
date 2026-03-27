@@ -1633,6 +1633,7 @@ async function openStripePortal() {
 let pollingIntervals = [];
 let isZooming = false;
 let zoomEndTimer = null;
+let _zoomMoved = false; // true only when the transform actually changed (real pan/zoom, not a click)
 // Build timestamp injected at deploy time — used to detect stale tabs
 const BUILD_TS = Date.now(); // replaced by build step; good enough as a unique-per-load marker
 let dataInitialized  = false;
@@ -2090,7 +2091,9 @@ function initMap(us) {
   warnSvg.attr('width', W).attr('height', H);
   zoom = d3.zoom()
     .scaleExtent([0.5, 100])
+    .clickDistance(5)   // FIX: allow clicks with <5px micro-movement; prevents D3 zoom from swallowing cluster/marker clicks
     .on('zoom', (event) => {
+      _zoomMoved = true;
       currentTransform = event.transform;
       const {x, y, k} = event.transform;
       gMap.attr('transform', event.transform);
@@ -2125,7 +2128,7 @@ function initMap(us) {
       }
       if (geoActive) updateGPSDot();
     })
-    .on('end', () => {
+    .on('end', (event) => {
       clearTimeout(zoomEndTimer);
       isZooming = false;
       if (windOn) initParts();
@@ -2135,10 +2138,44 @@ function initMap(us) {
       const newTier = currentTransform.k >= LABEL_ZOOM[3] ? 3 : currentTransform.k >= LABEL_ZOOM[2] ? 2 : 1;
       lastCityTier = newTier;
       loadCitiesForView();
-      // Re-render fires: crossing CLUSTER_ZOOM_THRESHOLD switches between clusters and individual markers
-      if (lyr.wildfires && wildfireData.length) { renderWildfires(); if (wildfireData.length) renderFirePerimeters(); }
+      // Only re-render fires when the transform actually changed (i.e. a real pan/zoom, not a
+      // stationary click). A stationary click fires pointerdown→pointerup→end with no 'zoom'
+      // event in between — _zoomMoved stays false. Without this guard, renderWildfires() would
+      // remove cluster DOM elements BEFORE the click event fires, swallowing every cluster click.
+      if (_zoomMoved && lyr.wildfires && wildfireData.length) {
+        renderWildfires();
+        if (wildfireData.length) renderFirePerimeters();
+      }
+      _zoomMoved = false;
     });
   svg.call(zoom);
+
+  // ── Cluster-click guard ───────────────────────────────────
+  // Root cause: D3 zoom "end" fires on EVERY pointerup (including plain clicks),
+  // calling renderWildfires() which REMOVES the cluster DOM element. The browser
+  // then can't fire a `click` on the now-detached element, so click handlers
+  // never run. Fix: use pointerdown (capture) to snapshot cluster info while the
+  // element is still in the DOM, then pointerup (capture) to open the card —
+  // both fire before D3's zoom "end" handler gets to re-render.
+  let _clPdn = null; // { idx, x, y } set on pointerdown over a cluster ring
+  document.addEventListener('pointerdown', function(e) {
+    const circle = e.target?.closest?.('.cluster-ring');
+    if (!circle) { _clPdn = null; return; }
+    const g = circle.closest('.fire-cluster');
+    const idx = g ? parseInt(g.getAttribute('data-cluster-idx'), 10) : NaN;
+    _clPdn = isNaN(idx) ? null : { idx, x: e.clientX, y: e.clientY };
+  }, { capture: true });
+
+  document.addEventListener('pointerup', function(e) {
+    if (!_clPdn) return;
+    const dn = _clPdn; _clPdn = null;
+    const dx = e.clientX - dn.x, dy = e.clientY - dn.y;
+    if (dx * dx + dy * dy > 100) return; // >10px movement = drag, not a click
+    if (!fireClusters[dn.idx]) return;
+    document.getElementById('mapTooltip').style.display = 'none';
+    openClusterCard(fireClusters[dn.idx], e.clientX, e.clientY);
+  }, { capture: true });
+
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
   const graticule = d3.geoGraticule().step([5, 5]);
   svg.append('path').datum(graticule()).attr('d', pathGen)
@@ -5221,17 +5258,21 @@ function renderFireClusters(clusters) {
     const g = gHazard.append('g').attr('class','fire-cluster').attr('data-base-r',baseR).attr('data-cluster-idx',idx).style('cursor','pointer');
     g.append('circle').attr('class','cluster-ring').attr('cx',cl.cx).attr('cy',cl.cy)
       .attr('r',baseR/k).attr('fill',fill).attr('stroke',col)
-      .attr('stroke-width',1.5/k).attr('stroke-dasharray',`${4/k},${3/k}`);
+      .attr('stroke-width',1.5/k).attr('stroke-dasharray',`${4/k},${3/k}`)
+      .style('pointer-events','all');
     g.append('text').attr('x',cl.cx).attr('y',cl.cy-1/k).attr('text-anchor','middle')
       .attr('font-size',12/k).style('pointer-events','none').text('🔥');
     g.append('text').attr('x',cl.cx).attr('y',cl.cy+10/k).attr('text-anchor','middle')
       .attr('font-size',8/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace")
       .attr('font-weight','700').style('pointer-events','none').text(`×${cl.fires.length}`);
     const acreStr = cl.totalAcres>=1000?`${(cl.totalAcres/1000).toFixed(0)}k ac total`:`${Math.round(cl.totalAcres)} ac total`;
-    const mapEl=document.getElementById('map')||document.querySelector('svg');
+    const mapEl=document.getElementById('mapSvg')||document.querySelector('svg');
+    // Hover handlers on g (tooltip)
     g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); const r=mapEl.getBoundingClientRect(); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${cl.fires.length} ACTIVE FIRES</div><div class="tt-row"><span class="tt-key">TOTAL</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">UNCONTAINED</span><span class="tt-val">${cl.uncontained}</span></div>`; tt.style.display='block'; tt.style.left=(event.clientX-r.left+14)+'px'; tt.style.top=(event.clientY-r.top-10)+'px'; })
      .on('mousemove',(event)=>{ const tt=document.getElementById('mapTooltip'); const r=mapEl.getBoundingClientRect(); tt.style.left=(event.clientX-r.left+14)+'px'; tt.style.top=(event.clientY-r.top-10)+'px'; })
-     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
+    // Click handler on the circle directly so the event target is always a filled hit area
+    g.select('circle.cluster-ring')
      .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; openClusterCard(cl, event.clientX, event.clientY); });
   });
 }
@@ -5567,14 +5608,17 @@ function renderFirePerimeters(){
     const acres=f.properties?.DailyAcres||f.properties?.GISAcres||0;
     perimUids.add(uid);
     const col=fireColor(acres);
-    // Insert before cluster badges AND fire markers so perimeters are always behind clickable elements
-    gHazard.insert('path','.fire-cluster, .fire-marker')
+    // Insert at the very bottom of the z-stack so perimeters never intercept cluster/marker clicks
+    const inClusterMode = k < CLUSTER_ZOOM_THRESHOLD;
+    gHazard.insert('path',':first-child')
       .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
       .attr('d',pg)
       .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.14)':col==='#ff6d00'?'rgba(255,109,0,.10)':'rgba(255,152,0,.08)')
       .attr('stroke',col).attr('stroke-width',1.5/k).attr('stroke-dasharray','5,3')
-      .attr('opacity',.75).style('cursor','pointer')
-      .on('click',onPerimClick(uid));
+      .attr('opacity',.75)
+      .style('pointer-events', inClusterMode ? 'none' : 'all')
+      .style('cursor', inClusterMode ? 'default' : 'pointer')
+      .on('click', inClusterMode ? null : onPerimClick(uid));
   });
 
   // ── 2. Approximate circles — only after clusters fully dissolve ──
@@ -5591,7 +5635,7 @@ function renderFirePerimeters(){
       const [svgX,svgY]=svgPt;
       const baseR=fireRadius(acres), col=fireColor(acres);
       const fill=col==='#dd2c00'?'rgba(221,44,0,.15)':col==='#ff6d00'?'rgba(255,109,0,.11)':'rgba(255,152,0,.08)';
-      gHazard.insert('circle','.fire-marker')
+      gHazard.insert('circle',':first-child')
         .attr('class','fire-perimeter fire-perim-approx').attr('data-fire-uid',uid)
         .attr('data-base-r',baseR)
         .attr('cx',svgX).attr('cy',svgY)
