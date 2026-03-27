@@ -579,9 +579,43 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .user-make-pro:hover{background:rgba(245,166,35,.15);}
 .user-make-free{background:none;border:1px solid rgba(100,100,120,.4);color:var(--text-dim);font-family:var(--font-mono);font-size:9px;padding:2px 6px;border-radius:2px;cursor:pointer;white-space:nowrap;}
 .user-make-free:hover{background:rgba(100,100,120,.15);}
+/* ── Hazard detail card ──────────────────────────────────────── */
+#hazardCard{position:fixed;z-index:8500;width:308px;max-height:72vh;overflow-y:auto;background:#0d1420;border:1px solid rgba(255,255,255,.12);border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.75);display:none;font-family:'Share Tech Mono',monospace;transition:opacity .15s;}
+#hazardCard.hc-open{display:block;}
+.hc-header{padding:14px 38px 10px 14px;border-bottom:1px solid rgba(255,255,255,.08);position:relative;}
+.hc-title{font-size:12px;font-weight:700;letter-spacing:.6px;line-height:1.35;margin-bottom:3px;}
+.hc-subtitle{font-size:10px;color:rgba(255,255,255,.45);letter-spacing:.3px;}
+.hc-body{padding:10px 14px;display:flex;flex-direction:column;gap:6px;}
+.hc-row{display:flex;justify-content:space-between;align-items:flex-start;font-size:10px;gap:8px;}
+.hc-key{color:rgba(255,255,255,.4);letter-spacing:.5px;text-transform:uppercase;white-space:nowrap;flex-shrink:0;}
+.hc-val{color:rgba(255,255,255,.82);text-align:right;}
+.hc-bar-wrap{margin:2px 0 6px;}
+.hc-bar-label{display:flex;justify-content:space-between;font-size:10px;margin-bottom:4px;}
+.hc-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.1);overflow:hidden;}
+.hc-bar-fill{height:100%;border-radius:3px;}
+.hc-banner{margin:8px 14px 0;padding:7px 10px;border-radius:6px;font-size:10px;line-height:1.5;letter-spacing:.2px;}
+.hc-divider{height:1px;background:rgba(255,255,255,.07);margin:4px 0;}
+.hc-actions{padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.08);}
+.hc-btn{flex:1;padding:7px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.65);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.4px;cursor:pointer;text-align:center;text-decoration:none;display:block;}
+.hc-btn:hover{background:rgba(255,255,255,.12);color:#fff;}
+.hc-close{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.55);cursor:pointer;font-size:11px;line-height:22px;text-align:center;padding:0;z-index:2;}
+.hc-close:hover{background:rgba(255,255,255,.2);}
+.hc-loading{padding:6px 14px;color:rgba(255,255,255,.35);font-size:10px;letter-spacing:.3px;}
+@keyframes hazardPulse{0%,100%{opacity:.25;}50%{opacity:.75;}}
+.hazard-outer-pulse{animation:hazardPulse 1.2s ease-in-out infinite;}
+@media(max-width:640px){
+  #hazardCard{position:fixed!important;left:0!important;right:0!important;bottom:0!important;top:auto!important;width:100%!important;border-radius:16px 16px 0 0;max-height:62vh;transform:translateY(102%);transition:transform .3s cubic-bezier(.4,0,.2,1);display:block;pointer-events:none;}
+  #hazardCard.hc-open{transform:translateY(0);pointer-events:all;}
+}
 </style>
 </head>
 <body>
+
+<!-- HAZARD DETAIL CARD -->
+<div id="hazardCard">
+  <button class="hc-close" onclick="closeHazardCard()">✕</button>
+  <div id="hazardCardContent"></div>
+</div>
 
 <!-- ONBOARDING OVERLAY -->
 <div id="onboardingOverlay">
@@ -2097,6 +2131,10 @@ function initMap(us) {
       if (windOn) initParts();
       if (lyr.temp) drawHeatmap();
       if (lyr.radar) scheduleRadarRepaint();
+      // Reload cities for new viewport / zoom tier
+      const newTier = currentTransform.k >= LABEL_ZOOM[3] ? 3 : currentTransform.k >= LABEL_ZOOM[2] ? 2 : 1;
+      lastCityTier = newTier;
+      loadCitiesForView();
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -2126,7 +2164,7 @@ function initMap(us) {
   resizeCanvases();
   setTimeout(zoomHome, 600);
   if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
-  if (lyr.wildfires   && wildfireData.length)   renderWildfires();
+  if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); if(wildfireData.length) renderFirePerimeters(); }
   // Signal that map is ready — triggers data load if auth already resolved
   mapReady = true;
   console.log('[VORTEX] mapReady=true, authReady=', authReady);
@@ -2224,6 +2262,7 @@ function handleMapHover(event) {
 // FIX(bug): always use svgEl as reference — pointer() coords relative to SVG, not event.target
 let clickDeb = null;
 function handleMapClick(event) {
+  closeHazardCard();
   // Pointer coords relative to the SVG element (not event.target which may be a child circle)
   const [x, y] = d3.pointer(event, svgEl);
   const t  = currentTransform;
@@ -2393,8 +2432,213 @@ const DEFS = [
   {n:'Fairbanks, AK',       la:64.84, lo:-147.72, tier:2},
 ];
 
+// ── Expanded city database — compact [city, state, lat, lng, tier] ───────────
+// tier 1 ≥300k pop (shown at k≥1.5)  tier 2 ≥50k (k≥3.5)  tier 3 ≥10k (k≥7.0)
+const EXTRA_CITIES = [
+  // === TIER 1 — Major metros missing from base list ===
+  ['Fort Worth','TX',32.75,-97.33,1],
+  ['Virginia Beach','VA',36.85,-75.98,1],
+  ['Colorado Springs','CO',38.83,-104.82,1],
+  ['Long Beach','CA',33.77,-118.19,1],
+  ['San Jose','CA',37.34,-121.89,1],
+  ['Oakland','CA',37.80,-122.27,1],
+  ['Bakersfield','CA',35.37,-119.02,1],
+  ['Anaheim','CA',33.84,-117.91,1],
+  ['Stockton','CA',37.96,-121.29,1],
+  ['Riverside','CA',33.98,-117.37,1],
+  ['Aurora','CO',39.69,-104.69,1],
+  ['St. Paul','MN',44.95,-93.09,1],
+  ['Corpus Christi','TX',27.80,-97.40,1],
+  // === TIER 2 — Regional cities ===
+  // Alabama
+  ['Montgomery','AL',32.36,-86.30,2],['Huntsville','AL',34.73,-86.59,2],
+  ['Tuscaloosa','AL',33.21,-87.57,2],['Dothan','AL',31.22,-85.39,2],
+  ['Decatur','AL',34.61,-86.98,2],['Auburn','AL',32.61,-85.49,2],
+  // Arkansas
+  ['Jonesboro','AR',35.84,-90.70,2],['Conway','AR',35.09,-92.44,2],
+  // Florida
+  ['Tallahassee','FL',30.44,-84.28,2],['Gainesville','FL',29.65,-82.32,2],
+  ['Pensacola','FL',30.42,-87.22,2],['Lakeland','FL',28.04,-81.95,2],
+  ['Cape Coral','FL',26.56,-81.95,2],['Fort Myers','FL',26.64,-81.87,2],
+  ['Sarasota','FL',27.34,-82.53,2],['Melbourne','FL',28.08,-80.61,2],
+  // Georgia
+  ['Augusta','GA',33.47,-82.01,2],['Savannah','GA',32.08,-81.10,2],
+  ['Macon','GA',32.84,-83.63,2],['Columbus','GA',32.46,-84.99,2],
+  ['Athens','GA',33.96,-83.38,2],['Warner Robins','GA',32.61,-83.60,2],
+  ['Albany','GA',31.58,-84.15,2],['Valdosta','GA',30.83,-83.28,2],
+  // Illinois
+  ['Springfield','IL',39.80,-89.65,2],['Rockford','IL',42.27,-89.09,2],
+  ['Peoria','IL',40.69,-89.59,2],['Champaign','IL',40.12,-88.24,2],
+  ['Bloomington','IL',40.48,-88.99,2],['Decatur','IL',39.84,-88.95,2],
+  ['Joliet','IL',41.53,-88.08,2],
+  // Indiana
+  ['Fort Wayne','IN',41.13,-85.13,2],['South Bend','IN',41.68,-86.25,2],
+  ['Evansville','IN',37.97,-87.57,2],['Lafayette','IN',40.42,-86.88,2],
+  ['Terre Haute','IN',39.47,-87.41,2],['Muncie','IN',40.19,-85.39,2],
+  // Iowa
+  ['Cedar Rapids','IA',42.01,-91.64,2],['Waterloo','IA',42.49,-92.34,2],
+  ['Dubuque','IA',42.50,-90.66,2],['Iowa City','IA',41.66,-91.53,2],
+  ['Sioux City','IA',42.50,-96.40,2],['Ames','IA',42.03,-93.62,2],
+  // Kansas
+  ['Manhattan','KS',39.18,-96.57,2],
+  // Louisiana
+  ['Baton Rouge','LA',30.45,-91.19,2],['Lafayette','LA',30.22,-92.02,2],
+  ['Lake Charles','LA',30.23,-93.22,2],
+  // Michigan
+  ['Lansing','MI',42.73,-84.56,2],['Flint','MI',43.01,-83.69,2],
+  ['Ann Arbor','MI',42.28,-83.74,2],['Kalamazoo','MI',42.29,-85.59,2],
+  // Minnesota
+  ['Rochester','MN',44.02,-92.46,2],['Duluth','MN',46.79,-92.10,2],
+  ['St. Cloud','MN',45.56,-94.16,2],
+  // Nebraska
+  ['Grand Island','NE',40.93,-98.34,2],
+  // Ohio
+  ['Toledo','OH',41.66,-83.56,2],['Akron','OH',41.08,-81.52,2],
+  ['Dayton','OH',39.76,-84.19,2],['Youngstown','OH',41.10,-80.65,2],
+  // Oklahoma
+  ['Lawton','OK',34.61,-98.39,2],['Enid','OK',36.39,-97.88,2],
+  // North Carolina
+  ['Greensboro','NC',36.07,-79.79,2],['Winston-Salem','NC',36.10,-80.24,2],
+  ['Durham','NC',35.99,-78.90,2],['Fayetteville','NC',35.05,-78.88,2],
+  ['Wilmington','NC',34.23,-77.94,2],['Asheville','NC',35.57,-82.55,2],
+  // South Carolina
+  ['Greenville','SC',34.85,-82.39,2],['Rock Hill','SC',34.93,-81.02,2],
+  // Tennessee
+  ['Knoxville','TN',35.96,-83.92,2],['Chattanooga','TN',35.05,-85.31,2],
+  ['Clarksville','TN',36.53,-87.36,2],['Murfreesboro','TN',35.85,-86.39,2],
+  ['Jackson','TN',35.61,-88.83,2],['Johnson City','TN',36.32,-82.35,2],
+  // Texas
+  ['Waco','TX',31.55,-97.15,2],['Abilene','TX',32.45,-99.73,2],
+  ['Wichita Falls','TX',33.91,-98.49,2],['Tyler','TX',32.35,-95.30,2],
+  ['Beaumont','TX',30.08,-94.13,2],['McAllen','TX',26.20,-98.23,2],
+  ['Killeen','TX',31.12,-97.73,2],['Denton','TX',33.21,-97.13,2],
+  ['Longview','TX',32.50,-94.74,2],['Bryan','TX',30.67,-96.37,2],
+  ['San Angelo','TX',31.46,-100.44,2],['Odessa','TX',31.85,-102.37,2],
+  ['Temple','TX',31.10,-97.34,2],
+  // Virginia
+  ['Roanoke','VA',37.27,-79.94,2],['Lynchburg','VA',37.41,-79.14,2],
+  ['Newport News','VA',37.09,-76.47,2],['Hampton','VA',37.03,-76.34,2],
+  ['Chesapeake','VA',36.77,-76.29,2],
+  // Washington
+  ['Tacoma','WA',47.25,-122.44,2],['Everett','WA',47.98,-122.20,2],
+  ['Olympia','WA',47.04,-122.90,2],['Yakima','WA',46.60,-120.51,2],
+  // Wisconsin
+  ['Green Bay','WI',44.52,-88.02,2],['Racine','WI',42.72,-87.81,2],
+  ['Appleton','WI',44.26,-88.41,2],['Eau Claire','WI',44.81,-91.50,2],
+  // Colorado / Oregon
+  ['Fort Collins','CO',40.59,-105.08,2],['Pueblo','CO',38.25,-104.61,2],
+  ['Boulder','CO',40.01,-105.28,2],['Salem','OR',44.94,-123.03,2],
+  // === TIER 3 — Small cities (storm-prone focus) ===
+  // Arkansas — comprehensive (home state)
+  ['Pine Bluff','AR',34.23,-92.00,3],['Hot Springs','AR',34.50,-93.05,3],
+  ['Russellville','AR',35.28,-93.13,3],['Texarkana','AR',33.44,-94.04,3],
+  ['Paragould','AR',36.06,-90.50,3],['Searcy','AR',35.25,-91.74,3],
+  ['West Memphis','AR',35.15,-90.18,3],['El Dorado','AR',33.21,-92.66,3],
+  ['Mountain Home','AR',36.34,-92.39,3],['Batesville','AR',35.77,-91.64,3],
+  ['Camden','AR',33.59,-92.83,3],['Magnolia','AR',33.27,-93.24,3],
+  ['Hope','AR',33.67,-93.59,3],['Benton','AR',34.56,-92.59,3],
+  ['Bryant','AR',34.60,-92.49,3],['Cabot','AR',34.97,-92.02,3],
+  ['Forrest City','AR',35.01,-90.79,3],
+  // Oklahoma
+  ['Muskogee','OK',35.74,-95.37,3],['Stillwater','OK',36.12,-97.06,3],
+  ['Bartlesville','OK',36.75,-95.98,3],['Ponca City','OK',36.71,-97.08,3],
+  ['Shawnee','OK',35.33,-96.93,3],['Ardmore','OK',34.17,-97.14,3],
+  ['Durant','OK',33.99,-96.40,3],['McAlester','OK',34.93,-95.77,3],
+  ['Tahlequah','OK',35.92,-94.97,3],['Ada','OK',34.77,-96.68,3],
+  ['Claremore','OK',36.31,-95.61,3],['Altus','OK',34.64,-99.33,3],
+  ['Woodward','OK',36.43,-99.39,3],
+  // Kansas
+  ['Salina','KS',38.84,-97.61,3],['Hutchinson','KS',38.06,-97.93,3],
+  ['Dodge City','KS',37.75,-100.02,3],['Garden City','KS',37.97,-100.87,3],
+  ['Liberal','KS',37.04,-100.92,3],['Emporia','KS',38.40,-96.18,3],
+  ['Hays','KS',38.88,-99.33,3],['Pittsburg','KS',37.41,-94.70,3],
+  // Nebraska
+  ['Kearney','NE',40.70,-99.08,3],['Norfolk','NE',42.03,-97.42,3],
+  ['Columbus','NE',41.43,-97.37,3],['Fremont','NE',41.44,-96.50,3],
+  ['North Platte','NE',41.12,-100.77,3],['Hastings','NE',40.59,-98.39,3],
+  ['Scottsbluff','NE',41.87,-103.66,3],
+  // Missouri
+  ['Jefferson City','MO',38.58,-92.17,3],['Cape Girardeau','MO',37.31,-89.52,3],
+  ['Poplar Bluff','MO',36.76,-90.39,3],['Rolla','MO',37.95,-91.77,3],
+  ['Sedalia','MO',38.70,-93.23,3],
+  // Iowa
+  ['Mason City','IA',43.15,-93.20,3],['Fort Dodge','IA',42.50,-94.18,3],
+  ['Marshalltown','IA',42.05,-92.91,3],
+  // Mississippi
+  ['Hattiesburg','MS',31.33,-89.29,3],['Meridian','MS',32.37,-88.70,3],
+  ['Tupelo','MS',34.26,-88.72,3],['Greenville','MS',33.41,-91.06,3],
+  ['Vicksburg','MS',32.35,-90.88,3],['Natchez','MS',31.56,-91.40,3],
+  // Alabama
+  ['Gadsden','AL',34.01,-85.99,3],['Florence','AL',34.80,-87.68,3],
+  ['Anniston','AL',33.66,-85.83,3],['Phenix City','AL',32.47,-85.00,3],
+  ['Selma','AL',32.41,-87.02,3],['Opelika','AL',32.65,-85.38,3],
+  // Tennessee
+  ['Cookeville','TN',36.16,-85.50,3],['Columbia','TN',35.62,-87.04,3],
+  ['Cleveland','TN',35.16,-84.88,3],['Kingsport','TN',36.55,-82.56,3],
+  ['Martin','TN',36.34,-88.85,3],['Dyersburg','TN',36.03,-89.38,3],
+  // Louisiana
+  ['Monroe','LA',32.51,-92.12,3],['Alexandria','LA',31.31,-92.45,3],
+  ['Houma','LA',29.60,-90.72,3],['Ruston','LA',32.52,-92.64,3],
+  // Georgia
+  ['Rome','GA',34.26,-85.16,3],['Dalton','GA',34.77,-84.97,3],
+  ['Brunswick','GA',31.15,-81.49,3],['Statesboro','GA',32.45,-81.78,3],
+  ['Carrollton','GA',33.58,-85.08,3],['Thomasville','GA',30.84,-83.97,3],
+  ['Gainesville','GA',34.30,-83.82,3],
+  // Florida
+  ['Panama City','FL',30.16,-85.66,3],['Fort Walton Beach','FL',30.41,-86.62,3],
+  ['Ocala','FL',29.19,-82.13,3],
+  // South Carolina
+  ['Spartanburg','SC',34.95,-81.93,3],['Florence','SC',34.20,-79.84,3],
+  ['Myrtle Beach','SC',33.69,-78.89,3],['Anderson','SC',34.50,-82.65,3],
+  ['Sumter','SC',33.92,-80.34,3],
+  // North Carolina
+  ['Hickory','NC',35.73,-81.34,3],['Greenville','NC',35.61,-77.37,3],
+  ['Jacksonville','NC',34.75,-77.43,3],['Goldsboro','NC',35.38,-77.99,3],
+  // Virginia
+  ['Charlottesville','VA',38.03,-78.48,3],['Harrisonburg','VA',38.45,-78.87,3],
+  ['Danville','VA',36.59,-79.40,3],['Fredericksburg','VA',38.30,-77.47,3],
+  // Texas
+  ['Texarkana','TX',33.43,-94.08,3],['Nacogdoches','TX',31.60,-94.66,3],
+  ['Sherman','TX',33.63,-96.61,3],['Paris','TX',33.66,-95.56,3],
+  ['San Marcos','TX',29.88,-97.94,3],['Huntsville','TX',30.72,-95.55,3],
+  ['Conroe','TX',30.32,-95.46,3],['Corsicana','TX',32.09,-96.47,3],
+  // Great Plains
+  ['Minot','ND',48.23,-101.30,3],['Grand Forks','ND',47.92,-97.03,3],
+  ['Aberdeen','SD',45.46,-98.49,3],['Watertown','SD',44.90,-97.11,3],
+  ['Pierre','SD',44.37,-100.35,3],
+  // Montana
+  ['Helena','MT',46.60,-112.02,3],['Missoula','MT',46.87,-114.01,3],
+  ['Bozeman','MT',45.68,-111.04,3],['Butte','MT',46.00,-112.53,3],
+  // Wyoming
+  ['Laramie','WY',41.31,-105.59,3],['Rock Springs','WY',41.59,-109.20,3],
+  ['Gillette','WY',44.29,-105.50,3],
+  // Colorado / New Mexico
+  ['Grand Junction','CO',39.06,-108.55,3],['Durango','CO',37.28,-107.88,3],
+  ['Roswell','NM',33.39,-104.52,3],['Las Cruces','NM',32.31,-106.78,3],
+  ['Farmington','NM',36.73,-108.21,3],['Clovis','NM',34.40,-103.21,3],
+  ['Carlsbad','NM',32.42,-104.23,3],
+  // Idaho
+  ['Twin Falls','ID',42.56,-114.46,3],['Pocatello','ID',42.87,-112.45,3],
+  // West Virginia
+  ['Morgantown','WV',39.63,-79.96,3],['Parkersburg','WV',39.27,-81.55,3],
+  ['Wheeling','WV',40.06,-80.72,3],['Beckley','WV',37.79,-81.19,3],
+  // Kentucky
+  ['Bowling Green','KY',36.99,-86.44,3],['Owensboro','KY',37.77,-87.11,3],
+  ['Paducah','KY',37.08,-88.60,3],['Hopkinsville','KY',36.87,-87.49,3],
+  ['Frankfort','KY',38.20,-84.87,3],
+  // Michigan
+  ['Saginaw','MI',43.42,-83.95,3],['Muskegon','MI',43.23,-86.25,3],
+  ['Traverse City','MI',44.76,-85.62,3],['Bay City','MI',43.59,-83.89,3],
+  // Wisconsin / Illinois / Indiana
+  ['Wausau','WI',44.96,-89.65,3],['La Crosse','WI',43.80,-91.24,3],
+  ['Quincy','IL',39.94,-91.41,3],['Carbondale','IL',37.73,-89.22,3],
+  ['Galesburg','IL',40.95,-90.37,3],['Kokomo','IN',40.49,-86.13,3],
+  ['Anderson','IN',40.10,-85.68,3],
+].map(([city, st, la, lo, tier]) => ({n:`${city}, ${st}`, la, lo, tier}));
+
 let stations = [];
 let lastStationFetch = 0;
+let lastCityTier = 1;       // tracks zoom tier for viewport-triggered city reload
 // FIX(perf): pre-computed nearest-station lookup grid for wind particles
 let stationLookupGrid = null;
 // Dynamic city weather cache — key: 'lat,lng', value: {station data + fetchedAt}
@@ -2652,8 +2896,26 @@ async function loadCitiesForView() {
     }));
     pinnedCitiesLoaded = true;
   }
-  // allDefs always reflects current pinnedCityDefs — add/remove ops update it directly
-  const allDefs = [...DEFS, ...pinnedCityDefs];
+  // Zoom-tier + viewport filtering: only fetch weather for cities on screen at current zoom
+  const k = (currentTransform || d3.zoomIdentity).k;
+  const maxTier = k >= LABEL_ZOOM[3] ? 3 : k >= LABEL_ZOOM[2] ? 2 : 1;
+  const bounds = getMapBounds();
+
+  // Build candidate list based on current zoom tier
+  const baseCities = maxTier >= 3
+    ? [...DEFS, ...EXTRA_CITIES]
+    : maxTier >= 2
+      ? [...DEFS, ...EXTRA_CITIES.filter(c => c.tier <= 2)]
+      : [...DEFS.filter(c => c.home || c.tier === 1), ...EXTRA_CITIES.filter(c => c.tier === 1)];
+
+  // Filter by viewport bounds (home cities + pinned always shown)
+  const allDefs = [
+    ...baseCities.filter(c => c.home || !bounds || (
+      c.la >= bounds.minLat && c.la <= bounds.maxLat &&
+      c.lo >= bounds.minLng && c.lo <= bounds.maxLng
+    )),
+    ...pinnedCityDefs,
+  ];
 
   const cacheKey = c => `${parseFloat(c.la).toFixed(2)},${parseFloat(c.lo).toFixed(2)}`;
   const now = Date.now();
@@ -2756,20 +3018,43 @@ function rescaleStations(k) {
     el.attr('r', +el.attr('data-base-r') * s)
       .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
   });
+  // ── LABELS: zoom-threshold filter + proximity deduplication ──
+  // Phase 1 — collect all labels with their screen-space positions
+  const t = currentTransform || d3.zoomIdentity;
+  const labelCandidates = [];
   gStations.selectAll('.station-label').each(function() {
-    const el    = d3.select(this);
-    const tier  = +(el.attr('data-tier') || 2);
-    const minK  = LABEL_ZOOM[tier] || 2.5;
-    const bx    = +el.attr('data-base-x');
-    const by    = +el.attr('data-base-y');
-    if (k < minK) { el.style('display', 'none'); }
-    else {
-      const screenSize = tier === 1 ? 8 : 7;
-      el.style('display', null)
-        .attr('font-size', screenSize / k)
-        .attr('x', bx + 8 / k)
-        .attr('y', by + 3 / k);
-    }
+    const el     = d3.select(this);
+    const tier   = +(el.attr('data-tier') || 2);
+    const minK   = LABEL_ZOOM[tier] || 2.5;
+    const bx     = +el.attr('data-base-x');
+    const by     = +el.attr('data-base-y');
+    const isHome = el.attr('data-home') === '1';
+    // Screen-space dot position (before label offset) used for distance checks
+    const sx = bx * t.k + t.x;
+    const sy = by * t.k + t.y;
+    labelCandidates.push({ el, tier, minK, bx, by, sx, sy, isHome, show: k >= minK });
+  });
+
+  // Phase 2 — priority sort: home first, then tier ascending
+  labelCandidates.sort((a, b) => {
+    if (a.isHome !== b.isHome) return a.isHome ? -1 : 1;
+    return a.tier - b.tier;
+  });
+
+  // Phase 3 — greedy placement: skip if within CULL_PX of a higher-priority label
+  const CULL_PX = 55;
+  const placed = [];
+  labelCandidates.forEach(c => {
+    if (!c.show) { c.el.style('display', 'none'); return; }
+    const tooClose = placed.some(p => Math.hypot(c.sx - p.sx, c.sy - p.sy) < CULL_PX);
+    if (tooClose) { c.el.style('display', 'none'); return; }
+    const screenSize = c.tier === 1 ? 8 : 7;
+    c.el.style('display', null)
+      .attr('font-size', screenSize / k)
+      .attr('letter-spacing', (c.tier === 1 ? 0.5 : 0.3) / k)
+      .attr('x', c.bx + 8 / k)
+      .attr('y', c.by + 3 / k);
+    placed.push({ sx: c.sx, sy: c.sy });
   });
   if (gWarn) {
     gWarn.selectAll('.warn-path').each(function() {
@@ -2836,6 +3121,7 @@ function drawStations() {
       const isHome = !!s.home, tier = s.tier || 2;
       d3.select(this)
         .attr('data-tier', tier)
+        .attr('data-home', isHome ? '1' : null)
         .attr('fill', isHome ? 'rgba(245,166,35,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)')
         .attr('font-family', "'Share Tech Mono', monospace")
         .attr('font-size', tier === 1 ? 8 : 7)
@@ -3198,7 +3484,7 @@ window.addEventListener('resize', () => {
     drawStations();
     buildStationGrid();
     if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
-    if (lyr.wildfires   && wildfireData.length)   renderWildfires();
+    if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); if(wildfireData.length) renderFirePerimeters(); }
     if (lyr.warnings) {
       renderedAlertIds.clear();
       gWarn.selectAll('.warn-path').remove();
@@ -4816,7 +5102,7 @@ function checkPersonalAlerts() {
 // ══════════════════════════════════════════════════════════
 // MULTI-HAZARD
 // ══════════════════════════════════════════════════════════
-let earthquakeData = [], wildfireData = [];
+let earthquakeData = [], wildfireData = [], wildfirePerimData = [];
 function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
 function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
 function fireRadius(acres) { return !acres||acres<10?4:acres<100?5:acres<1000?7:acres<10000?9:12; }
@@ -4843,42 +5129,54 @@ function renderEarthquakes() {
     const [lon,lat] = feat.geometry.coordinates, mag = feat.properties.mag;
     const place = feat.properties.place||'Unknown';
     const time  = new Date(feat.properties.time).toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+    const id = feat.id || '';
     const pt = projection([lon,lat]); if (!pt) return;
     const [px,py] = pt, baseR = eqRadius(mag), col = eqColor(mag);
-    const g = gHazard.append('g').attr('class','eq-marker').attr('data-base-r',baseR).style('cursor','pointer');
-    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*1.9/k).attr('fill','none').attr('stroke',col).attr('stroke-width',.8/k).attr('opacity',.4);
+    const g = gHazard.append('g').attr('class','eq-marker').attr('data-base-r',baseR).attr('data-hazard-id',id).style('cursor','pointer');
+    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR*1.9/k).attr('fill','none').attr('stroke',col).attr('stroke-width',.8/k).attr('opacity',.4);
     g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.85);
     g.append('text').attr('x',px+(baseR+2)/k).attr('y',py+3/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace").attr('font-size',7/k).attr('font-weight','700').style('pointer-events','none').text(`M${mag.toFixed(1)}`);
-    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div><div class="tt-row"><span class="tt-key">LOCATION</span><span class="tt-val">${place}</span></div><div class="tt-row"><span class="tt-key">TIME</span><span class="tt-val">${time}</span></div><div class="tt-row"><span class="tt-key">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; }).on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#c862f5;">🟣 M${mag.toFixed(1)} EARTHQUAKE</div><div class="tt-row"><span class="tt-key">LOCATION</span><span class="tt-val">${place}</span></div><div class="tt-row"><span class="tt-key">TIME</span><span class="tt-val">${time}</span></div><div class="tt-row"><span class="tt-key">DEPTH</span><span class="tt-val">${feat.geometry.coordinates[2].toFixed(1)} km</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+     .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; setSelectedHazard(g); if(id) history.replaceState(null,'',`#eq=${encodeURIComponent(id)}`); openEqCard(feat, event.clientX, event.clientY); });
   });
+  if (pendingHazardHash) checkHazardHash();
 }
 
 async function fetchWildfires() {
   if (!lyr.wildfires || !gHazard || !projection) return;
   try {
-    const url='https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=IncidentName,DailyAcres,PercentContained,POOState&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects';
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
     const r = await fetch(url,{signal:AbortSignal.timeout(12000)});
     if (!r.ok) throw new Error(r.status);
     wildfireData = ((await r.json()).features||[]).filter(f=>f.geometry?.type==='Point');
     renderWildfires();
-  } catch(e) {}
+    if (pendingHazardHash) checkHazardHash();
+    fetchAllFirePerimeters();
+  } catch(e) { console.error('[Vortex] fetchWildfires error:', e); }
 }
 function renderWildfires() {
   if (!gHazard || !projection) return;
   gHazard.selectAll('.fire-marker').remove();
+  gHazard.selectAll('.fire-perimeter').remove();
   if (!lyr.wildfires || !wildfireData.length) return;
   const k = currentTransform ? currentTransform.k : 1;
   wildfireData.forEach(feat => {
     const [lon,lat]=feat.geometry.coordinates, p=feat.properties;
     const name=p.IncidentName||'Unknown Fire', acres=p.DailyAcres||0;
-    const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown', state=p.POOState||'';
+    const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown';
+    const state=(p.POOState||'').replace('US-','');
+    const uid=p.UniqueFireIdentifier||'';
     const pt=projection([lon,lat]); if (!pt) return;
     const [px,py]=pt, baseR=fireRadius(acres), col=fireColor(acres);
-    const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).style('cursor','pointer');
-    g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR*2/k).attr('fill',col).attr('opacity',.15);
+    const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).attr('data-hazard-id',uid).style('cursor','pointer');
+    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR*2/k).attr('fill',col).attr('opacity',.15);
     g.append('circle').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',.9);
     g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(baseR*1.2)/k).style('pointer-events','none').text('🔥');
-    g.on('mouseenter',(event)=>{ const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`; const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state.replace('US-','')}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; }).on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; });
+    const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`;
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+     .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; setSelectedHazard(g); if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`); openFireCard(feat, event.clientX, event.clientY); });
   });
 }
 function rescaleHazards() {
@@ -4888,9 +5186,349 @@ function rescaleHazards() {
     const g=d3.select(this), isEq=this.classList.contains('eq-marker'), baseR=+(g.attr('data-base-r')||4);
     g.selectAll('circle').filter((d,i)=>i===0).attr('r',baseR*(isEq?1.9:2)/k);
     g.selectAll('circle').filter((d,i)=>i===1).attr('r',baseR/k);
-    g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k);
+    const cx=+g.select('circle').attr('cx'), cy=+g.select('circle').attr('cy');
+    g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k).attr('y',cy+3/k);
+    if(isEq){ g.selectAll('text').attr('x',cx+(baseR+2)/k); }
+    else { g.selectAll('text').attr('x',cx); }
+  });
+  gHazard.selectAll('.fire-perimeter').each(function(){
+    const isHl=+d3.select(this).attr('opacity')>=1;
+    d3.select(this).attr('stroke-width',(isHl?2.5:1.5)/k);
   });
 }
+
+// ══════════════════════════════════════════════════════════
+// HAZARD CLICK CARDS — fires + earthquakes
+// ══════════════════════════════════════════════════════════
+
+// ── Utilities ─────────────────────────────────────────────
+function haversineMiles(lat1,lon1,lat2,lon2){
+  const R=3958.8,dLat=(lat2-lat1)*Math.PI/180,dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function buildProximityInfo(lat,lng){
+  const parts=[];
+  const homeLat=userProfile?.home_lat??HOME.lat, homeLng=userProfile?.home_lng??HOME.lon;
+  const homeDist=Math.round(haversineMiles(lat,lng,homeLat,homeLng));
+  const homeName=stations.find(s=>s.home)?.n?.split(',')[0]||'Home';
+  parts.push(`${homeDist} mi from ${homeName}`);
+  const nearby=pinnedCityDefs
+    .map(c=>({name:c.n.split(',')[0],dist:Math.round(haversineMiles(lat,lng,c.la,c.lo))}))
+    .filter(c=>c.dist<=250).sort((a,b)=>a.dist-b.dist).slice(0,2);
+  nearby.forEach(c=>parts.push(`${c.dist} mi from ${c.name}`));
+  return parts;
+}
+
+function intensityLabel(v){
+  return ['','Not Felt','Weak','Weak','Light','Moderate','Strong','Very Strong','Severe','Violent','Extreme'][Math.min(Math.round(v||0),10)]||'';
+}
+
+function pagerBadge(alert){
+  const map={green:{bg:'rgba(27,94,32,.5)',col:'#69f0ae',txt:'Little or no impact expected'},yellow:{bg:'rgba(245,127,23,.35)',col:'#ffee58',txt:'Some impact possible'},orange:{bg:'rgba(191,54,12,.4)',col:'#ffcc80',txt:'Significant impact possible'},red:{bg:'rgba(183,28,28,.5)',col:'#ff8a80',txt:'Critical impact expected'}};
+  return map[alert]||null;
+}
+
+function formatTimeAgo(ms){
+  const d=Date.now()-ms,h=Math.floor(d/3600000),m=Math.floor(d/60000);
+  if(h>48)return`${Math.floor(h/24)}d ago`;
+  if(h>0)return`${h}h ago`;
+  return`${m||1}m ago`;
+}
+
+// ── Selected marker state ─────────────────────────────────
+let selectedHazardGroup=null;
+let pendingHazardHash=null;
+
+function clearSelectedHazard(){
+  if(selectedHazardGroup){
+    selectedHazardGroup.select('.hazard-outer').classed('hazard-outer-pulse',false);
+    selectedHazardGroup=null;
+  }
+  if(gHazard){
+    const k=currentTransform?.k||1;
+    gHazard.selectAll('.fire-perimeter').attr('stroke-width',1.5/k).attr('opacity',.7);
+  }
+}
+
+function setSelectedHazard(gSel){
+  clearSelectedHazard();
+  selectedHazardGroup=gSel;
+  gSel.select('.hazard-outer').classed('hazard-outer-pulse',true);
+}
+
+// ── Card open/close ───────────────────────────────────────
+function closeHazardCard(){
+  const card=document.getElementById('hazardCard');
+  if(!card) return;
+  card.classList.remove('hc-open');
+  clearSelectedHazard();
+  history.replaceState(null,'',window.location.pathname+window.location.search);
+}
+
+function openHazardCard(html,clientX,clientY){
+  const card=document.getElementById('hazardCard');
+  document.getElementById('hazardCardContent').innerHTML=html;
+  if(window.innerWidth>640){
+    const w=316,pad=16,h=460;
+    let left=clientX+22, top=clientY-120;
+    if(left+w>window.innerWidth-pad) left=clientX-w-22;
+    if(top<pad) top=pad;
+    if(top+h>window.innerHeight-pad) top=window.innerHeight-h-pad;
+    card.style.left=left+'px'; card.style.top=top+'px';
+  }
+  card.classList.add('hc-open');
+}
+
+// ── Share ─────────────────────────────────────────────────
+function shareHazardLink(hash){
+  const url=`${location.origin}${location.pathname}#${hash}`;
+  (navigator.clipboard?navigator.clipboard.writeText(url):Promise.reject()).then(()=>{
+    showToast('check','Link Copied','Share this URL to open this event directly.');
+  }).catch(()=>{
+    const ta=Object.assign(document.createElement('textarea'),{value:url});
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+    showToast('check','Link Copied','Share this URL to open this event directly.');
+  });
+}
+
+// ── FIRE CARD ─────────────────────────────────────────────
+async function openFireCard(feat,clientX,clientY){
+  const p=feat.properties, [lon,lat]=feat.geometry.coordinates;
+  const name=p.IncidentName||'Unknown Fire';
+  const acres=p.DailyAcres||0;
+  const pct=p.PercentContained;
+  const state=(p.POOState||'').replace('US-','');
+  const county=p.POOCounty||'';
+  const city=p.POOCity||'';
+  const cause=p.FireCauseGeneral||p.FireCause||'';
+  const personnel=p.TotalIncidentPersonnel;
+  const cost=p.EstimatedCostToDate;
+  const uid=p.UniqueFireIdentifier||'';
+  const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k`:(Math.round(acres)||'<1').toLocaleString();
+  const acreNote=acres>=640?` · ~${Math.round(acres/640)} sq mi`:'';
+  const pctNum=pct??0;
+  const barCol=pctNum>=75?'#69f0ae':pctNum>=35?'#f5a623':'#e63946';
+  const causeIcon=cause.toLowerCase().includes('lightning')?'⚡':cause.toLowerCase().includes('human')?'👤':cause?'❓':'';
+  let daysBurning=null;
+  if(p.FireDiscoveryDateTime){
+    daysBurning=Math.max(0,Math.floor((Date.now()-p.FireDiscoveryDateTime)/86400000));
+  }
+  const prox=buildProximityInfo(lat,lon);
+  const hash=uid?`fire=${encodeURIComponent(uid)}`:'';
+  const inciUrl=uid?`https://inciweb.wildfire.gov/incident-information/${uid}`:'https://inciweb.wildfire.gov';
+
+  let html=`<div class="hc-header">
+    <div class="hc-title" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div>
+    <div class="hc-subtitle">${state}${county?` · ${county} Co.`:''}${city?` · ${city}`:''}</div>
+  </div>`;
+
+  html+=`<div class="hc-body">`;
+  // Containment bar
+  html+=`<div class="hc-bar-wrap">
+    <div class="hc-bar-label"><span class="hc-key">CONTAINMENT</span><span style="color:${barCol};font-weight:700;">${pct!=null?pct+'%':'Unknown'}</span></div>
+    <div class="hc-bar"><div class="hc-bar-fill" style="width:${pctNum}%;background:${barCol};"></div></div>
+  </div>`;
+  html+=`<div class="hc-row"><span class="hc-key">SIZE</span><span class="hc-val">${acreStr} acres${acreNote}</span></div>`;
+  if(daysBurning!==null) html+=`<div class="hc-row"><span class="hc-key">BURNING</span><span class="hc-val">${daysBurning===0?'Discovered today':daysBurning+' day'+(daysBurning!==1?'s':'')}</span></div>`;
+  if(cause) html+=`<div class="hc-row"><span class="hc-key">CAUSE</span><span class="hc-val">${causeIcon} ${cause}</span></div>`;
+  if(personnel) html+=`<div class="hc-row"><span class="hc-key">PERSONNEL</span><span class="hc-val">${parseInt(personnel).toLocaleString()} firefighters</span></div>`;
+  if(cost>0){const cs=cost>=1e6?`$${(cost/1e6).toFixed(1)}M`:`$${Math.round(cost/1000)}K`; html+=`<div class="hc-row"><span class="hc-key">EST. COST</span><span class="hc-val">${cs}</span></div>`;}
+  html+=`<div class="hc-divider"></div>`;
+  prox.forEach(pr=>{ html+=`<div class="hc-row"><span class="hc-key">DISTANCE</span><span class="hc-val" style="color:rgba(200,220,255,.55);">${pr}</span></div>`; });
+  html+=`</div>`;
+  html+=`<div class="hc-actions">
+    <a href="${inciUrl}" target="_blank" rel="noopener" class="hc-btn">InciWeb →</a>
+    <a href="https://www.wpc.ncep.noaa.gov/kml/nws_wwa/fire/" target="_blank" rel="noopener" class="hc-btn">🔴 Red Flag</a>
+    ${hash?`<button class="hc-btn" onclick="shareHazardLink('${hash}')">Share 🔗</button>`:''}
+  </div>`;
+
+  openHazardCard(html,clientX,clientY);
+  if(uid) highlightFirePerimeter(uid);
+}
+
+// ── Fire perimeters — bulk fetch on layer enable ───────────
+async function fetchAllFirePerimeters(){
+  if(!lyr.wildfires||!gHazard||!projection) return;
+  try{
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/1/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(12000)});
+    if(!r.ok) throw new Error(r.status);
+    wildfirePerimData=((await r.json()).features||[]).filter(f=>f.geometry);
+  }catch(e){ console.error('[Vortex] fetchAllFirePerimeters error:',e); }
+  renderFirePerimeters(); // always render — fallback circles even if fetch failed
+}
+
+function renderFirePerimeters(){
+  if(!gHazard||!projection||!lyr.wildfires) return;
+  gHazard.selectAll('.fire-perimeter').remove();
+  const pg=d3.geoPath().projection(projection);
+  const k=currentTransform?.k||1;
+
+  // Helper — attach click handler to open fire card for this uid
+  function onPerimClick(uid){
+    return (event)=>{
+      event.stopPropagation();
+      const fireFeat=wildfireData.find(pt=>pt.properties.UniqueFireIdentifier===uid);
+      if(!fireFeat) return;
+      gHazard.selectAll('.fire-marker').each(function(){
+        if(d3.select(this).attr('data-hazard-id')===uid) setSelectedHazard(d3.select(this));
+      });
+      if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`);
+      openFireCard(fireFeat,event.clientX,event.clientY);
+    };
+  }
+
+  // ── 1. Official NIFC perimeter polygons ─────────────────
+  const perimUids=new Set();
+  wildfirePerimData.forEach(f=>{
+    const uid=f.properties?.UniqueFireIdentifier||f.properties?.OBJECTID||'';
+    const acres=f.properties?.DailyAcres||f.properties?.GISAcres||0;
+    const col=fireColor(acres);
+    perimUids.add(uid);
+    gHazard.insert('path','.fire-marker')
+      .datum(f).attr('class','fire-perimeter').attr('data-fire-uid',uid)
+      .attr('d',pg)
+      .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.14)':col==='#ff6d00'?'rgba(255,109,0,.10)':'rgba(255,152,0,.08)')
+      .attr('stroke',col).attr('stroke-width',1.5/k).attr('stroke-dasharray','5,3')
+      .attr('opacity',.75).style('cursor','pointer')
+      .on('click',onPerimClick(uid));
+  });
+
+  // ── 2. Approximate circles for fires without NIFC polygons ─
+  // Radius formula: r_deg = sqrt(acres * 4047 m² / (π × 111320 m/°²))
+  wildfireData.forEach(fireFeat=>{
+    const uid=fireFeat.properties.UniqueFireIdentifier||'';
+    if(perimUids.has(uid)) return;
+    const acres=fireFeat.properties.DailyAcres||0;
+    if(acres<50) return; // skip tiny dots — not worth approximating
+    const [lon,lat]=fireFeat.geometry.coordinates;
+    const col=fireColor(acres);
+    const rDeg=Math.min(0.5,Math.max(0.01,Math.sqrt(acres*4047/(Math.PI*111320*111320))));
+    const circle=d3.geoCircle().center([lon,lat]).radius(rDeg)();
+    gHazard.insert('path','.fire-marker')
+      .datum(circle)
+      .attr('class','fire-perimeter fire-perim-approx').attr('data-fire-uid',uid)
+      .attr('d',pg)
+      .attr('fill',col==='#dd2c00'?'rgba(221,44,0,.12)':col==='#ff6d00'?'rgba(255,109,0,.09)':'rgba(255,152,0,.07)')
+      .attr('stroke',col).attr('stroke-width',1/k).attr('stroke-dasharray','3,4')
+      .attr('opacity',.6).style('cursor','pointer')
+      .on('click',onPerimClick(uid));
+  });
+}
+
+function highlightFirePerimeter(uid){
+  const k=currentTransform?.k||1;
+  gHazard.selectAll('.fire-perimeter')
+    .attr('stroke-width',1.5/k).attr('opacity',.7);
+  gHazard.selectAll('.fire-perimeter').filter(`[data-fire-uid="${CSS.escape(uid)}"]`)
+    .attr('stroke-width',2.5/k).attr('opacity',1);
+}
+
+// ── EARTHQUAKE CARD ───────────────────────────────────────
+async function openEqCard(feat,clientX,clientY){
+  const p=feat.properties,[lon,lat,depth]=feat.geometry.coordinates;
+  const mag=p.mag||0, place=p.place||'Unknown location';
+  const id=feat.id||'';
+  const time=new Date(p.time);
+  const timeStr=time.toLocaleString('en-US',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',timeZoneName:'short'});
+  const ago=formatTimeAgo(p.time);
+  const depthCls=depth<70?'Shallow (<70 km)':depth<300?'Intermediate':'Deep';
+  const col=eqColor(mag);
+  const type=(p.type||'earthquake');
+  const isQuake=type==='earthquake';
+  const magType=(p.magType||'').toUpperCase();
+  const felt=p.felt, cdi=p.cdi, mmi=p.mmi, alert=p.alert, tsunami=p.tsunami;
+  const usgsUrl=p.url||'https://earthquake.usgs.gov';
+  const hash=id?`eq=${encodeURIComponent(id)}`:'';
+  const prox=buildProximityInfo(lat,lon);
+  const alertStyle=pagerBadge(alert);
+
+  let html=`<div class="hc-header">
+    <div class="hc-title" style="color:${col};">🟣 M${mag.toFixed(1)} ${isQuake?'EARTHQUAKE':type.toUpperCase()}</div>
+    <div class="hc-subtitle">${place}</div>
+  </div>`;
+
+  if(tsunami===1){
+    html+=`<div class="hc-banner" style="background:rgba(0,150,255,.15);border:1px solid rgba(0,150,255,.4);color:#80d8ff;">🌊 TSUNAMI ADVISORY — check tsunami.gov</div>`;
+  }
+  if(alertStyle){
+    html+=`<div class="hc-banner" style="background:${alertStyle.bg};border:1px solid ${alertStyle.col}55;color:${alertStyle.col};"><strong>PAGER ${alert?.toUpperCase()}:</strong> ${alertStyle.txt}</div>`;
+  }
+
+  html+=`<div class="hc-body">`;
+  html+=`<div class="hc-row"><span class="hc-key">DEPTH</span><span class="hc-val">${depth.toFixed(1)} km · <span style="color:rgba(200,220,255,.5);">${depthCls}</span></span></div>`;
+  html+=`<div class="hc-row"><span class="hc-key">TIME</span><span class="hc-val">${timeStr}</span></div>`;
+  html+=`<div class="hc-row"><span class="hc-key"></span><span class="hc-val" style="color:rgba(255,255,255,.4);">${ago}</span></div>`;
+  if(magType) html+=`<div class="hc-row"><span class="hc-key">MAG TYPE</span><span class="hc-val">${magType}</span></div>`;
+  html+=`<div class="hc-divider"></div>`;
+  if(felt>0) html+=`<div class="hc-row"><span class="hc-key">FELT REPORTS</span><span class="hc-val">${felt.toLocaleString()} people</span></div>`;
+  if(cdi!=null){const lb=intensityLabel(cdi); html+=`<div class="hc-row"><span class="hc-key">COMMUNITY CDI</span><span class="hc-val">${cdi.toFixed(1)}${lb?' · '+lb:''}</span></div>`;}
+  if(mmi!=null){const lb=intensityLabel(mmi); html+=`<div class="hc-row"><span class="hc-key">SHAKEMAP MMI</span><span class="hc-val">${mmi.toFixed(1)}${lb?' · '+lb:''}</span></div>`;}
+  html+=`<div class="hc-divider"></div>`;
+  prox.forEach(pr=>{ html+=`<div class="hc-row"><span class="hc-key">DISTANCE</span><span class="hc-val" style="color:rgba(200,220,255,.55);">${pr}</span></div>`; });
+  html+=`<div id="hcAftershocks" class="hc-loading">Checking for aftershocks…</div>`;
+  html+=`</div>`;
+  html+=`<div class="hc-actions">
+    <a href="${usgsUrl}" target="_blank" rel="noopener" class="hc-btn">USGS →</a>
+    ${hash?`<button class="hc-btn" onclick="shareHazardLink('${hash}')">Share 🔗</button>`:''}
+  </div>`;
+
+  openHazardCard(html,clientX,clientY);
+  if(p.detail) fetchEqDetail(p.detail,lat,lon,mag,p.time);
+  else { const el=document.getElementById('hcAftershocks'); if(el) el.textContent=''; }
+}
+
+// ── Earthquake aftershocks ────────────────────────────────
+async function fetchEqDetail(detailUrl,lat,lon,mainMag,mainTime){
+  try{
+    const start=new Date(mainTime+60000).toISOString().slice(0,19);
+    const end=new Date(Math.min(Date.now(),mainTime+7*86400000)).toISOString().slice(0,19);
+    if(end<=start){ const el=document.getElementById('hcAftershocks'); if(el) el.textContent=''; return; }
+    const radius=Math.min(150,Math.max(30,mainMag*12));
+    const minMag=Math.max(1.0,mainMag-3.5);
+    const url=`https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=${start}&endtime=${end}&latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&maxradiuskm=${Math.round(radius)}&minmagnitude=${minMag.toFixed(1)}&orderby=magnitude`;
+    const r=await fetch(url,{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error(r.status);
+    const feats=(await r.json()).features||[];
+    const el=document.getElementById('hcAftershocks');
+    if(!el) return;
+    if(!feats.length){ el.textContent=''; return; }
+    const largest=feats[0]?.properties?.mag?.toFixed(1);
+    el.innerHTML=`<div class="hc-divider"></div>
+      <div class="hc-row"><span class="hc-key">AFTERSHOCKS</span><span class="hc-val">${feats.length} detected (≥M${minMag.toFixed(1)})</span></div>
+      ${largest?`<div class="hc-row"><span class="hc-key">LARGEST</span><span class="hc-val">M${largest}</span></div>`:''}`;
+  }catch(e){ const el=document.getElementById('hcAftershocks'); if(el) el.textContent=''; }
+}
+
+// ── URL routing — deep links to specific events ───────────
+function checkHazardHash(){
+  const hash=decodeURIComponent(location.hash.slice(1));
+  if(!hash) return;
+
+  if(hash.startsWith('eq=')){
+    const id=hash.slice(3);
+    const feat=earthquakeData.find(f=>f.id===id);
+    if(!feat){ pendingHazardHash=hash; return; }
+    pendingHazardHash=null;
+    gHazard.selectAll('.eq-marker').each(function(){
+      if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
+    });
+    openEqCard(feat,window.innerWidth/2,window.innerHeight/2);
+
+  } else if(hash.startsWith('fire=')){
+    const id=hash.slice(5);
+    const feat=wildfireData.find(f=>f.properties.UniqueFireIdentifier===id);
+    if(!feat){ pendingHazardHash=hash; return; }
+    pendingHazardHash=null;
+    gHazard.selectAll('.fire-marker').each(function(){
+      if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
+    });
+    openFireCard(feat,window.innerWidth/2,window.innerHeight/2);
+  }
+}
+window.addEventListener('hashchange',checkHazardHash);
 
 // ══════════════════════════════════════════════════════════
 // INIT
@@ -4899,6 +5537,7 @@ updateCfgUI();
 updateLegend();
 // NOTE: startDataPolling() is now called from onAuthStateChange only — not here
 // This prevents unauthenticated data fetches (FIX security: auth race condition)
+if(location.hash) checkHazardHash(); // handle deep links on page load
 
 // ══════════════════════════════════════════════════════════
 // MOBILE
