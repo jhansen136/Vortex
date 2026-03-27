@@ -598,7 +598,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .hc-actions{padding:10px 14px 14px;display:flex;gap:8px;border-top:1px solid rgba(255,255,255,.08);}
 .hc-btn{flex:1;padding:7px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.05);color:rgba(255,255,255,.65);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.4px;cursor:pointer;text-align:center;text-decoration:none;display:block;}
 .hc-btn:hover{background:rgba(255,255,255,.12);color:#fff;}
-.hc-close{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.55);cursor:pointer;font-size:11px;line-height:22px;text-align:center;padding:0;}
+.hc-close{position:absolute;top:10px;right:10px;width:22px;height:22px;border-radius:50%;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.55);cursor:pointer;font-size:11px;line-height:22px;text-align:center;padding:0;z-index:2;}
 .hc-close:hover{background:rgba(255,255,255,.2);}
 .hc-loading{padding:6px 14px;color:rgba(255,255,255,.35);font-size:10px;letter-spacing:.3px;}
 @keyframes hazardPulse{0%,100%{opacity:.25;}50%{opacity:.75;}}
@@ -5184,8 +5184,10 @@ function rescaleHazards() {
     const g=d3.select(this), isEq=this.classList.contains('eq-marker'), baseR=+(g.attr('data-base-r')||4);
     g.selectAll('circle').filter((d,i)=>i===0).attr('r',baseR*(isEq?1.9:2)/k);
     g.selectAll('circle').filter((d,i)=>i===1).attr('r',baseR/k);
-    g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k);
-    if(isEq){ const cx=+g.select('circle').attr('cx'); g.selectAll('text').attr('x',cx+(baseR+2)/k); }
+    const cx=+g.select('circle').attr('cx'), cy=+g.select('circle').attr('cy');
+    g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k).attr('y',cy+3/k);
+    if(isEq){ g.selectAll('text').attr('x',cx+(baseR+2)/k); }
+    else { g.selectAll('text').attr('x',cx); }
   });
   gHazard.selectAll('.fire-perimeter').attr('stroke-width', 1.5/k);
 }
@@ -5449,34 +5451,20 @@ function checkHazardHash(){
     const feat=earthquakeData.find(f=>f.id===id);
     if(!feat){ pendingHazardHash=hash; return; }
     pendingHazardHash=null;
-    const [lon,lat]=feat.geometry.coordinates;
-    const pt=projection([lon,lat]);
-    if(!pt) return;
-    const targetK=10, tx=window.innerWidth/2-pt[0]*targetK, ty=window.innerHeight/2-pt[1]*targetK;
-    svg.transition().duration(700).call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(targetK));
-    setTimeout(()=>{
-      gHazard.selectAll('.eq-marker').each(function(){
-        if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
-      });
-      openEqCard(feat,window.innerWidth/2,window.innerHeight/2);
-    },750);
+    gHazard.selectAll('.eq-marker').each(function(){
+      if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
+    });
+    openEqCard(feat,window.innerWidth/2,window.innerHeight/2);
 
   } else if(hash.startsWith('fire=')){
     const id=hash.slice(5);
     const feat=wildfireData.find(f=>f.properties.UniqueFireIdentifier===id);
     if(!feat){ pendingHazardHash=hash; return; }
     pendingHazardHash=null;
-    const [lon,lat]=feat.geometry.coordinates;
-    const pt=projection([lon,lat]);
-    if(!pt) return;
-    const targetK=10, tx=window.innerWidth/2-pt[0]*targetK, ty=window.innerHeight/2-pt[1]*targetK;
-    svg.transition().duration(700).call(zoom.transform,d3.zoomIdentity.translate(tx,ty).scale(targetK));
-    setTimeout(()=>{
-      gHazard.selectAll('.fire-marker').each(function(){
-        if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
-      });
-      openFireCard(feat,window.innerWidth/2,window.innerHeight/2);
-    },750);
+    gHazard.selectAll('.fire-marker').each(function(){
+      if(d3.select(this).attr('data-hazard-id')===id) setSelectedHazard(d3.select(this));
+    });
+    openFireCard(feat,window.innerWidth/2,window.innerHeight/2);
   }
 }
 window.addEventListener('hashchange',checkHazardHash);
