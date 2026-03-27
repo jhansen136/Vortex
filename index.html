@@ -3018,21 +3018,43 @@ function rescaleStations(k) {
     el.attr('r', +el.attr('data-base-r') * s)
       .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
   });
+  // ── LABELS: zoom-threshold filter + proximity deduplication ──
+  // Phase 1 — collect all labels with their screen-space positions
+  const t = currentTransform || d3.zoomIdentity;
+  const labelCandidates = [];
   gStations.selectAll('.station-label').each(function() {
-    const el    = d3.select(this);
-    const tier  = +(el.attr('data-tier') || 2);
-    const minK  = LABEL_ZOOM[tier] || 2.5;
-    const bx    = +el.attr('data-base-x');
-    const by    = +el.attr('data-base-y');
-    if (k < minK) { el.style('display', 'none'); }
-    else {
-      const screenSize = tier === 1 ? 8 : 7;
-      el.style('display', null)
-        .attr('font-size', screenSize / k)
-        .attr('letter-spacing', (tier === 1 ? 0.5 : 0.3) / k)
-        .attr('x', bx + 8 / k)
-        .attr('y', by + 3 / k);
-    }
+    const el     = d3.select(this);
+    const tier   = +(el.attr('data-tier') || 2);
+    const minK   = LABEL_ZOOM[tier] || 2.5;
+    const bx     = +el.attr('data-base-x');
+    const by     = +el.attr('data-base-y');
+    const isHome = el.attr('data-home') === '1';
+    // Screen-space dot position (before label offset) used for distance checks
+    const sx = bx * t.k + t.x;
+    const sy = by * t.k + t.y;
+    labelCandidates.push({ el, tier, minK, bx, by, sx, sy, isHome, show: k >= minK });
+  });
+
+  // Phase 2 — priority sort: home first, then tier ascending
+  labelCandidates.sort((a, b) => {
+    if (a.isHome !== b.isHome) return a.isHome ? -1 : 1;
+    return a.tier - b.tier;
+  });
+
+  // Phase 3 — greedy placement: skip if within CULL_PX of a higher-priority label
+  const CULL_PX = 55;
+  const placed = [];
+  labelCandidates.forEach(c => {
+    if (!c.show) { c.el.style('display', 'none'); return; }
+    const tooClose = placed.some(p => Math.hypot(c.sx - p.sx, c.sy - p.sy) < CULL_PX);
+    if (tooClose) { c.el.style('display', 'none'); return; }
+    const screenSize = c.tier === 1 ? 8 : 7;
+    c.el.style('display', null)
+      .attr('font-size', screenSize / k)
+      .attr('letter-spacing', (c.tier === 1 ? 0.5 : 0.3) / k)
+      .attr('x', c.bx + 8 / k)
+      .attr('y', c.by + 3 / k);
+    placed.push({ sx: c.sx, sy: c.sy });
   });
   if (gWarn) {
     gWarn.selectAll('.warn-path').each(function() {
@@ -3099,6 +3121,7 @@ function drawStations() {
       const isHome = !!s.home, tier = s.tier || 2;
       d3.select(this)
         .attr('data-tier', tier)
+        .attr('data-home', isHome ? '1' : null)
         .attr('fill', isHome ? 'rgba(245,166,35,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)')
         .attr('font-family', "'Share Tech Mono', monospace")
         .attr('font-size', tier === 1 ? 8 : 7)
@@ -5123,14 +5146,13 @@ function renderEarthquakes() {
 async function fetchWildfires() {
   if (!lyr.wildfires || !gHazard || !projection) return;
   try {
-    const fields = 'IncidentName,DailyAcres,PercentContained,POOState,POOCity,POOCounty,FireCause,FireCauseGeneral,FireDiscoveryDateTime,TotalIncidentPersonnel,EstimatedCostToDate,UniqueFireIdentifier';
-    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=${fields}&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
+    const url=`https://services9.arcgis.com/RHVPKKiFTONKtxq3/arcgis/rest/services/USA_Wildfires_v1/FeatureServer/0/query?where=1%3D1&outFields=*&f=geojson&resultRecordCount=200&geometry=-125,24,-66,50&geometryType=esriGeometryEnvelope&inSR=4326&spatialRel=esriSpatialRelIntersects`;
     const r = await fetch(url,{signal:AbortSignal.timeout(12000)});
     if (!r.ok) throw new Error(r.status);
     wildfireData = ((await r.json()).features||[]).filter(f=>f.geometry?.type==='Point');
     renderWildfires();
     if (pendingHazardHash) checkHazardHash();
-  } catch(e) {}
+  } catch(e) { console.error('[Vortex] fetchWildfires error:', e); }
 }
 function renderWildfires() {
   if (!gHazard || !projection) return;
@@ -5163,7 +5185,7 @@ function rescaleHazards() {
     g.selectAll('circle').filter((d,i)=>i===0).attr('r',baseR*(isEq?1.9:2)/k);
     g.selectAll('circle').filter((d,i)=>i===1).attr('r',baseR/k);
     g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k);
-    if(isEq) g.selectAll('text').attr('x', function(){ const cx=+d3.select(this.parentNode).select('circle:last-of-type').attr('cx'); return cx+(baseR+2)/k; });
+    if(isEq){ const cx=+g.select('circle').attr('cx'); g.selectAll('text').attr('x',cx+(baseR+2)/k); }
   });
   gHazard.selectAll('.fire-perimeter').attr('stroke-width', 1.5/k);
 }
