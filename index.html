@@ -2160,19 +2160,25 @@ function initMap(us) {
   let _clPdn = null; // { idx, x, y } set on pointerdown over a cluster ring
   document.addEventListener('pointerdown', function(e) {
     const circle = e.target?.closest?.('.cluster-ring');
+    console.log('[cluster-dbg] pointerdown target:', e.target?.tagName, e.target?.className?.baseVal||e.target?.className, 'circle?', !!circle);
     if (!circle) { _clPdn = null; return; }
     const g = circle.closest('.fire-cluster');
     const idx = g ? parseInt(g.getAttribute('data-cluster-idx'), 10) : NaN;
+    console.log('[cluster-dbg] pointerdown cluster idx:', idx, 'fireClusters.length:', fireClusters.length);
     _clPdn = isNaN(idx) ? null : { idx, x: e.clientX, y: e.clientY };
   }, { capture: true });
 
   document.addEventListener('pointerup', function(e) {
+    console.log('[cluster-dbg] pointerup _clPdn:', JSON.stringify(_clPdn));
     if (!_clPdn) return;
     const dn = _clPdn; _clPdn = null;
     const dx = e.clientX - dn.x, dy = e.clientY - dn.y;
-    if (dx * dx + dy * dy > 100) return; // >10px movement = drag, not a click
+    const dist2 = dx * dx + dy * dy;
+    console.log('[cluster-dbg] pointerup dist²:', dist2, 'fireClusters[idx]:', !!fireClusters[dn.idx]);
+    if (dist2 > 100) return; // >10px movement = drag, not a click
     if (!fireClusters[dn.idx]) return;
     document.getElementById('mapTooltip').style.display = 'none';
+    console.log('[cluster-dbg] calling openClusterCard idx:', dn.idx);
     openClusterCard(fireClusters[dn.idx], e.clientX, e.clientY);
   }, { capture: true });
 
@@ -5392,6 +5398,7 @@ function closeHazardCard(){
 }
 
 function openHazardCard(html,clientX,clientY){
+  console.log('[cluster-dbg] openHazardCard fires, card el:', !!document.getElementById('hazardCard'));
   const card=document.getElementById('hazardCard');
   document.getElementById('hazardCardContent').innerHTML=html;
   if(window.innerWidth>640){
@@ -5419,6 +5426,7 @@ function shareHazardLink(hash){
 
 // ── CLUSTER CARD ──────────────────────────────────────────
 function openClusterCard(cluster, clientX, clientY) {
+  console.log('[cluster-dbg] openClusterCard fires, fires:', cluster?.fires?.length);
   lastOpenCluster = { cluster, clientX, clientY };
   const { fires, totalAcres, uncontained, avgContain } = cluster;
   const states = [...new Set(fires.map(f=>(f.properties.POOState||'').replace('US-','')).filter(Boolean))].slice(0,4).join(' · ');
