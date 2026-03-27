@@ -2135,6 +2135,8 @@ function initMap(us) {
       const newTier = currentTransform.k >= LABEL_ZOOM[3] ? 3 : currentTransform.k >= LABEL_ZOOM[2] ? 2 : 1;
       lastCityTier = newTier;
       loadCitiesForView();
+      // Re-render fires: crossing CLUSTER_ZOOM_THRESHOLD switches between clusters and individual markers
+      if (lyr.wildfires && wildfireData.length) { renderWildfires(); if (wildfireData.length) renderFirePerimeters(); }
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -3961,7 +3963,7 @@ function toggleLayer(name, btn) {
   }
   if (name === 'wildfires') {
     if (lyr.wildfires) fetchWildfires();
-    else if (gHazard) { gHazard.selectAll('.fire-marker,.fire-perimeter').remove(); wildfireData=[]; wildfirePerimData=[]; }
+    else if (gHazard) { gHazard.selectAll('.fire-marker,.fire-cluster,.fire-perimeter').remove(); wildfireData=[]; wildfirePerimData=[]; fireClusters=[]; }
   }
   if (name === 'radar') {
     if (lyr.radar) {
@@ -5102,7 +5104,9 @@ function checkPersonalAlerts() {
 // ══════════════════════════════════════════════════════════
 // MULTI-HAZARD
 // ══════════════════════════════════════════════════════════
-let earthquakeData = [], wildfireData = [], wildfirePerimData = [];
+let earthquakeData = [], wildfireData = [], wildfirePerimData = [], fireClusters = [];
+let lastOpenCluster = null;
+const CLUSTER_ZOOM_THRESHOLD = 2.5; // below this k-value, fires cluster into badges
 function eqRadius(mag)  { return Math.max(3, mag * 3.5); }
 function eqColor(mag)   { return mag>=6.0?'#e040fb':mag>=5.0?'#c862f5':mag>=4.0?'#9c27b0':'#7b1fa2'; }
 function fireRadius(acres) { return !acres||acres<10?4:acres<100?5:acres<1000?7:acres<10000?9:12; }
@@ -5155,31 +5159,93 @@ async function fetchWildfires() {
     fetchAllFirePerimeters();
   } catch(e) { console.error('[Vortex] fetchWildfires error:', e); }
 }
+// ── Individual fire marker (used in both cluster + non-cluster mode) ───
+function renderSingleFire(feat) {
+  const k = currentTransform?.k || 1;
+  const [lon,lat]=feat.geometry.coordinates, p=feat.properties;
+  const name=p.IncidentName||'Unknown Fire', acres=p.DailyAcres||0;
+  const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown';
+  const state=(p.POOState||'').replace('US-','');
+  const uid=p.UniqueFireIdentifier||'';
+  const pt=projection([lon,lat]); if (!pt) return;
+  const [px,py]=pt, baseR=fireRadius(acres), col=fireColor(acres);
+  const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).attr('data-hazard-id',uid).style('cursor','pointer');
+  g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',acres>=10?0:.85);
+  g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(acres>=10?Math.min(baseR*1.2,10):baseR*1.2)/k).style('pointer-events','none').text('🔥');
+  const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`;
+  g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+   .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+   .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; setSelectedHazard(g); if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`); openFireCard(feat, event.clientX, event.clientY, false); });
+}
+
+// ── Cluster computation ────────────────────────────────────
+function computeFireClusters() {
+  const t = currentTransform || d3.zoomIdentity;
+  const PIXEL_RADIUS = 60;
+  const pts = wildfireData.map(feat => {
+    const svgPt = projection(feat.geometry.coordinates); if (!svgPt) return null;
+    return { feat, sx: svgPt[0]*t.k+t.x, sy: svgPt[1]*t.k+t.y };
+  }).filter(Boolean);
+
+  const assigned = new Set(), clusters = [];
+  pts.forEach((pt, i) => {
+    if (assigned.has(i)) return;
+    const members = [pt]; assigned.add(i);
+    pts.forEach((other, j) => {
+      if (assigned.has(j)) return;
+      const dx=pt.sx-other.sx, dy=pt.sy-other.sy;
+      if (Math.sqrt(dx*dx+dy*dy) <= PIXEL_RADIUS) { members.push(other); assigned.add(j); }
+    });
+    const cx = members.reduce((s,m)=>s+m.sx,0)/members.length;
+    const cy = members.reduce((s,m)=>s+m.sy,0)/members.length;
+    const fires = [...members.map(m=>m.feat)].sort((a,b)=>(b.properties.DailyAcres||0)-(a.properties.DailyAcres||0));
+    const totalAcres = fires.reduce((s,f)=>s+(f.properties.DailyAcres||0),0);
+    const uncontained = fires.filter(f=>(f.properties.PercentContained||0)===0&&(f.properties.DailyAcres||0)>100).length;
+    const containVals = fires.filter(f=>f.properties.PercentContained!=null).map(f=>f.properties.PercentContained);
+    const avgContain = containVals.length ? Math.round(containVals.reduce((s,v)=>s+v,0)/containVals.length) : null;
+    clusters.push({ fires, cx:(cx-t.x)/t.k, cy:(cy-t.y)/t.k, totalAcres, uncontained, avgContain });
+  });
+  return clusters;
+}
+
+// ── Cluster badge rendering ────────────────────────────────
+function renderFireClusters(clusters) {
+  const k = currentTransform?.k || 1;
+  clusters.forEach((cl, idx) => {
+    if (cl.fires.length === 1) { renderSingleFire(cl.fires[0]); return; }
+    const maxAcres = cl.fires[0].properties.DailyAcres||0;
+    const col = fireColor(maxAcres);
+    const baseR = Math.max(18, Math.min(30, 14 + cl.fires.length * 1.2));
+    const fill = col==='#dd2c00'?'rgba(221,44,0,.22)':col==='#ff6d00'?'rgba(255,109,0,.18)':'rgba(255,152,0,.15)';
+    const g = gHazard.append('g').attr('class','fire-cluster').attr('data-base-r',baseR).attr('data-cluster-idx',idx).style('cursor','pointer');
+    g.append('circle').attr('class','cluster-ring').attr('cx',cl.cx).attr('cy',cl.cy)
+      .attr('r',baseR/k).attr('fill',fill).attr('stroke',col)
+      .attr('stroke-width',1.5/k).attr('stroke-dasharray',`${4/k},${3/k}`);
+    g.append('text').attr('x',cl.cx).attr('y',cl.cy-1/k).attr('text-anchor','middle')
+      .attr('font-size',12/k).style('pointer-events','none').text('🔥');
+    g.append('text').attr('x',cl.cx).attr('y',cl.cy+10/k).attr('text-anchor','middle')
+      .attr('font-size',8/k).attr('fill',col).attr('font-family',"'Share Tech Mono',monospace")
+      .attr('font-weight','700').style('pointer-events','none').text(`×${cl.fires.length}`);
+    const acreStr = cl.totalAcres>=1000?`${(cl.totalAcres/1000).toFixed(0)}k ac total`:`${Math.round(cl.totalAcres)} ac total`;
+    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${cl.fires.length} FIRES</div><div class="tt-row"><span class="tt-key">TOTAL</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">UNCONTAINED</span><span class="tt-val">${cl.uncontained}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
+     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
+     .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; openClusterCard(cl, event.clientX, event.clientY); });
+  });
+}
+
 function renderWildfires() {
   if (!gHazard || !projection) return;
-  gHazard.selectAll('.fire-marker').remove();
+  gHazard.selectAll('.fire-marker,.fire-cluster').remove();
   gHazard.selectAll('.fire-perimeter').remove();
   if (!lyr.wildfires || !wildfireData.length) return;
-  const k = currentTransform ? currentTransform.k : 1;
-  wildfireData.forEach(feat => {
-    const [lon,lat]=feat.geometry.coordinates, p=feat.properties;
-    const name=p.IncidentName||'Unknown Fire', acres=p.DailyAcres||0;
-    const pct=p.PercentContained!=null?`${p.PercentContained}% contained`:'Containment unknown';
-    const state=(p.POOState||'').replace('US-','');
-    const uid=p.UniqueFireIdentifier||'';
-    const pt=projection([lon,lat]); if (!pt) return;
-    const [px,py]=pt, baseR=fireRadius(acres), col=fireColor(acres);
-    const g=gHazard.append('g').attr('class','fire-marker').attr('data-base-r',baseR).attr('data-hazard-id',uid).style('cursor','pointer');
-    // Fires ≥10 acres always get a shape (NIFC polygon or approx circle) — dot is hidden,
-    // kept as a transparent pulse/click target. Tiny fires (<10ac, no shape) show the dot.
-    g.append('circle').attr('class','hazard-outer').attr('cx',px).attr('cy',py).attr('r',baseR/k).attr('fill',col).attr('opacity',acres>=10?0:.85);
-    // Emoji label: smaller centroid marker for shape-backed fires, normal size for tiny dots
-    g.append('text').attr('x',px).attr('y',py+3/k).attr('text-anchor','middle').attr('font-size',(acres>=10?Math.min(baseR*1.2,10):baseR*1.2)/k).style('pointer-events','none').text('🔥');
-    const acreStr=acres>=1000?`${(acres/1000).toFixed(1)}k acres`:`${Math.round(acres)} acres`;
-    g.on('mouseenter',(event)=>{ const tt=document.getElementById('mapTooltip'); tt.innerHTML=`<div class="tt-city" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div><div class="tt-row"><span class="tt-key">STATE</span><span class="tt-val">${state}</span></div><div class="tt-row"><span class="tt-key">SIZE</span><span class="tt-val">${acreStr}</span></div><div class="tt-row"><span class="tt-key">STATUS</span><span class="tt-val">${pct}</span></div>`; tt.style.display='block'; tt.style.left=(event.offsetX+14)+'px'; tt.style.top=(event.offsetY-10)+'px'; })
-     .on('mouseleave',()=>{ document.getElementById('mapTooltip').style.display='none'; })
-     .on('click',(event)=>{ event.stopPropagation(); document.getElementById('mapTooltip').style.display='none'; setSelectedHazard(g); if(uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`); openFireCard(feat, event.clientX, event.clientY); });
-  });
+  const k = currentTransform?.k || 1;
+  if (k < CLUSTER_ZOOM_THRESHOLD) {
+    fireClusters = computeFireClusters();
+    renderFireClusters(fireClusters);
+  } else {
+    fireClusters = [];
+    wildfireData.forEach(renderSingleFire);
+  }
 }
 function rescaleHazards() {
   if (!gHazard || !projection) return;
@@ -5192,6 +5258,14 @@ function rescaleHazards() {
     g.selectAll('text').attr('font-size',(isEq?7:baseR*1.2)/k).attr('y',cy+3/k);
     if(isEq){ g.selectAll('text').attr('x',cx+(baseR+2)/k); }
     else { g.selectAll('text').attr('x',cx); }
+  });
+  // Cluster badges
+  gHazard.selectAll('.fire-cluster').each(function() {
+    const g=d3.select(this), baseR=+(g.attr('data-base-r')||20);
+    const cx=+g.select('circle').attr('cx'), cy=+g.select('circle').attr('cy');
+    g.select('circle').attr('r',baseR/k).attr('stroke-width',1.5/k).attr('stroke-dasharray',`${4/k},${3/k}`);
+    g.selectAll('text').filter((d,i)=>i===0).attr('font-size',12/k).attr('x',cx).attr('y',cy-1/k);
+    g.selectAll('text').filter((d,i)=>i===1).attr('font-size',8/k).attr('x',cx).attr('y',cy+10/k);
   });
   gHazard.selectAll('.fire-perimeter').each(function(){
     const el=d3.select(this), isHl=+el.attr('opacity')>=1;
@@ -5299,8 +5373,97 @@ function shareHazardLink(hash){
   });
 }
 
+// ── CLUSTER CARD ──────────────────────────────────────────
+function openClusterCard(cluster, clientX, clientY) {
+  lastOpenCluster = { cluster, clientX, clientY };
+  const { fires, totalAcres, uncontained, avgContain } = cluster;
+  const states = [...new Set(fires.map(f=>(f.properties.POOState||'').replace('US-','')).filter(Boolean))].slice(0,4).join(' · ');
+  const acStr = totalAcres>=1000?`${(totalAcres/1000).toFixed(0)}k`:`${Math.round(totalAcres)}`;
+  const containStr = avgContain!=null?`${avgContain}%`:'—';
+  const contCol = avgContain==null?'#888':avgContain>=75?'#69f0ae':avgContain>=35?'#ffc107':'#ef5350';
+
+  let html = `<div class="hc-header" style="background:linear-gradient(135deg,rgba(255,109,0,.18),rgba(221,44,0,.12));">
+    <div style="font-size:9px;color:rgba(255,255,255,.4);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;">🔥 Fire cluster</div>
+    <div style="font-size:18px;font-weight:bold;color:#fff;letter-spacing:1px;">${fires.length} ACTIVE FIRES</div>
+    <div style="font-size:10px;color:rgba(255,255,255,.45);margin-top:3px;">${states}</div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1px;background:rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);">
+    <div style="background:#0d1420;padding:10px 8px;text-align:center;">
+      <div style="font-size:15px;color:#ff6d00;font-weight:bold;">${acStr}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">Total Acres</div>
+    </div>
+    <div style="background:#0d1420;padding:10px 8px;text-align:center;">
+      <div style="font-size:15px;color:${uncontained>0?'#ef5350':'#69f0ae'};font-weight:bold;">${uncontained}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">Uncontained</div>
+    </div>
+    <div style="background:#0d1420;padding:10px 8px;text-align:center;">
+      <div style="font-size:15px;color:${contCol};font-weight:bold;">${containStr}</div>
+      <div style="font-size:8px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">Avg Contain</div>
+    </div>
+  </div>
+  <div style="padding:7px 14px 3px;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;"><span>Fire</span><span>Acres · Contained</span></div>`;
+
+  fires.forEach(feat => {
+    const p=feat.properties;
+    const nm=(p.IncidentName||'Unknown').toUpperCase();
+    const st=(p.POOState||'').replace('US-',''), co=p.POOCounty||'';
+    const ac=p.DailyAcres||0, acS=ac>=1000?`${(ac/1000).toFixed(1)}k ac`:`${Math.round(ac)} ac`;
+    const pct=p.PercentContained, col=fireColor(ac);
+    let pctStr,pctCol;
+    if(pct==null){pctStr='Unknown';pctCol='rgba(255,255,255,.3)';}
+    else if(pct===0){pctStr='0% — uncontained';pctCol='#ef5350';}
+    else if(pct<50){pctStr=`${pct}% contained`;pctCol='#ffc107';}
+    else{pctStr=`${pct}% contained`;pctCol='#69f0ae';}
+    const uid=p.UniqueFireIdentifier||'';
+    html+=`<div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid rgba(255,255,255,.04);cursor:pointer;"
+      onmouseenter="this.style.background='rgba(255,255,255,.04)'" onmouseleave="this.style.background=''"
+      onclick="openFireFromCluster('${uid.replace(/'/g,"\\'")}')">
+      <div style="width:8px;height:8px;border-radius:50%;background:${col};flex-shrink:0;"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${nm}</div>
+        <div style="font-size:9px;color:rgba(255,255,255,.4);margin-top:1px;">${st}${co?' · '+co+' Co.':''}</div>
+      </div>
+      <div style="text-align:right;flex-shrink:0;">
+        <div style="font-size:10px;color:#ff9800;">${acS}</div>
+        <div style="font-size:9px;color:${pctCol};margin-top:1px;">${pctStr}</div>
+      </div>
+      <div style="font-size:10px;color:rgba(255,255,255,.2);flex-shrink:0;">›</div>
+    </div>`;
+  });
+
+  html+=`<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;">
+    <button onclick="zoomToCluster()" style="flex:1;padding:7px;border-radius:7px;border:1px solid rgba(255,109,0,.35);background:rgba(255,109,0,.12);color:#ff9800;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer;">🔍 Zoom to region</button>
+  </div>`;
+
+  openHazardCard(html, clientX, clientY);
+}
+
+function openFireFromCluster(uid) {
+  const feat = wildfireData.find(f=>f.properties.UniqueFireIdentifier===uid);
+  if (!feat) return;
+  if (uid) history.replaceState(null,'',`#fire=${encodeURIComponent(uid)}`);
+  openFireCard(feat, window.innerWidth/2, window.innerHeight/2, true);
+}
+
+function zoomToCluster() {
+  if (!lastOpenCluster || !projection) return;
+  const fires = lastOpenCluster.cluster.fires;
+  const lons = fires.map(f=>f.geometry.coordinates[0]);
+  const lats = fires.map(f=>f.geometry.coordinates[1]);
+  const minLon=Math.min(...lons)-0.8, maxLon=Math.max(...lons)+0.8;
+  const minLat=Math.min(...lats)-0.8, maxLat=Math.max(...lats)+0.8;
+  const p0=projection([minLon,maxLat]), p1=projection([maxLon,minLat]);
+  if (!p0||!p1) return;
+  const dx=p1[0]-p0[0], dy=p1[1]-p0[1];
+  const scale=Math.min(W/Math.max(dx,1), H/Math.max(dy,1))*0.75;
+  const cx=(p0[0]+p1[0])/2, cy=(p0[1]+p1[1])/2;
+  svg.transition().duration(700).call(zoom.transform,
+    d3.zoomIdentity.translate(W/2-cx*scale, H/2-cy*scale).scale(scale));
+  closeHazardCard();
+}
+
 // ── FIRE CARD ─────────────────────────────────────────────
-async function openFireCard(feat,clientX,clientY){
+async function openFireCard(feat,clientX,clientY,fromCluster=false){
   const p=feat.properties, [lon,lat]=feat.geometry.coordinates;
   const name=p.IncidentName||'Unknown Fire';
   const acres=p.DailyAcres||0;
@@ -5325,7 +5488,11 @@ async function openFireCard(feat,clientX,clientY){
   const hash=uid?`fire=${encodeURIComponent(uid)}`:'';
   const inciUrl=uid?`https://inciweb.wildfire.gov/incident-information/${uid}`:'https://inciweb.wildfire.gov';
 
-  let html=`<div class="hc-header">
+  const backBtn = fromCluster&&lastOpenCluster
+    ? `<div style="padding:7px 14px 0;font-size:9px;color:rgba(255,109,0,.7);cursor:pointer;letter-spacing:.5px;"
+         onclick="openClusterCard(lastOpenCluster.cluster,lastOpenCluster.clientX,lastOpenCluster.clientY)">← ${lastOpenCluster.cluster.fires.length} fires in this cluster</div>`
+    : '';
+  let html=`${backBtn}<div class="hc-header">
     <div class="hc-title" style="color:#ff6d00;">🔥 ${name.toUpperCase()}</div>
     <div class="hc-subtitle">${state}${county?` · ${county} Co.`:''}${city?` · ${city}`:''}</div>
   </div>`;
