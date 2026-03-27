@@ -2097,6 +2097,10 @@ function initMap(us) {
       if (windOn) initParts();
       if (lyr.temp) drawHeatmap();
       if (lyr.radar) scheduleRadarRepaint();
+      // Reload cities for new viewport / zoom tier
+      const newTier = currentTransform.k >= LABEL_ZOOM[3] ? 3 : currentTransform.k >= LABEL_ZOOM[2] ? 2 : 1;
+      lastCityTier = newTier;
+      loadCitiesForView();
     });
   svg.call(zoom);
   svg.append('rect').attr('width', W).attr('height', H).attr('fill', '#05070a');
@@ -2393,8 +2397,213 @@ const DEFS = [
   {n:'Fairbanks, AK',       la:64.84, lo:-147.72, tier:2},
 ];
 
+// ── Expanded city database — compact [city, state, lat, lng, tier] ───────────
+// tier 1 ≥300k pop (shown at k≥1.5)  tier 2 ≥50k (k≥3.5)  tier 3 ≥10k (k≥7.0)
+const EXTRA_CITIES = [
+  // === TIER 1 — Major metros missing from base list ===
+  ['Fort Worth','TX',32.75,-97.33,1],
+  ['Virginia Beach','VA',36.85,-75.98,1],
+  ['Colorado Springs','CO',38.83,-104.82,1],
+  ['Long Beach','CA',33.77,-118.19,1],
+  ['San Jose','CA',37.34,-121.89,1],
+  ['Oakland','CA',37.80,-122.27,1],
+  ['Bakersfield','CA',35.37,-119.02,1],
+  ['Anaheim','CA',33.84,-117.91,1],
+  ['Stockton','CA',37.96,-121.29,1],
+  ['Riverside','CA',33.98,-117.37,1],
+  ['Aurora','CO',39.69,-104.69,1],
+  ['St. Paul','MN',44.95,-93.09,1],
+  ['Corpus Christi','TX',27.80,-97.40,1],
+  // === TIER 2 — Regional cities ===
+  // Alabama
+  ['Montgomery','AL',32.36,-86.30,2],['Huntsville','AL',34.73,-86.59,2],
+  ['Tuscaloosa','AL',33.21,-87.57,2],['Dothan','AL',31.22,-85.39,2],
+  ['Decatur','AL',34.61,-86.98,2],['Auburn','AL',32.61,-85.49,2],
+  // Arkansas
+  ['Jonesboro','AR',35.84,-90.70,2],['Conway','AR',35.09,-92.44,2],
+  // Florida
+  ['Tallahassee','FL',30.44,-84.28,2],['Gainesville','FL',29.65,-82.32,2],
+  ['Pensacola','FL',30.42,-87.22,2],['Lakeland','FL',28.04,-81.95,2],
+  ['Cape Coral','FL',26.56,-81.95,2],['Fort Myers','FL',26.64,-81.87,2],
+  ['Sarasota','FL',27.34,-82.53,2],['Melbourne','FL',28.08,-80.61,2],
+  // Georgia
+  ['Augusta','GA',33.47,-82.01,2],['Savannah','GA',32.08,-81.10,2],
+  ['Macon','GA',32.84,-83.63,2],['Columbus','GA',32.46,-84.99,2],
+  ['Athens','GA',33.96,-83.38,2],['Warner Robins','GA',32.61,-83.60,2],
+  ['Albany','GA',31.58,-84.15,2],['Valdosta','GA',30.83,-83.28,2],
+  // Illinois
+  ['Springfield','IL',39.80,-89.65,2],['Rockford','IL',42.27,-89.09,2],
+  ['Peoria','IL',40.69,-89.59,2],['Champaign','IL',40.12,-88.24,2],
+  ['Bloomington','IL',40.48,-88.99,2],['Decatur','IL',39.84,-88.95,2],
+  ['Joliet','IL',41.53,-88.08,2],
+  // Indiana
+  ['Fort Wayne','IN',41.13,-85.13,2],['South Bend','IN',41.68,-86.25,2],
+  ['Evansville','IN',37.97,-87.57,2],['Lafayette','IN',40.42,-86.88,2],
+  ['Terre Haute','IN',39.47,-87.41,2],['Muncie','IN',40.19,-85.39,2],
+  // Iowa
+  ['Cedar Rapids','IA',42.01,-91.64,2],['Waterloo','IA',42.49,-92.34,2],
+  ['Dubuque','IA',42.50,-90.66,2],['Iowa City','IA',41.66,-91.53,2],
+  ['Sioux City','IA',42.50,-96.40,2],['Ames','IA',42.03,-93.62,2],
+  // Kansas
+  ['Manhattan','KS',39.18,-96.57,2],
+  // Louisiana
+  ['Baton Rouge','LA',30.45,-91.19,2],['Lafayette','LA',30.22,-92.02,2],
+  ['Lake Charles','LA',30.23,-93.22,2],
+  // Michigan
+  ['Lansing','MI',42.73,-84.56,2],['Flint','MI',43.01,-83.69,2],
+  ['Ann Arbor','MI',42.28,-83.74,2],['Kalamazoo','MI',42.29,-85.59,2],
+  // Minnesota
+  ['Rochester','MN',44.02,-92.46,2],['Duluth','MN',46.79,-92.10,2],
+  ['St. Cloud','MN',45.56,-94.16,2],
+  // Nebraska
+  ['Grand Island','NE',40.93,-98.34,2],
+  // Ohio
+  ['Toledo','OH',41.66,-83.56,2],['Akron','OH',41.08,-81.52,2],
+  ['Dayton','OH',39.76,-84.19,2],['Youngstown','OH',41.10,-80.65,2],
+  // Oklahoma
+  ['Lawton','OK',34.61,-98.39,2],['Enid','OK',36.39,-97.88,2],
+  // North Carolina
+  ['Greensboro','NC',36.07,-79.79,2],['Winston-Salem','NC',36.10,-80.24,2],
+  ['Durham','NC',35.99,-78.90,2],['Fayetteville','NC',35.05,-78.88,2],
+  ['Wilmington','NC',34.23,-77.94,2],['Asheville','NC',35.57,-82.55,2],
+  // South Carolina
+  ['Greenville','SC',34.85,-82.39,2],['Rock Hill','SC',34.93,-81.02,2],
+  // Tennessee
+  ['Knoxville','TN',35.96,-83.92,2],['Chattanooga','TN',35.05,-85.31,2],
+  ['Clarksville','TN',36.53,-87.36,2],['Murfreesboro','TN',35.85,-86.39,2],
+  ['Jackson','TN',35.61,-88.83,2],['Johnson City','TN',36.32,-82.35,2],
+  // Texas
+  ['Waco','TX',31.55,-97.15,2],['Abilene','TX',32.45,-99.73,2],
+  ['Wichita Falls','TX',33.91,-98.49,2],['Tyler','TX',32.35,-95.30,2],
+  ['Beaumont','TX',30.08,-94.13,2],['McAllen','TX',26.20,-98.23,2],
+  ['Killeen','TX',31.12,-97.73,2],['Denton','TX',33.21,-97.13,2],
+  ['Longview','TX',32.50,-94.74,2],['Bryan','TX',30.67,-96.37,2],
+  ['San Angelo','TX',31.46,-100.44,2],['Odessa','TX',31.85,-102.37,2],
+  ['Temple','TX',31.10,-97.34,2],
+  // Virginia
+  ['Roanoke','VA',37.27,-79.94,2],['Lynchburg','VA',37.41,-79.14,2],
+  ['Newport News','VA',37.09,-76.47,2],['Hampton','VA',37.03,-76.34,2],
+  ['Chesapeake','VA',36.77,-76.29,2],
+  // Washington
+  ['Tacoma','WA',47.25,-122.44,2],['Everett','WA',47.98,-122.20,2],
+  ['Olympia','WA',47.04,-122.90,2],['Yakima','WA',46.60,-120.51,2],
+  // Wisconsin
+  ['Green Bay','WI',44.52,-88.02,2],['Racine','WI',42.72,-87.81,2],
+  ['Appleton','WI',44.26,-88.41,2],['Eau Claire','WI',44.81,-91.50,2],
+  // Colorado / Oregon
+  ['Fort Collins','CO',40.59,-105.08,2],['Pueblo','CO',38.25,-104.61,2],
+  ['Boulder','CO',40.01,-105.28,2],['Salem','OR',44.94,-123.03,2],
+  // === TIER 3 — Small cities (storm-prone focus) ===
+  // Arkansas — comprehensive (home state)
+  ['Pine Bluff','AR',34.23,-92.00,3],['Hot Springs','AR',34.50,-93.05,3],
+  ['Russellville','AR',35.28,-93.13,3],['Texarkana','AR',33.44,-94.04,3],
+  ['Paragould','AR',36.06,-90.50,3],['Searcy','AR',35.25,-91.74,3],
+  ['West Memphis','AR',35.15,-90.18,3],['El Dorado','AR',33.21,-92.66,3],
+  ['Mountain Home','AR',36.34,-92.39,3],['Batesville','AR',35.77,-91.64,3],
+  ['Camden','AR',33.59,-92.83,3],['Magnolia','AR',33.27,-93.24,3],
+  ['Hope','AR',33.67,-93.59,3],['Benton','AR',34.56,-92.59,3],
+  ['Bryant','AR',34.60,-92.49,3],['Cabot','AR',34.97,-92.02,3],
+  ['Forrest City','AR',35.01,-90.79,3],
+  // Oklahoma
+  ['Muskogee','OK',35.74,-95.37,3],['Stillwater','OK',36.12,-97.06,3],
+  ['Bartlesville','OK',36.75,-95.98,3],['Ponca City','OK',36.71,-97.08,3],
+  ['Shawnee','OK',35.33,-96.93,3],['Ardmore','OK',34.17,-97.14,3],
+  ['Durant','OK',33.99,-96.40,3],['McAlester','OK',34.93,-95.77,3],
+  ['Tahlequah','OK',35.92,-94.97,3],['Ada','OK',34.77,-96.68,3],
+  ['Claremore','OK',36.31,-95.61,3],['Altus','OK',34.64,-99.33,3],
+  ['Woodward','OK',36.43,-99.39,3],
+  // Kansas
+  ['Salina','KS',38.84,-97.61,3],['Hutchinson','KS',38.06,-97.93,3],
+  ['Dodge City','KS',37.75,-100.02,3],['Garden City','KS',37.97,-100.87,3],
+  ['Liberal','KS',37.04,-100.92,3],['Emporia','KS',38.40,-96.18,3],
+  ['Hays','KS',38.88,-99.33,3],['Pittsburg','KS',37.41,-94.70,3],
+  // Nebraska
+  ['Kearney','NE',40.70,-99.08,3],['Norfolk','NE',42.03,-97.42,3],
+  ['Columbus','NE',41.43,-97.37,3],['Fremont','NE',41.44,-96.50,3],
+  ['North Platte','NE',41.12,-100.77,3],['Hastings','NE',40.59,-98.39,3],
+  ['Scottsbluff','NE',41.87,-103.66,3],
+  // Missouri
+  ['Jefferson City','MO',38.58,-92.17,3],['Cape Girardeau','MO',37.31,-89.52,3],
+  ['Poplar Bluff','MO',36.76,-90.39,3],['Rolla','MO',37.95,-91.77,3],
+  ['Sedalia','MO',38.70,-93.23,3],
+  // Iowa
+  ['Mason City','IA',43.15,-93.20,3],['Fort Dodge','IA',42.50,-94.18,3],
+  ['Marshalltown','IA',42.05,-92.91,3],
+  // Mississippi
+  ['Hattiesburg','MS',31.33,-89.29,3],['Meridian','MS',32.37,-88.70,3],
+  ['Tupelo','MS',34.26,-88.72,3],['Greenville','MS',33.41,-91.06,3],
+  ['Vicksburg','MS',32.35,-90.88,3],['Natchez','MS',31.56,-91.40,3],
+  // Alabama
+  ['Gadsden','AL',34.01,-85.99,3],['Florence','AL',34.80,-87.68,3],
+  ['Anniston','AL',33.66,-85.83,3],['Phenix City','AL',32.47,-85.00,3],
+  ['Selma','AL',32.41,-87.02,3],['Opelika','AL',32.65,-85.38,3],
+  // Tennessee
+  ['Cookeville','TN',36.16,-85.50,3],['Columbia','TN',35.62,-87.04,3],
+  ['Cleveland','TN',35.16,-84.88,3],['Kingsport','TN',36.55,-82.56,3],
+  ['Martin','TN',36.34,-88.85,3],['Dyersburg','TN',36.03,-89.38,3],
+  // Louisiana
+  ['Monroe','LA',32.51,-92.12,3],['Alexandria','LA',31.31,-92.45,3],
+  ['Houma','LA',29.60,-90.72,3],['Ruston','LA',32.52,-92.64,3],
+  // Georgia
+  ['Rome','GA',34.26,-85.16,3],['Dalton','GA',34.77,-84.97,3],
+  ['Brunswick','GA',31.15,-81.49,3],['Statesboro','GA',32.45,-81.78,3],
+  ['Carrollton','GA',33.58,-85.08,3],['Thomasville','GA',30.84,-83.97,3],
+  ['Gainesville','GA',34.30,-83.82,3],
+  // Florida
+  ['Panama City','FL',30.16,-85.66,3],['Fort Walton Beach','FL',30.41,-86.62,3],
+  ['Ocala','FL',29.19,-82.13,3],
+  // South Carolina
+  ['Spartanburg','SC',34.95,-81.93,3],['Florence','SC',34.20,-79.84,3],
+  ['Myrtle Beach','SC',33.69,-78.89,3],['Anderson','SC',34.50,-82.65,3],
+  ['Sumter','SC',33.92,-80.34,3],
+  // North Carolina
+  ['Hickory','NC',35.73,-81.34,3],['Greenville','NC',35.61,-77.37,3],
+  ['Jacksonville','NC',34.75,-77.43,3],['Goldsboro','NC',35.38,-77.99,3],
+  // Virginia
+  ['Charlottesville','VA',38.03,-78.48,3],['Harrisonburg','VA',38.45,-78.87,3],
+  ['Danville','VA',36.59,-79.40,3],['Fredericksburg','VA',38.30,-77.47,3],
+  // Texas
+  ['Texarkana','TX',33.43,-94.08,3],['Nacogdoches','TX',31.60,-94.66,3],
+  ['Sherman','TX',33.63,-96.61,3],['Paris','TX',33.66,-95.56,3],
+  ['San Marcos','TX',29.88,-97.94,3],['Huntsville','TX',30.72,-95.55,3],
+  ['Conroe','TX',30.32,-95.46,3],['Corsicana','TX',32.09,-96.47,3],
+  // Great Plains
+  ['Minot','ND',48.23,-101.30,3],['Grand Forks','ND',47.92,-97.03,3],
+  ['Aberdeen','SD',45.46,-98.49,3],['Watertown','SD',44.90,-97.11,3],
+  ['Pierre','SD',44.37,-100.35,3],
+  // Montana
+  ['Helena','MT',46.60,-112.02,3],['Missoula','MT',46.87,-114.01,3],
+  ['Bozeman','MT',45.68,-111.04,3],['Butte','MT',46.00,-112.53,3],
+  // Wyoming
+  ['Laramie','WY',41.31,-105.59,3],['Rock Springs','WY',41.59,-109.20,3],
+  ['Gillette','WY',44.29,-105.50,3],
+  // Colorado / New Mexico
+  ['Grand Junction','CO',39.06,-108.55,3],['Durango','CO',37.28,-107.88,3],
+  ['Roswell','NM',33.39,-104.52,3],['Las Cruces','NM',32.31,-106.78,3],
+  ['Farmington','NM',36.73,-108.21,3],['Clovis','NM',34.40,-103.21,3],
+  ['Carlsbad','NM',32.42,-104.23,3],
+  // Idaho
+  ['Twin Falls','ID',42.56,-114.46,3],['Pocatello','ID',42.87,-112.45,3],
+  // West Virginia
+  ['Morgantown','WV',39.63,-79.96,3],['Parkersburg','WV',39.27,-81.55,3],
+  ['Wheeling','WV',40.06,-80.72,3],['Beckley','WV',37.79,-81.19,3],
+  // Kentucky
+  ['Bowling Green','KY',36.99,-86.44,3],['Owensboro','KY',37.77,-87.11,3],
+  ['Paducah','KY',37.08,-88.60,3],['Hopkinsville','KY',36.87,-87.49,3],
+  ['Frankfort','KY',38.20,-84.87,3],
+  // Michigan
+  ['Saginaw','MI',43.42,-83.95,3],['Muskegon','MI',43.23,-86.25,3],
+  ['Traverse City','MI',44.76,-85.62,3],['Bay City','MI',43.59,-83.89,3],
+  // Wisconsin / Illinois / Indiana
+  ['Wausau','WI',44.96,-89.65,3],['La Crosse','WI',43.80,-91.24,3],
+  ['Quincy','IL',39.94,-91.41,3],['Carbondale','IL',37.73,-89.22,3],
+  ['Galesburg','IL',40.95,-90.37,3],['Kokomo','IN',40.49,-86.13,3],
+  ['Anderson','IN',40.10,-85.68,3],
+].map(([city, st, la, lo, tier]) => ({n:`${city}, ${st}`, la, lo, tier}));
+
 let stations = [];
 let lastStationFetch = 0;
+let lastCityTier = 1;       // tracks zoom tier for viewport-triggered city reload
 // FIX(perf): pre-computed nearest-station lookup grid for wind particles
 let stationLookupGrid = null;
 // Dynamic city weather cache — key: 'lat,lng', value: {station data + fetchedAt}
@@ -2652,8 +2861,26 @@ async function loadCitiesForView() {
     }));
     pinnedCitiesLoaded = true;
   }
-  // allDefs always reflects current pinnedCityDefs — add/remove ops update it directly
-  const allDefs = [...DEFS, ...pinnedCityDefs];
+  // Zoom-tier + viewport filtering: only fetch weather for cities on screen at current zoom
+  const k = (currentTransform || d3.zoomIdentity).k;
+  const maxTier = k >= LABEL_ZOOM[3] ? 3 : k >= LABEL_ZOOM[2] ? 2 : 1;
+  const bounds = getMapBounds();
+
+  // Build candidate list based on current zoom tier
+  const baseCities = maxTier >= 3
+    ? [...DEFS, ...EXTRA_CITIES]
+    : maxTier >= 2
+      ? [...DEFS, ...EXTRA_CITIES.filter(c => c.tier <= 2)]
+      : [...DEFS.filter(c => c.home || c.tier === 1), ...EXTRA_CITIES.filter(c => c.tier === 1)];
+
+  // Filter by viewport bounds (home cities + pinned always shown)
+  const allDefs = [
+    ...baseCities.filter(c => c.home || !bounds || (
+      c.la >= bounds.minLat && c.la <= bounds.maxLat &&
+      c.lo >= bounds.minLng && c.lo <= bounds.maxLng
+    )),
+    ...pinnedCityDefs,
+  ];
 
   const cacheKey = c => `${parseFloat(c.la).toFixed(2)},${parseFloat(c.lo).toFixed(2)}`;
   const now = Date.now();
@@ -2767,6 +2994,7 @@ function rescaleStations(k) {
       const screenSize = tier === 1 ? 8 : 7;
       el.style('display', null)
         .attr('font-size', screenSize / k)
+        .attr('letter-spacing', (tier === 1 ? 0.5 : 0.3) / k)
         .attr('x', bx + 8 / k)
         .attr('y', by + 3 / k);
     }
