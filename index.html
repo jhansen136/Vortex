@@ -5495,6 +5495,7 @@ function openFireFromCluster(uid) {
 
 function zoomToCluster() {
   if (!lastOpenCluster || !projection) return;
+  const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
   const fires = lastOpenCluster.cluster.fires;
   const lons = fires.map(f=>f.geometry.coordinates[0]);
   const lats = fires.map(f=>f.geometry.coordinates[1]);
