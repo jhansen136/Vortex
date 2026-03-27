@@ -5394,15 +5394,16 @@ function closeHazardCard(){
 function openHazardCard(html,clientX,clientY){
   const card=document.getElementById('hazardCard');
   document.getElementById('hazardCardContent').innerHTML=html;
+  card.classList.add('hc-open');
   if(window.innerWidth>640){
-    const w=316,pad=16,h=460;
-    let left=clientX+22, top=clientY-120;
+    const w=316,pad=16;
+    const h=Math.min(card.offsetHeight||460, window.innerHeight-pad*2);
+    let left=clientX+22, top=clientY-Math.round(h*0.3);
     if(left+w>window.innerWidth-pad) left=clientX-w-22;
     if(top<pad) top=pad;
     if(top+h>window.innerHeight-pad) top=window.innerHeight-h-pad;
     card.style.left=left+'px'; card.style.top=top+'px';
   }
-  card.classList.add('hc-open');
 }
 
 // ── Share ─────────────────────────────────────────────────
@@ -5445,7 +5446,8 @@ function openClusterCard(cluster, clientX, clientY) {
       <div style="font-size:8px;color:rgba(255,255,255,.35);letter-spacing:1px;text-transform:uppercase;margin-top:2px;">Avg Contain</div>
     </div>
   </div>
-  <div style="padding:7px 14px 3px;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;"><span>Fire</span><span>Acres · Contained</span></div>`;
+  <div style="padding:7px 14px 3px;font-size:9px;color:rgba(255,255,255,.3);letter-spacing:1.5px;text-transform:uppercase;display:flex;justify-content:space-between;"><span>Fire</span><span>Acres · Contained</span></div>
+  <div style="max-height:260px;overflow-y:auto;overscroll-behavior:contain;">`;
 
   fires.forEach(feat => {
     const p=feat.properties;
@@ -5475,7 +5477,8 @@ function openClusterCard(cluster, clientX, clientY) {
     </div>`;
   });
 
-  html+=`<div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;">
+  html+=`</div>
+  <div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,.06);display:flex;gap:8px;">
     <button onclick="zoomToCluster()" style="flex:1;padding:7px;border-radius:7px;border:1px solid rgba(255,109,0,.35);background:rgba(255,109,0,.12);color:#ff9800;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer;">🔍 Zoom to region</button>
   </div>`;
 
