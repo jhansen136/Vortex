@@ -1013,6 +1013,26 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>
       </div>
 
+      <!-- MRR stats -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:14px 0 12px;">
+        <div style="background:var(--bg);border:1px solid var(--border-bright);border-radius:6px;padding:10px 10px 8px;text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text-bright);" id="statTotalUsers">—</div>
+          <div style="font-family:var(--font-cond);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-top:2px;">Users</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border-bright);border-radius:6px;padding:10px 10px 8px;text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--cyan);" id="statTrialUsers">—</div>
+          <div style="font-family:var(--font-cond);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-top:2px;">Trial</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border-bright);border-radius:6px;padding:10px 10px 8px;text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--amber);" id="statProUsers">—</div>
+          <div style="font-family:var(--font-cond);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-top:2px;">Pro</div>
+        </div>
+        <div style="background:var(--bg);border:1px solid var(--border-bright);border-radius:6px;padding:10px 10px 8px;text-align:center;">
+          <div style="font-family:var(--font-mono);font-size:18px;font-weight:700;color:#4ade80;" id="statMRR">—</div>
+          <div style="font-family:var(--font-cond);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-dim);margin-top:2px;">MRR</div>
+        </div>
+      </div>
+
       <!-- Registered users -->
       <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;text-transform:uppercase;margin:14px 0 6px;">Registered Users</div>
       <div id="userList" style="max-height:200px;overflow-y:auto;">
@@ -5019,17 +5039,28 @@ async function loadUserList() {
   listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
   const { data: users, error } = await supa
     .from('profiles')
-    .select('id, display_name, role, disabled, subscription_status')
+    .select('id, display_name, role, disabled, subscription_status, plan_interval')
     .order('role', { ascending: true });
   if (error || !users?.length) {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
     return;
   }
-  const disabledCount = users.filter(u => u.disabled).length;
-  const statU = document.getElementById('statUsers');
-  const statD = document.getElementById('statDisabled');
-  if (statU) statU.textContent = users.length;
-  if (statD) statD.textContent = disabledCount;
+
+  // MRR stats
+  const trialCount   = users.filter(u => u.subscription_status === 'trial').length;
+  const proUsers     = users.filter(u => u.subscription_status === 'pro');
+  const proMonthly   = proUsers.filter(u => (u.plan_interval ?? 'month') === 'month').length;
+  const proAnnual    = proUsers.filter(u => u.plan_interval === 'year').length;
+  const mrr          = (proMonthly * 4.99) + (proAnnual * 39.99 / 12);
+  const mrrStr       = mrr === 0 ? '$0' : `$${mrr.toFixed(2)}`;
+  const proLabel     = proMonthly + proAnnual > 0
+    ? `${proMonthly + proAnnual} <span style="font-size:9px;color:var(--text-dim);">(${proMonthly}mo / ${proAnnual}yr)</span>`
+    : '0';
+  const el = id => document.getElementById(id);
+  if (el('statTotalUsers')) el('statTotalUsers').textContent = users.length;
+  if (el('statTrialUsers')) el('statTrialUsers').textContent = trialCount;
+  if (el('statProUsers'))   el('statProUsers').innerHTML     = proLabel;
+  if (el('statMRR'))        el('statMRR').textContent        = mrrStr;
   listEl.innerHTML = '';
   users.forEach(u => {
     const isMe       = u.id === currentUser?.id;

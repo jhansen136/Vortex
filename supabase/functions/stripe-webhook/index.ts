@@ -47,10 +47,22 @@ serve(async (req) => {
           break;
         }
 
+        // Determine monthly vs annual interval from the subscription
+        let planInterval = 'month';
+        if (session.subscription) {
+          try {
+            const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+            planInterval = sub.items.data[0]?.price?.recurring?.interval ?? 'month';
+          } catch (e: any) {
+            console.warn('[stripe-webhook] Could not fetch subscription interval:', e.message);
+          }
+        }
+
         await supa.from('profiles').update({
           subscription_status: 'pro',
           stripe_customer_id:  customerId,
           trial_ends_at:       null,
+          plan_interval:       planInterval,
         }).eq('id', userId);
 
         await sendWelcomeEmail(customerEmail);
@@ -86,8 +98,9 @@ serve(async (req) => {
         }
 
         if (newStatus) {
+          const planInterval = sub.items.data[0]?.price?.recurring?.interval ?? 'month';
           const { error } = await supa.from('profiles')
-            .update({ subscription_status: newStatus })
+            .update({ subscription_status: newStatus, plan_interval: planInterval })
             .eq('stripe_customer_id', customerId);
           if (error) console.error('[stripe-webhook] subscription.updated error:', error.message);
         }
