@@ -462,11 +462,12 @@ serve(async (req) => {
     await supa.from('alert_history').delete().lt('sent_at', cutoff30d);
 
     // ── 8. Update last_threshold_call_at for users who were called ────────────
-    for (const u of profileUpdates) {
-      await supa.from('profiles')
+    // Run in parallel — no reason to serialize these independent updates
+    await Promise.all(profileUpdates.map(u =>
+      supa.from('profiles')
         .update({ last_threshold_call_at: u.last_threshold_call_at })
-        .eq('id', u.id);
-    }
+        .eq('id', u.id)
+    ));
 
     // ── 9. Clean up sent_alerts older than 48h ────────────────────────────────
     await supa.from('sent_alerts').delete().lt('sent_at', cutoff48h);
