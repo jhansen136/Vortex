@@ -2017,8 +2017,9 @@ async function resolveAuth(session, source) {
     currentUser = null;
     authReady = false;
     dataInitialized = false;
-    if (window._pendingInviteToken || _isRecovery) {
-      // Direct link — skip landing page, go straight to auth
+    const authAlreadyOpen = document.getElementById('authOverlay').style.display === 'flex';
+    if (window._pendingInviteToken || _isRecovery || authAlreadyOpen) {
+      // Direct link, recovery, or user already clicked Sign In — keep auth overlay showing
       document.getElementById('authOverlay').style.display = 'flex';
       document.getElementById('landingPage').style.display = 'none';
     } else {
