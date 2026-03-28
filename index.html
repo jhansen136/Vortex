@@ -5039,22 +5039,25 @@ async function loadUserList() {
   listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">Loading…</div>';
   const { data: users, error } = await supa
     .from('profiles')
-    .select('id, display_name, role, disabled, subscription_status, plan_interval')
+    .select('id, display_name, role, disabled, subscription_status, plan_interval, stripe_customer_id')
     .order('role', { ascending: true });
   if (error || !users?.length) {
     listEl.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:4px 0;">No users found.</div>';
     return;
   }
 
-  // MRR stats
+  // MRR stats — only count pro users with a Stripe customer ID (paid), not manually comped
   const trialCount   = users.filter(u => u.subscription_status === 'trial').length;
   const proUsers     = users.filter(u => u.subscription_status === 'pro');
-  const proMonthly   = proUsers.filter(u => (u.plan_interval ?? 'month') === 'month').length;
-  const proAnnual    = proUsers.filter(u => u.plan_interval === 'year').length;
+  const paidPro      = proUsers.filter(u => !!u.stripe_customer_id);
+  const compedPro    = proUsers.filter(u => !u.stripe_customer_id).length;
+  const proMonthly   = paidPro.filter(u => (u.plan_interval ?? 'month') === 'month').length;
+  const proAnnual    = paidPro.filter(u => u.plan_interval === 'year').length;
   const mrr          = (proMonthly * 4.99) + (proAnnual * 39.99 / 12);
   const mrrStr       = mrr === 0 ? '$0' : `$${mrr.toFixed(2)}`;
-  const proLabel     = proMonthly + proAnnual > 0
-    ? `${proMonthly + proAnnual} <span style="font-size:9px;color:var(--text-dim);">(${proMonthly}mo / ${proAnnual}yr)</span>`
+  const proTotal     = paidPro.length + compedPro;
+  const proLabel     = proTotal > 0
+    ? `${proTotal} <span style="font-size:9px;color:var(--text-dim);">(${proMonthly}mo / ${proAnnual}yr${compedPro > 0 ? ` / ${compedPro}🎁` : ''})</span>`
     : '0';
   const el = id => document.getElementById(id);
   if (el('statTotalUsers')) el('statTotalUsers').textContent = users.length;
@@ -5066,8 +5069,9 @@ async function loadUserList() {
     const isMe       = u.id === currentUser?.id;
     const isDisabled = u.disabled === true;
     const isPro      = u.subscription_status === 'pro';
-    const subLabel   = u.subscription_status === 'pro' ? 'PRO' : u.subscription_status === 'trial' ? 'TRIAL' : 'FREE';
-    const subColor   = u.subscription_status === 'pro' ? 'var(--amber)' : u.subscription_status === 'trial' ? 'var(--cyan)' : 'var(--text-dim)';
+    const isComped   = isPro && !u.stripe_customer_id;
+    const subLabel   = isPro ? (isComped ? 'PRO 🎁' : 'PRO') : u.subscription_status === 'trial' ? 'TRIAL' : 'FREE';
+    const subColor   = isPro ? 'var(--amber)' : u.subscription_status === 'trial' ? 'var(--cyan)' : 'var(--text-dim)';
     const row = document.createElement('div');
     row.className = 'user-row';
     row.innerHTML = `
