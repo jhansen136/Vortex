@@ -5566,17 +5566,29 @@ function zoomToCluster() {
   if (!lastOpenCluster || !projection) return;
   const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
   const fires = lastOpenCluster.cluster.fires;
-  const lons = fires.map(f=>f.geometry.coordinates[0]);
-  const lats = fires.map(f=>f.geometry.coordinates[1]);
-  const minLon=Math.min(...lons)-0.8, maxLon=Math.max(...lons)+0.8;
-  const minLat=Math.min(...lats)-0.8, maxLat=Math.max(...lats)+0.8;
-  const p0=projection([minLon,maxLat]), p1=projection([maxLon,minLat]);
-  if (!p0||!p1) return;
-  const dx=p1[0]-p0[0], dy=p1[1]-p0[1];
-  const scale=Math.min(W/Math.max(dx,1), H/Math.max(dy,1))*0.75;
-  const cx=(p0[0]+p1[0])/2, cy=(p0[1]+p1[1])/2;
-  svg.transition().duration(700).call(zoom.transform,
-    d3.zoomIdentity.translate(W/2-cx*scale, H/2-cy*scale).scale(scale));
+
+  // Project each fire into SVG pixel space — geoAlbersUsa returns null for
+  // points outside the US, so filter those out rather than using padded
+  // bounding-box corners which frequently fall outside the projection boundary.
+  const pts = fires.map(f => projection(f.geometry.coordinates)).filter(Boolean);
+  if (!pts.length) return;
+
+  const xs = pts.map(p=>p[0]), ys = pts.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+
+  // Add 80px padding in projection space so fires aren't at the very edge;
+  // ensures single-fire "clusters" still get a reasonable zoom level.
+  const PAD = 80;
+  const spanX = Math.max(maxX-minX, 1) + PAD*2;
+  const spanY = Math.max(maxY-minY, 1) + PAD*2;
+  const scale = Math.min(W/spanX, H/spanY, 80); // cap at 80 — well past cluster-dissolve threshold
+
+  svg.transition().duration(700).call(
+    zoom.transform,
+    d3.zoomIdentity.translate(W/2 - cx*scale, H/2 - cy*scale).scale(scale)
+  );
   closeHazardCard();
 }
 
