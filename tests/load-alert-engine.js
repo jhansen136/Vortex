@@ -18,6 +18,7 @@ import { check, sleep } from 'k6';
 import { Trend, Rate } from 'k6/metrics';
 
 const SUPABASE_URL  = 'https://dajqwkniduebplujkxht.supabase.co';
+const SUPABASE_ANON = 'sb_publishable_GJ3cf0S5z8RxdBVu0gksbA_jlvX-hrI';
 const CRON_SECRET   = __ENV.CRON_SECRET;
 
 const alertEngineDuration = new Trend('alert_engine_duration', true);
@@ -53,7 +54,11 @@ export const options = {
 };
 
 export default function () {
-  const url = `${SUPABASE_URL}/functions/v1/alert-engine`;
+  // Function deployed with --no-verify-jwt; CRON_SECRET verified inside the function.
+  // Pass via both header and query param to match either auth path.
+  // dryrun=1 short-circuits all external calls (Open-Meteo, NWS, Twilio) and DB writes.
+  // Never run load tests without this — it will exhaust API rate limits against real users.
+  const url = `${SUPABASE_URL}/functions/v1/alert-engine?secret=${CRON_SECRET}&dryrun=1`;
 
   const res = http.post(url, null, {
     headers: {
