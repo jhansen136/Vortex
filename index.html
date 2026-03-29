@@ -495,7 +495,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .lp-footer{border-top:1px solid rgba(255,255,255,.06);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;}
 .lp-footer-copy{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);}
 @media(max-width:768px){
-  .lp-nav{padding:16px 20px;}
+  .lp-nav{padding:16px 20px;padding-top:calc(16px + env(safe-area-inset-top));}
   .lp-hero{padding:60px 20px 50px;}
   .lp-features{grid-template-columns:1fr;}
   .lp-stats{flex-wrap:wrap;}
@@ -4709,19 +4709,24 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
     if (!opts.silent) showToast('watch', 'Already Added', `${name} is already in your cities.`);
     return;
   }
-  // If city is already in DEFS (built-in map city), allow adding for alerts only —
-  // don't render a duplicate map pin, but do allow it in user_cities for alert monitoring.
-  // Free users limited to 1 pinned city
+  const inDefs = DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
+
+  // Free users: block adding DEFS cities entirely (already on map, can't use alerts)
+  if (!isProUser() && inDefs && !opts.silent) {
+    showToast('watch', 'Already on Map', `${name} is already shown on your map.`);
+    return;
+  }
+  // Free users limited to 1 pinned (non-DEFS) city
   if (!isProUser() && pinnedCityDefs.length >= 1 && !opts.silent) {
     showUpgradeModal('Free accounts can pin 1 city. Upgrade to Pro for unlimited pinned cities.');
     return;
   }
+
   const { data, error } = await supa.from('user_cities')
     .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
     .select('id').single();
   if (error) { if (!opts.silent) showToast('alert', 'Error', 'Could not save city.'); return; }
   // Only add to pinnedCityDefs (map rendering) if not already a DEFS city — avoids duplicate pins
-  const inDefs = DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
   if (!inDefs) pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
   cityWeatherCache.delete(`${la.toFixed(2)},${lo.toFixed(2)}`);
   loadCitiesForView();
