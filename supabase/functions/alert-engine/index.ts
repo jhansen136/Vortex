@@ -146,6 +146,14 @@ serve(async (req) => {
     return new Response('Unauthorized', { status: 401 });
   }
 
+  // Load test dry-run mode — ?dryrun=1 skips all external API calls and DB writes.
+  // Use this for load testing so Open-Meteo / Twilio / NWS are never hit.
+  if (url.searchParams.get('dryrun') === '1') {
+    return new Response(JSON.stringify({ ok: true, dryrun: true, notified: 0, called: 0, errors: [] }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
   const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
   const results: { notified: number; called: number; errors: string[] } = { notified: 0, called: 0, errors: [] };
 
