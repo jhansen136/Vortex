@@ -451,7 +451,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 
 /* ── LANDING PAGE ── */
 #landingPage{position:fixed;inset:0;z-index:9998;background:#0a0b0d;overflow-y:auto;display:none;}
-.lp-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;border-bottom:1px solid rgba(255,255,255,.06);}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;padding:20px 40px;padding-top:calc(20px + env(safe-area-inset-top));border-bottom:1px solid rgba(255,255,255,.06);}
 .lp-logo{font-family:'Share Tech Mono',monospace;font-size:22px;color:var(--amber);letter-spacing:4px;}
 .lp-nav-links{display:flex;gap:16px;align-items:center;}
 .lp-nav-links a{font-family:'Barlow Condensed',sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);text-decoration:none;transition:color .15s;}
@@ -975,7 +975,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="modal-field">
         <label>Hue API Username / Token</label>
         <input type="text" id="hueToken" placeholder="Your Hue API username">
-        <div class="hint">Get at http://[bridge-ip]/debug/clip.html — used only on your local network</div>
+        <div class="hint">Get at http://[bridge-ip]/debug/clip.html · Only activates when the app is open on the same network as your bridge</div>
       </div>
       <button class="btn-primary" onclick="saveSetup()">SAVE SETTINGS</button>
       <button class="btn-skip" onclick="closeSetup()">Close</button>
@@ -1285,7 +1285,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       </div>
       <div class="notif-row">
         <div>
-          <div class="notif-label">Smart Lights <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-label">Smart Lights <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span><span style="background:rgba(0,212,255,.15);color:var(--cyan);font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;border:1px solid rgba(0,212,255,.3);">BETA</span></div>
           <div class="notif-sub" id="hueSub">Philips Hue</div>
         </div>
         <label class="toggle"><input type="checkbox" id="toggleHue" data-sync-group="hue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
@@ -1442,7 +1442,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       </div>
       <div class="notif-row">
         <div>
-          <div class="notif-label">Smart Lights <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-label">Smart Lights <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span><span style="background:rgba(0,212,255,.15);color:var(--cyan);font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;border:1px solid rgba(0,212,255,.3);">BETA</span></div>
           <div class="notif-sub" id="hueSubM">Philips Hue</div>
         </div>
         <label class="toggle"><input type="checkbox" id="toggleHueM" data-sync-group="hue" onchange="toggleNotif('hue',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
@@ -4706,11 +4706,8 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
     if (!opts.silent) showToast('watch', 'Already Added', `${name} is already in your cities.`);
     return;
   }
-  // Skip duplicate — already exists in DEFS (built-in cities) within 0.05°
-  if (DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05)) {
-    if (!opts.silent) showToast('watch', 'Already on Map', `${name} is already shown on your map.`);
-    return;
-  }
+  // If city is already in DEFS (built-in map city), allow adding for alerts only —
+  // don't render a duplicate map pin, but do allow it in user_cities for alert monitoring.
   // Free users limited to 1 pinned city
   if (!isProUser() && pinnedCityDefs.length >= 1 && !opts.silent) {
     showUpgradeModal('Free accounts can pin 1 city. Upgrade to Pro for unlimited pinned cities.');
@@ -4720,7 +4717,9 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
     .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
     .select('id').single();
   if (error) { if (!opts.silent) showToast('alert', 'Error', 'Could not save city.'); return; }
-  pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
+  // Only add to pinnedCityDefs (map rendering) if not already a DEFS city — avoids duplicate pins
+  const inDefs = DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
+  if (!inDefs) pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
   cityWeatherCache.delete(`${la.toFixed(2)},${lo.toFixed(2)}`);
   loadCitiesForView();
   if (!opts.silent) {
