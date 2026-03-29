@@ -96,18 +96,19 @@ async function fetchWeather(lat: number, lon: number) {
 // ── Twilio voice call ──────────────────────────────────────────────────────────
 // Plays the NWS EAS audio (if TWILIO_ALERT_AUDIO_URL is set) then a TTS message.
 // When you have the NWS recording: npx supabase secrets set TWILIO_ALERT_AUDIO_URL=https://...
-async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood'): Promise<void> {
+async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood', locationName?: string): Promise<void> {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return;
 
   const audioTag = TWILIO_AUDIO_URL
     ? `<Play loop="1">${TWILIO_AUDIO_URL}</Play>`
     : '';
 
+  const loc = locationName ? `near ${locationName}` : 'for your home area';
   const tts = type === 'warning'
-    ? 'This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active for your home area. Open the Vortex app immediately.'
+    ? `This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active ${loc}. Open the Vortex app immediately.`
     : type === 'flood'
-    ? 'This is an emergency alert from Vortex Storm Intelligence. A flash flood warning is active for your home area. Move to higher ground immediately.'
-    : 'This is a Vortex weather alert. Severe storm conditions are developing near your home area. Check the Vortex app for current conditions.';
+    ? `This is an emergency alert from Vortex Storm Intelligence. A flash flood warning is active ${loc}. Move to higher ground immediately.`
+    : `This is a Vortex weather alert. Severe storm conditions are developing ${loc}. Check the Vortex app for current conditions.`;
 
   // Message repeated twice — second repetition helps iOS DND repeated-calls bypass
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -176,10 +177,11 @@ serve(async (req) => {
     }
 
     const ids = users.map((u: any) => u.id);
-    const [{ data: thresholds }, { data: integrations }, { data: preferences }] = await Promise.all([
+    const [{ data: thresholds }, { data: integrations }, { data: preferences }, { data: alertCities }] = await Promise.all([
       supa.from('thresholds').select('*').in('user_id', ids),
       supa.from('integrations').select('*').in('user_id', ids),
       supa.from('preferences').select('*').in('user_id', ids),
+      supa.from('user_cities').select('id, user_id, name, lat, lng, alert_lat, alert_lng, alert_fips').eq('alert_enabled', true).in('user_id', ids),
     ]);
 
     // ── 3. Load recent sent_alerts (last 48h for deduplication) ──────────────
@@ -223,13 +225,18 @@ serve(async (req) => {
     }
 
     // Pre-fetch all unique user locations in parallel before the user loop.
-    // This means Open-Meteo is only called once per unique location per 15 min,
-    // regardless of how many users share that location.
-    const uniqueLocations = [...new Set(users.map((u: any) => {
+    // Includes home locations and alert-enabled city locations.
+    const homeLocKeys = users.map((u: any) => {
       const lat = u.home_lat ?? FALLBACK_LAT;
       const lon = u.home_lng ?? FALLBACK_LON;
       return `${lat.toFixed(2)},${lon.toFixed(2)}`;
-    }))];
+    });
+    const cityLocKeys = (alertCities || []).map((c: any) => {
+      const lat = c.alert_lat ?? c.lat;
+      const lon = c.alert_lng ?? c.lng;
+      return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+    });
+    const uniqueLocations = [...new Set([...homeLocKeys, ...cityLocKeys])];
     await Promise.all(
       uniqueLocations.map((locKey: string) => {
         const [la, lo] = locKey.split(',').map(Number);
@@ -279,7 +286,8 @@ serve(async (req) => {
         key: string; title: string; body: string;
         priority: string; tags: string;
         event?: string; area?: string;
-        call?: boolean; callType?: 'warning' | 'threshold';
+        call?: boolean; callType?: 'warning' | 'threshold' | 'flood';
+        callLocation?: string;
       };
       const toSend: AlertItem[] = [];
 
@@ -369,6 +377,88 @@ serve(async (req) => {
         }
       }
 
+      // ── Alert-enabled pinned cities ───────────────────────────────────────────
+      const userAlertCities = (alertCities || []).filter((c: any) => c.user_id === user.id);
+      for (const city of userAlertCities) {
+        const cityLat  = city.alert_lat ?? city.lat;
+        const cityLon  = city.alert_lng ?? city.lng;
+        const citySame = city.alert_fips ? ['0' + city.alert_fips] : [];
+
+        // NWS alerts matching this city's county
+        if (citySame.length) {
+          const cityNwsAlerts = allAlerts.filter((f: any) => {
+            const same: string[] = f.properties?.geocode?.SAME || [];
+            return same.some((code: string) => citySame.includes(code));
+          });
+          for (const alert of cityNwsAlerts) {
+            const key          = `nws:${alert.properties.id}:city:${city.id}`;
+            const event        = alert.properties.event;
+            const isTornado    = event === 'Tornado Warning';
+            const isFlashFlood = event === 'Flash Flood Warning';
+            const isTorWatch   = event === 'Tornado Watch';
+            const isTstorm     = event === 'Severe Thunderstorm Warning';
+            const isFlood      = event === 'Flood Warning';
+            const isWinter     = ['Winter Storm Warning', 'Blizzard Warning', 'Ice Storm Warning'].includes(event);
+            const isWind       = ['High Wind Warning', 'Extreme Wind Warning'].includes(event);
+
+            if (hasSent(key)) continue;
+            if (isTorWatch   && pref?.push_tornado_watch_enabled === false) continue;
+            if (isTstorm     && pref?.push_tstorm_enabled        === false) continue;
+            if ((isFlashFlood || isFlood) && pref?.push_flood_enabled === false) continue;
+            if (isWinter     && pref?.push_winter_enabled        === false) continue;
+            if (isWind       && pref?.push_wind_enabled          === false) continue;
+
+            const priority = (isTornado || isFlashFlood) ? 'max' : (isTorWatch || isTstorm) ? 'high' : 'default';
+            const tags     = isTornado ? 'rotating_light,sos' : (isFlashFlood || isFlood) ? 'rain,warning' : isWinter ? 'snowflake,warning' : isWind ? 'wind_face,warning' : 'warning';
+
+            toSend.push({
+              key,
+              title:    `⚠️ ${event} — ${city.name}`,
+              body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
+              priority, tags,
+              event,
+              area:     city.name,
+              call:     (isTornado    && !!phone && (pref?.call_tornado_enabled !== false)) ||
+                        (isFlashFlood && !!phone && (pref?.call_flood_enabled === true)),
+              callType: isFlashFlood ? 'flood' : 'warning',
+              callLocation: city.name,
+            });
+          }
+        }
+
+        // Threshold alerts for this city's coordinates
+        if (th) {
+          try {
+            const wx = await getWeather(cityLat, cityLon);
+            const checks = [
+              { key: `threshold:cape:city:${city.id}`, value: wx.cape, limit: th.cape, label: 'CAPE',       unit: ' J/kg',  severe: wx.cape >= SEVERE.cape },
+              { key: `threshold:srh:city:${city.id}`,  value: wx.srh,  limit: th.srh,  label: 'SRH',        unit: ' m²/s²', severe: wx.srh  >= SEVERE.srh  },
+              { key: `threshold:wind:city:${city.id}`, value: wx.w,    limit: th.wind, label: 'Wind Speed',  unit: ' mph',   severe: false },
+              { key: `threshold:risk:city:${city.id}`, value: wx.risk, limit: th.risk, label: 'Risk Score',  unit: ' / 100', severe: wx.risk >= SEVERE.risk },
+            ];
+            for (const c of checks) {
+              if (c.value >= c.limit && !sentRecently(c.key)) {
+                const triggerCall = c.severe && !!phone && thresholdCallOk && (pref?.call_threshold_enabled !== false);
+                toSend.push({
+                  key:      c.key,
+                  title:    `VORTEX: ${c.label} Alert — ${city.name}`,
+                  body:     `${c.label} is ${Math.round(c.value)}${c.unit} near ${city.name} — your threshold is ${c.limit}${c.unit}`,
+                  priority: c.severe ? 'max' : 'high',
+                  tags:     'warning,chart_increasing',
+                  event:    `${c.label} Alert`,
+                  area:     city.name,
+                  call:     triggerCall,
+                  callType: 'threshold',
+                  callLocation: city.name,
+                });
+              }
+            }
+          } catch (e: any) {
+            results.errors.push(`weather:city:${city.id}: ${e.message}`);
+          }
+        }
+      }
+
       // ── Send notifications ────────────────────────────────────────────────────
       let calledForThreshold = false;
       for (const alert of toSend) {
@@ -418,7 +508,7 @@ serve(async (req) => {
             }
           } else {
             try {
-              await makeCall(phone, alert.callType!);
+              await makeCall(phone, alert.callType!, alert.callLocation);
               results.called++;
               dailyCallCount++;
               callSent = true;
