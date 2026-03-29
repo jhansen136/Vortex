@@ -488,6 +488,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .lp-pricing-features li{font-family:'Barlow',sans-serif;font-size:14px;color:var(--text-dim);padding-left:20px;position:relative;}
 .lp-pricing-features li::before{content:'✓';position:absolute;left:0;color:var(--amber);}
 .lp-trial-note{font-family:'Barlow',sans-serif;font-size:12px;color:var(--text-dim);margin-top:16px;}
+.lp-story{padding:70px 24px;display:flex;justify-content:center;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06);}
+.lp-story-inner{max-width:600px;text-align:center;}
+.lp-story-quote{font-family:'Barlow',sans-serif;font-size:19px;color:#e8edf5;line-height:1.85;font-style:italic;margin-bottom:20px;}
+.lp-story-credit{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--amber);}
 .lp-footer{border-top:1px solid rgba(255,255,255,.06);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;}
 .lp-footer-copy{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);}
 @media(max-width:768px){
@@ -683,7 +687,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   <section class="lp-hero">
     <div class="lp-eyebrow">Storm Intelligence Platform</div>
     <h1 class="lp-headline">KNOW BEFORE<br>THE <span>STORM</span></h1>
-    <p class="lp-subhead">Real-time NWS tornado warnings, live weather maps, and risk scoring — delivered to your phone before the sirens sound.</p>
+    <p class="lp-subhead">When a tornado warning is issued for your location, VORTEX calls your phone. Not a push notification you might sleep through — an actual phone call. Because some warnings can't wait.</p>
     <div class="lp-ctas">
       <button class="lp-cta-primary" onclick="showTrialSignup()">Start Free Trial →</button>
       <button class="lp-cta-secondary" onclick="showLoginFromLanding()">Sign In</button>
@@ -707,19 +711,26 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 
   <div class="lp-features">
     <div class="lp-feature">
-      <div class="lp-feature-icon">⚡</div>
-      <div class="lp-feature-title">Instant NWS Alerts</div>
-      <div class="lp-feature-desc">Tornado warnings, severe thunderstorm alerts, and flash flood notices pushed to your phone within 60 seconds of NWS issuance.</div>
+      <div class="lp-feature-icon">📞</div>
+      <div class="lp-feature-title">Phone Call Alerts</div>
+      <div class="lp-feature-desc">When a tornado warning, flash flood warning, or critical risk threshold is triggered for your area, VORTEX calls your phone. Not a ping you might sleep through — a real call. Push notifications included for all other alerts.</div>
     </div>
     <div class="lp-feature">
       <div class="lp-feature-icon">🗺</div>
       <div class="lp-feature-title">Live Weather Map</div>
-      <div class="lp-feature-desc">Interactive US map with real-time temperature, wind speed, and active severe weather overlays updated every minute.</div>
+      <div class="lp-feature-desc">Interactive US map with real-time temperature, wind speed, live radar, active wildfires, and earthquake activity — all on one screen, updated continuously.</div>
     </div>
     <div class="lp-feature">
       <div class="lp-feature-icon">📊</div>
       <div class="lp-feature-title">Storm Risk Scoring</div>
-      <div class="lp-feature-desc">A 0–100 risk index for your exact location, calculated every minute from live conditions so you always know your exposure.</div>
+      <div class="lp-feature-desc">A 0–100 risk index for your exact location, recalculated every 30 seconds from live conditions so you always know your exposure.</div>
+    </div>
+  </div>
+
+  <div class="lp-story">
+    <div class="lp-story-inner">
+      <div class="lp-story-quote">Last summer, a tornado passed through a campground in Rogers, Arkansas while my family was sleeping in a camper. No warning. Not even sirens. I'm a software engineer. I built this so it doesn't happen to you.</div>
+      <div class="lp-story-credit">— Jordan Hansen, founder</div>
     </div>
   </div>
 
@@ -729,10 +740,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="lp-price">$4.99<span>/mo</span></div>
       <div class="lp-price-period">or $39.99 / year — save 33%</div>
       <ul class="lp-pricing-features">
+        <li>Phone call alerts for tornado warnings</li>
         <li>Real-time NWS push notifications</li>
         <li>Live weather map + overlays</li>
         <li>Storm risk scoring 0–100</li>
-        <li>Tornado & severe weather alerts</li>
         <li>Cancel anytime</li>
       </ul>
       <button class="lp-cta-primary" style="width:100%;font-size:15px;padding:16px;" onclick="showTrialSignup()">Start 14-Day Free Trial →</button>
@@ -746,7 +757,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   </footer>
 </div>
 
-<div id="authOverlay" style="display:flex;">
+<div id="authOverlay" style="display:none;">
   <div id="authBox">
     <div id="authLogo">⟳ VORTEX</div>
     <div id="authTagline">Storm Intelligence Platform</div>
@@ -807,7 +818,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
   </div>
 </div>
 
-<div class="modal-overlay" id="setupModal" style="display:none;">
+<div class="modal-overlay" id="setupModal" style="display:none;" onclick="if(event.target===this)closeSetup()">
   <div class="modal">
     <div class="modal-title">VORTEX Setup</div>
     <div class="modal-sub" id="setupUserInfo" style="color:var(--cyan);font-size:11px;letter-spacing:1px;margin-bottom:10px;"></div>
@@ -1681,11 +1692,13 @@ function _hideAllAuthForms() {
   document.getElementById('authError').textContent = '';
 }
 function showLoginFromLanding() {
+  _authUserInitiated = true;
   document.getElementById('landingPage').style.display = 'none';
   document.getElementById('authOverlay').style.display = 'flex';
   showAuthLogin();
 }
 function showTrialSignup() {
+  _authUserInitiated = true;
   document.getElementById('landingPage').style.display = 'none';
   document.getElementById('authOverlay').style.display = 'flex';
   showAuthRegister(null);
@@ -1756,6 +1769,12 @@ function authShowError(msg) {
 // ── INVITE TOKEN — read from URL on page load ─────────────
 // Store token globally so resolveAuth can reapply it after auth state resolves
 window._pendingInviteToken = new URLSearchParams(window.location.search).get('invite') || null;
+
+// ── AUTH USER-INITIATED FLAG ───────────────────────────────
+// Set to true when the user explicitly clicks Sign In or Start Trial.
+// Prevents resolveAuth() from replacing the auth overlay with the landing page
+// after the Supabase onAuthStateChange fires (which happens on every page load).
+let _authUserInitiated = false;
 
 async function authLogin() {
   const email = document.getElementById('authEmail').value.trim();
@@ -2037,12 +2056,12 @@ async function resolveAuth(session, source) {
     currentUser = null;
     authReady = false;
     dataInitialized = false;
-    const authAlreadyOpen = document.getElementById('authOverlay').style.display === 'flex';
-    if (window._pendingInviteToken || _isRecovery || authAlreadyOpen) {
-      // Direct link, recovery, or user already clicked Sign In — keep auth overlay showing
+    if (window._pendingInviteToken || _isRecovery || _authUserInitiated) {
+      // Direct invite link, password recovery, or user clicked Sign In — keep auth overlay
       document.getElementById('authOverlay').style.display = 'flex';
       document.getElementById('landingPage').style.display = 'none';
     } else {
+      // Fresh unauthenticated visit — show the marketing landing page
       document.getElementById('landingPage').style.display = 'block';
       document.getElementById('authOverlay').style.display = 'none';
     }
