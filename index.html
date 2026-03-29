@@ -2399,14 +2399,14 @@ async function fetchPointData(lat, lon) {
 // STATIONS + OPEN-METEO
 // ══════════════════════════════════════════════════════════
 const DEFS = [
-  // ── NW Arkansas home stations ──
-  {n:'Fayetteville, AR',    la:36.07, lo:-94.16, home:true, tier:3},
-  {n:'Springdale, AR',      la:36.19, lo:-94.13, home:true, tier:3},
-  {n:'Bentonville, AR',     la:36.37, lo:-94.21, home:true, tier:3},
-  {n:'Rogers, AR',          la:36.33, lo:-94.12, home:true, tier:3},
-  {n:'Siloam Springs, AR',  la:36.19, lo:-94.54, home:true, tier:3},
-  {n:'Harrison, AR',        la:36.23, lo:-93.11, home:true, tier:3},
-  {n:'Fort Smith, AR',      la:35.39, lo:-94.42, home:true, tier:3},
+  // ── NW Arkansas stations ──
+  {n:'Fayetteville, AR',    la:36.07, lo:-94.16, tier:3},
+  {n:'Springdale, AR',      la:36.19, lo:-94.13, tier:3},
+  {n:'Bentonville, AR',     la:36.37, lo:-94.21, tier:3},
+  {n:'Rogers, AR',          la:36.33, lo:-94.12, tier:3},
+  {n:'Siloam Springs, AR',  la:36.19, lo:-94.54, tier:3},
+  {n:'Harrison, AR',        la:36.23, lo:-93.11, tier:3},
+  {n:'Fort Smith, AR',      la:35.39, lo:-94.42, tier:3},
   // ── Tier 1 — Major metros ──
   {n:'Dallas, TX',          la:32.78, lo:-96.80,  tier:1},
   {n:'Houston, TX',         la:29.76, lo:-95.37,  tier:1},
@@ -3234,8 +3234,9 @@ function drawStations() {
   glowSel.enter().append('circle')
     .attr('class', 'station-glow')
     .each(function(s) {
-      const isHome = !!s.home, baseGlow = isHome ? 7 : 5;
-      d3.select(this).attr('data-base-r', baseGlow).attr('opacity', isHome ? 0.2 : 0.12);
+      const isHome = !!s.home, isPinned = !!s.pinned && !isHome;
+      const baseGlow = isHome ? 7 : isPinned ? 6 : 5;
+      d3.select(this).attr('data-base-r', baseGlow).attr('opacity', isHome ? 0.2 : isPinned ? 0.15 : 0.12);
     })
     .merge(glowSel)
     // cx/cy on MERGE so positions update when projection changes on resize
@@ -3249,12 +3250,13 @@ function drawStations() {
   dotSel.enter().append('circle')
     .attr('class', 'station-dot')
     .each(function(s) {
-      const isHome = !!s.home, baseDot = isHome ? 4 : 3;
+      const isHome = !!s.home, isPinned = !!s.pinned && !isHome;
+      const baseDot = isHome ? 4 : isPinned ? 4 : 3;
       d3.select(this)
         .attr('r', baseDot).attr('data-base-r', baseDot)
         .attr('data-home', isHome ? '1' : null)
-        .attr('stroke', isHome ? 'var(--amber)' : 'rgba(255,255,255,0.4)')
-        .attr('stroke-width', isHome ? 1.8 : 1)
+        .attr('stroke', isHome ? 'var(--amber)' : isPinned ? 'var(--cyan)' : 'rgba(255,255,255,0.4)')
+        .attr('stroke-width', (isHome || isPinned) ? 1.8 : 1)
         .style('cursor', 'pointer')
         .on('click', (event, d) => { event.stopPropagation(); selectStation(d); })
         .on('mouseenter', (event, d) => showTooltip(d, event))
@@ -3272,11 +3274,11 @@ function drawStations() {
   labelSel.enter().append('text')
     .attr('class', 'station-label')
     .each(function(s) {
-      const isHome = !!s.home, tier = s.tier || 2;
+      const isHome = !!s.home, isPinned = !!s.pinned && !isHome, tier = s.tier || 2;
       d3.select(this)
         .attr('data-tier', tier)
         .attr('data-home', isHome ? '1' : null)
-        .attr('fill', isHome ? 'rgba(245,166,35,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)')
+        .attr('fill', isHome ? 'rgba(245,166,35,0.85)' : isPinned ? 'rgba(0,212,255,0.85)' : tier === 1 ? 'rgba(255,255,255,0.80)' : 'rgba(200,220,255,0.60)')
         .attr('font-family', "'Share Tech Mono', monospace")
         .attr('font-size', tier === 1 ? 8 : 7)
         .attr('font-weight', tier === 1 ? '700' : '400')
