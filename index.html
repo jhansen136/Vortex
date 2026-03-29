@@ -4783,20 +4783,113 @@ async function loadMyCitiesList() {
   const el = document.getElementById('myCitiesList');
   if (!el || !currentUser || !supa) return;
   const { data } = await supa.from('user_cities')
-    .select('id, name, lat, lng')
+    .select('id, name, lat, lng, alert_enabled, alert_lat, alert_lng')
     .eq('user_id', currentUser.id)
     .order('created_at', { ascending: true });
   if (!data?.length) {
     el.innerHTML = '<div style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);padding:2px 0;">No cities added yet.</div>';
     return;
   }
-  el.innerHTML = data.map(c => `
-    <div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);">
-      <span style="flex:1;font-family:var(--font-mono);font-size:11px;color:var(--text);">📌 ${c.name}</span>
-      <button onclick="removePinnedCity('${c.id}',${c.lat},${c.lng})"
-        style="background:transparent;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:0 4px;line-height:1;"
-        title="Remove">✕</button>
-    </div>`).join('');
+  el.innerHTML = data.map(c => {
+    const alertOn  = !!c.alert_enabled;
+    const dispLat  = c.alert_lat  ?? c.lat;
+    const dispLng  = c.alert_lng  ?? c.lng;
+    return `
+    <div id="cityRow_${c.id}" style="border-bottom:1px solid var(--border);padding:6px 0;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="flex:1;font-family:var(--font-mono);font-size:11px;color:var(--text);">📌 ${c.name}</span>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;" title="Alert me for this location">
+          <span style="font-family:var(--font-mono);font-size:9px;color:${alertOn ? 'var(--amber)' : 'var(--text-dim)'};letter-spacing:1px;">ALERT</span>
+          <div onclick="toggleCityAlert('${c.id}',${c.lat},${c.lng},${alertOn})"
+            style="width:32px;height:18px;border-radius:9px;background:${alertOn ? 'var(--amber)' : 'rgba(255,255,255,.1)'};border:1px solid ${alertOn ? 'var(--amber)' : 'rgba(255,255,255,.15)'};position:relative;cursor:pointer;transition:background .2s;">
+            <div style="position:absolute;top:2px;left:${alertOn ? '14px' : '2px'};width:12px;height:12px;border-radius:50%;background:#fff;transition:left .2s;"></div>
+          </div>
+        </label>
+        <button onclick="removePinnedCity('${c.id}',${c.lat},${c.lng})"
+          style="background:transparent;border:none;color:var(--text-dim);font-size:15px;cursor:pointer;padding:0 4px;line-height:1;"
+          title="Remove">✕</button>
+      </div>
+      ${alertOn ? `
+      <div style="margin-top:8px;padding:8px 10px;background:rgba(245,166,35,.05);border:1px solid rgba(245,166,35,.15);border-radius:4px;">
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-bottom:6px;">ALERT COORDINATES</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <input id="cityLat_${c.id}" type="number" step="0.0001" value="${dispLat}" placeholder="Latitude"
+            style="width:110px;background:var(--bg);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 7px;border-radius:3px;outline:none;"
+            onblur="saveCityCoords('${c.id}')">
+          <input id="cityLng_${c.id}" type="number" step="0.0001" value="${dispLng}" placeholder="Longitude"
+            style="width:110px;background:var(--bg);border:1px solid var(--border-bright);color:var(--text);font-family:var(--font-mono);font-size:11px;padding:5px 7px;border-radius:3px;outline:none;"
+            onblur="saveCityCoords('${c.id}')">
+          <button onclick="useCityGPS('${c.id}')"
+            style="background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--font-cond);font-size:11px;font-weight:700;letter-spacing:1px;padding:5px 10px;border-radius:3px;cursor:pointer;white-space:nowrap;">
+            ⌖ MY GPS
+          </button>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:5px;">Refine to your exact campsite for more accurate threshold alerts.</div>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+async function toggleCityAlert(id, baseLat, baseLng, currentlyOn) {
+  if (!currentUser || !supa) return;
+  const enabling = !currentlyOn;
+  let fips = null;
+
+  if (enabling) {
+    // Resolve county FIPS via NWS points API so alert engine can match NWS warnings
+    try {
+      const r = await fetch(`https://api.weather.gov/points/${baseLat},${baseLng}`,
+        { headers: { 'User-Agent': 'VORTEX Storm Intelligence (jhansen136@gmail.com)' } });
+      const j = await r.json();
+      fips = j.properties?.county?.split('/').pop()?.replace('USC', '') ?? null;
+    } catch (_) {}
+  }
+
+  const update = enabling
+    ? { alert_enabled: true,  alert_fips: fips }
+    : { alert_enabled: false, alert_fips: null, alert_lat: null, alert_lng: null };
+
+  const { error } = await supa.from('user_cities').update(update).eq('id', id).eq('user_id', currentUser.id);
+  if (error) { showToast('alert', 'Error', 'Could not update city alert.'); return; }
+  loadMyCitiesList();
+}
+
+async function saveCityCoords(id) {
+  const latEl = document.getElementById(`cityLat_${id}`);
+  const lngEl = document.getElementById(`cityLng_${id}`);
+  if (!latEl || !lngEl || !supa || !currentUser) return;
+  const lat = parseFloat(latEl.value), lng = parseFloat(lngEl.value);
+  if (isNaN(lat) || isNaN(lng)) return;
+
+  // Re-resolve FIPS for refined coordinates
+  let fips = null;
+  try {
+    const r = await fetch(`https://api.weather.gov/points/${lat},${lng}`,
+      { headers: { 'User-Agent': 'VORTEX Storm Intelligence (jhansen136@gmail.com)' } });
+    const j = await r.json();
+    fips = j.properties?.county?.split('/').pop()?.replace('USC', '') ?? null;
+  } catch (_) {}
+
+  await supa.from('user_cities')
+    .update({ alert_lat: lat, alert_lng: lng, alert_fips: fips })
+    .eq('id', id).eq('user_id', currentUser.id);
+  showToast('watch', 'Saved', 'Alert coordinates updated.');
+}
+
+function useCityGPS(id) {
+  if (!navigator.geolocation) { showToast('alert', 'GPS Unavailable', 'Your browser does not support geolocation.'); return; }
+  navigator.geolocation.getCurrentPosition(
+    async pos => {
+      const lat = parseFloat(pos.coords.latitude.toFixed(4));
+      const lng = parseFloat(pos.coords.longitude.toFixed(4));
+      const latEl = document.getElementById(`cityLat_${id}`);
+      const lngEl = document.getElementById(`cityLng_${id}`);
+      if (latEl) latEl.value = lat;
+      if (lngEl) lngEl.value = lng;
+      await saveCityCoords(id);
+    },
+    () => showToast('alert', 'GPS Error', 'Could not get your location.')
+  );
 }
 
 let settingHomeFromMap = false;
