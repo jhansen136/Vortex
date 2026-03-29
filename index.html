@@ -3231,7 +3231,7 @@ function drawStations() {
   const stationData = stations.filter(s => !!projection([s.lo, s.la]));
 
   // ── GLOWS ──
-  const glowSel = gStations.selectAll('.station-glow').data(stationData, d => d.n);
+  const glowSel = gStations.selectAll('.station-glow:not(.home-pin)').data(stationData, d => d.n);
   glowSel.enter().append('circle')
     .attr('class', 'station-glow')
     .each(function(s) {
@@ -3247,7 +3247,7 @@ function drawStations() {
   glowSel.exit().remove();
 
   // ── DOTS ──
-  const dotSel = gStations.selectAll('.station-dot').data(stationData, d => d.n);
+  const dotSel = gStations.selectAll('.station-dot:not(.home-pin)').data(stationData, d => d.n);
   dotSel.enter().append('circle')
     .attr('class', 'station-dot')
     .each(function(s) {
@@ -3270,7 +3270,7 @@ function drawStations() {
   dotSel.exit().remove();
 
   // ── LABELS ──
-  const labelSel = gStations.selectAll('.station-label').data(stationData, d => d.n);
+  const labelSel = gStations.selectAll('.station-label:not(.home-pin)').data(stationData, d => d.n);
   labelSel.enter().append('text')
     .attr('class', 'station-label')
     .each(function(s) {
