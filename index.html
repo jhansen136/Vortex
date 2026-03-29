@@ -1552,13 +1552,16 @@ const HOME_FIPS = new Set(['05007','05143','05087','05015','05009']);
 const LABEL_ZOOM = { 1: 1.5, 2: 3.5, 3: 7.0 };
 
 // Dynamic city zoom — population threshold by zoom scale
+// More breakpoints in the k=3-8 range prevent the mid-zoom city flood
 function popThreshold(k) {
-  if (k < 2)  return 750_000;
-  if (k < 4)  return 250_000;
-  if (k < 7)  return  75_000;
-  if (k < 11) return  20_000;
-  if (k < 16) return   5_000;
-  return 1_000;
+  if (k < 2)  return 1_000_000;  // Continental — mega cities only
+  if (k < 3)  return   500_000;  // Wide national — major metros
+  if (k < 4)  return   250_000;  // National — large metros
+  if (k < 6)  return   120_000;  // Regional — medium-large cities
+  if (k < 8)  return    55_000;  // State level — medium cities
+  if (k < 11) return    22_000;  // City level — smaller cities
+  if (k < 15) return     7_000;  // Neighborhood
+  return 2_000;                   // Max zoom — towns
 }
 
 // Cull cities that would render too close together on screen.
@@ -2838,7 +2841,7 @@ async function fetchCityWeatherBatch(cities) {
 
 // Rebuild stations from cache and re-render — no network I/O
 function renderCitiesFromCache(visible) {
-  const culled = cullByPixelDistance(visible, 50);
+  const culled = cullByPixelDistance(visible, 65);
   stations = culled.map(c => {
     const key = `${c.lat.toFixed(2)},${c.lng.toFixed(2)}`;
     return cityWeatherCache.get(key);
@@ -4723,7 +4726,10 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
   cityWeatherCache.delete(`${la.toFixed(2)},${lo.toFixed(2)}`);
   loadCitiesForView();
   if (!opts.silent) {
-    showToast('watch', 'City Added', `${name} added to your map.`);
+    const msg = inDefs
+      ? `${name} is in My Cities — enable alerts anytime.`
+      : `${name} added to your map and My Cities — enable alerts anytime.`;
+    showToast('watch', 'City Added', msg);
     loadMyCitiesList();
   }
 }
@@ -4832,6 +4838,23 @@ async function loadMyCitiesList() {
 async function toggleCityAlert(id, baseLat, baseLng, currentlyOn) {
   if (!currentUser || !supa) return;
   const enabling = !currentlyOn;
+
+  if (enabling) {
+    // Free users can't enable alerts
+    if (!isProUser()) {
+      showUpgradeModal('Alert monitoring requires VORTEX Pro.');
+      return;
+    }
+    // Pro users capped at 3 alert locations
+    const { count } = await supa.from('user_cities')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', currentUser.id).eq('alert_enabled', true);
+    if (count >= 3) {
+      showToast('watch', 'Alert Limit Reached', 'Pro accounts can monitor up to 3 locations. Disable one to add another.');
+      return;
+    }
+  }
+
   let fips = null;
 
   if (enabling) {
