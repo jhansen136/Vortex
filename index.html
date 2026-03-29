@@ -4706,11 +4706,8 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
     if (!opts.silent) showToast('watch', 'Already Added', `${name} is already in your cities.`);
     return;
   }
-  // Skip duplicate — already exists in DEFS (built-in cities) within 0.05°
-  if (DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05)) {
-    if (!opts.silent) showToast('watch', 'Already on Map', `${name} is already shown on your map.`);
-    return;
-  }
+  // If city is already in DEFS (built-in map city), allow adding for alerts only —
+  // don't render a duplicate map pin, but do allow it in user_cities for alert monitoring.
   // Free users limited to 1 pinned city
   if (!isProUser() && pinnedCityDefs.length >= 1 && !opts.silent) {
     showUpgradeModal('Free accounts can pin 1 city. Upgrade to Pro for unlimited pinned cities.');
@@ -4720,7 +4717,9 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
     .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
     .select('id').single();
   if (error) { if (!opts.silent) showToast('alert', 'Error', 'Could not save city.'); return; }
-  pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
+  // Only add to pinnedCityDefs (map rendering) if not already a DEFS city — avoids duplicate pins
+  const inDefs = DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
+  if (!inDefs) pinnedCityDefs.push({ n: name, la, lo, tier: 3, pinned: true, pinnedId: data.id });
   cityWeatherCache.delete(`${la.toFixed(2)},${lo.toFixed(2)}`);
   loadCitiesForView();
   if (!opts.silent) {
