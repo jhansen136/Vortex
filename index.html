@@ -2218,7 +2218,7 @@ function initMap(us) {
     // Cluster rings and hazard paths use their own pointerdown/pointerup guards
     if (e.target.closest?.('.cluster-ring,.warn-path,.eq-marker,.fire-perim')) return;
     // Station dot tap — get datum and call selectStation directly
-    const dot = e.target.closest?.('.station-dot');
+    const dot = e.target.closest?.('.station-dot, .station-hit');
     if (dot) {
       const d = d3.select(dot).datum();
       if (d) { selectStation(d); return; }
@@ -2226,6 +2226,9 @@ function initMap(us) {
       const h = getHomeStation(); if (h) selectStation(h);
       return;
     }
+    // Proximity fallback — snaps to nearest station within 24px (just-missed taps)
+    const nearby = findNearbyStation(e.clientX, e.clientY, 24);
+    if (nearby) { selectStation(nearby); return; }
     // Map background tap — switch to cond tab immediately for feedback, then fetch
     if (isMobile()) mobileNav('cond');
     handleMapClick(e);
@@ -3064,6 +3067,36 @@ function getHomeStation() {
   const cached = cityWeatherCache.get(key);
   if (cached) { homeStation = cached; return homeStation; }
   return null;
+}
+
+// Find the nearest station to a screen-space tap point, within thresholdPx.
+// Returns null if nothing is close enough — tap falls through to map click.
+function findNearbyStation(clientX, clientY, thresholdPx) {
+  if (!stations.length || !projection || !currentTransform) return null;
+  const rect = svgEl.getBoundingClientRect();
+  const { x: tx, y: ty, k } = currentTransform;
+  let best = null, bestDist = thresholdPx;
+  // Check regular stations
+  for (const s of stations) {
+    const pt = projection([s.lo, s.la]);
+    if (!pt) continue;
+    const sx = pt[0] * k + tx + rect.left;
+    const sy = pt[1] * k + ty + rect.top;
+    const dist = Math.hypot(clientX - sx, clientY - sy);
+    if (dist < bestDist) { bestDist = dist; best = s; }
+  }
+  // Also check home pin (not in stations[])
+  const h = getHomeStation();
+  if (h && userProfile?.home_lat && userProfile?.home_lng) {
+    const pt = projection([userProfile.home_lng, userProfile.home_lat]);
+    if (pt) {
+      const sx = pt[0] * k + tx + rect.left;
+      const sy = pt[1] * k + ty + rect.top;
+      const dist = Math.hypot(clientX - sx, clientY - sy);
+      if (dist < bestDist) { bestDist = dist; best = h; }
+    }
+  }
+  return best;
 }
 
 // Fetch weather for the user's exact home coordinates, independent of stations[].
