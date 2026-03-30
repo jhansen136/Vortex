@@ -1903,7 +1903,9 @@ async function loadUserSettings(userId) {
       syncToggleGroup('call-threshold',       p.call_threshold_enabled        ?? false);
       // Free users: force all Pro-gated toggles off regardless of DB state
       if (!isProUser()) {
-        ['push','hue','call-tornado','call-flood','call-threshold'].forEach(g => syncToggleGroup(g, false));
+        ['push','hue','call-tornado','call-flood','call-threshold',
+         'push-flood','push-tornado-watch','push-tstorm','push-winter','push-wind'
+        ].forEach(g => syncToggleGroup(g, false));
       }
       // Show/hide DEFAULT OFF badge based on current state
       const defBadge = document.getElementById('callThresholdDefault');
