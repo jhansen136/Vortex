@@ -1916,6 +1916,8 @@ async function loadUserSettings(userId) {
     updateCfgUI();
     loadAlertHistory();
     drawHomePin();
+    // Fetch weather for exact home coords — independent of city polling race condition
+    fetchHomeStation();
   } catch (err) {
     // Settings failed to load — log it but don't block data polling
     console.warn('[VORTEX] loadUserSettings error (non-fatal):', err);
@@ -1991,6 +1993,7 @@ function startDataPolling() {
   fetchNWS();
   pollingIntervals.push(
     setInterval(loadCitiesForView, INTERVAL_STATIONS),
+    setInterval(fetchHomeStation,  INTERVAL_STATIONS),
     setInterval(fetchNWS,      INTERVAL_NWS),
     setInterval(checkTh,       INTERVAL_THRESHOLD),
     setInterval(() => { if (lyr.radar) fetchRadar(); }, INTERVAL_RADAR),
@@ -2196,6 +2199,40 @@ function initMap(us) {
       _zoomMoved = false;
     });
   svg.call(zoom);
+
+  // ── Mobile tap-to-fetch ───────────────────────────────────
+  // D3 zoom's clickDistance(5) swallows finger taps (natural movement 8-15px) by
+  // calling stopImmediatePropagation() on the synthesized click. Use pointerdown/
+  // pointerup instead — D3 zoom doesn't filter those, so they fire reliably.
+  // Skip mouse pointerType so desktop click handlers continue working normally.
+  let _tapStart = null;
+  svgEl.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !e.isPrimary) return;
+    _tapStart = { x: e.clientX, y: e.clientY };
+  }, { passive: true });
+  svgEl.addEventListener('pointerup', (e) => {
+    if (!_tapStart || e.pointerType === 'mouse' || !e.isPrimary) { _tapStart = null; return; }
+    const start = _tapStart;
+    _tapStart = null;
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) return; // drag/pan
+    // Cluster rings and hazard paths use their own pointerdown/pointerup guards
+    if (e.target.closest?.('.cluster-ring,.warn-path,.eq-marker,.fire-perim')) return;
+    // Station dot tap — get datum and call selectStation directly
+    const dot = e.target.closest?.('.station-dot, .station-hit');
+    if (dot) {
+      const d = d3.select(dot).datum();
+      if (d) { selectStation(d); return; }
+      // Home pin dot has no datum bound — use dedicated homeStation variable
+      const h = getHomeStation(); if (h) selectStation(h);
+      return;
+    }
+    // Proximity fallback — snaps to nearest station within 24px (just-missed taps)
+    const nearby = findNearbyStation(e.clientX, e.clientY, 24);
+    if (nearby) { selectStation(nearby); return; }
+    // Map background tap — switch to cond tab immediately for feedback, then fetch
+    if (isMobile()) mobileNav('cond');
+    handleMapClick(e);
+  });
 
   // ── Cluster-click guard ───────────────────────────────────
   // Root cause: D3 zoom "end" fires on EVERY pointerup (including plain clicks),
@@ -2785,6 +2822,7 @@ let stationLookupGrid = null;
 // Dynamic city weather cache — key: 'lat,lng', value: {station data + fetchedAt}
 const cityWeatherCache   = new Map();        // key:'lat,lng' → weather data + fetchedAt
 const CITY_CACHE_TTL     = 3 * 60 * 1000;   // 3 min — stale-while-revalidate
+let homeStation = null;                      // dedicated home-coords station, independent of stations[]
 const cityPositionCache  = new Map();        // key:'lat,lng' → city object (session-permanent)
 const tiersLoaded        = { 1: false, 2: false, 3: false };
 let   pinnedCitiesLoaded = false;
@@ -3020,6 +3058,69 @@ function retryStationFetch() {
   loadCitiesForView();
 }
 
+// Returns the home station from any available source: dedicated fetch, or city weather cache.
+// This makes home hover/click resilient regardless of which fetch completed first.
+function getHomeStation() {
+  if (homeStation) return homeStation;
+  if (!userProfile?.home_lat || !userProfile?.home_lng) return null;
+  const key = `${parseFloat(userProfile.home_lat).toFixed(2)},${parseFloat(userProfile.home_lng).toFixed(2)}`;
+  const cached = cityWeatherCache.get(key);
+  if (cached) { homeStation = cached; return homeStation; }
+  return null;
+}
+
+// Find the nearest station to a screen-space tap point, within thresholdPx.
+// Returns null if nothing is close enough — tap falls through to map click.
+function findNearbyStation(clientX, clientY, thresholdPx) {
+  if (!stations.length || !projection || !currentTransform) return null;
+  const rect = svgEl.getBoundingClientRect();
+  const { x: tx, y: ty, k } = currentTransform;
+  let best = null, bestDist = thresholdPx;
+  // Check regular stations
+  for (const s of stations) {
+    const pt = projection([s.lo, s.la]);
+    if (!pt) continue;
+    const sx = pt[0] * k + tx + rect.left;
+    const sy = pt[1] * k + ty + rect.top;
+    const dist = Math.hypot(clientX - sx, clientY - sy);
+    if (dist < bestDist) { bestDist = dist; best = s; }
+  }
+  // Also check home pin (not in stations[])
+  const h = getHomeStation();
+  if (h && userProfile?.home_lat && userProfile?.home_lng) {
+    const pt = projection([userProfile.home_lng, userProfile.home_lat]);
+    if (pt) {
+      const sx = pt[0] * k + tx + rect.left;
+      const sy = pt[1] * k + ty + rect.top;
+      const dist = Math.hypot(clientX - sx, clientY - sy);
+      if (dist < bestDist) { bestDist = dist; best = h; }
+    }
+  }
+  return best;
+}
+
+// Fetch weather for the user's exact home coordinates, independent of stations[].
+// Stores result in module-level homeStation so drawHomePin handlers always find it.
+async function fetchHomeStation() {
+  if (!userProfile?.home_lat || !userProfile?.home_lng) return;
+  const def = {
+    n: userProfile.home_label || 'Home',
+    la: userProfile.home_lat,
+    lo: userProfile.home_lng,
+    home: true,
+    tier: 1,
+  };
+  try {
+    const results = await fetchBatch([def]);
+    if (results && results[0]) {
+      homeStation = results[0];
+      drawHomePin(); // re-render so hover/tap works immediately
+    }
+  } catch (err) {
+    console.warn('[VORTEX] fetchHomeStation failed:', err);
+  }
+}
+
 // ── CITY LOADER ────────────────────────────────────────────
 // Source: hardcoded DEFS + user pinned cities.
 // Dots always rendered — labels show/hide by tier via rescaleStations.
@@ -3031,10 +3132,21 @@ async function loadCitiesForView() {
   if (!pinnedCitiesLoaded && supa) {
     const { data } = await supa.from('user_cities')
       .select('id, name, lat, lng').eq('user_id', currentUser.id);
-    pinnedCityDefs = (data || []).map(c => ({
-      n: c.name, la: parseFloat(c.lat), lo: parseFloat(c.lng),
-      tier: 3, pinned: true, pinnedId: c.id,
-    }));
+    pinnedCityDefs = (data || [])
+      // Skip cities already in DEFS — those are already on the map, no duplicate dot needed
+      .filter(c => {
+        const la = parseFloat(c.lat), lo = parseFloat(c.lng);
+        return !DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
+      })
+      // Deduplicate by location in case user added same city multiple times
+      .filter((c, i, arr) => {
+        const la = parseFloat(c.lat), lo = parseFloat(c.lng);
+        return arr.findIndex(x => Math.abs(parseFloat(x.lat) - la) < 0.05 && Math.abs(parseFloat(x.lng) - lo) < 0.05) === i;
+      })
+      .map(c => ({
+        n: c.name, la: parseFloat(c.lat), lo: parseFloat(c.lng),
+        tier: 3, pinned: true, pinnedId: c.id,
+      }));
     pinnedCitiesLoaded = true;
   }
   // Zoom-tier + viewport filtering: only fetch weather for cities on screen at current zoom
@@ -3049,9 +3161,15 @@ async function loadCitiesForView() {
       ? [...DEFS, ...EXTRA_CITIES.filter(c => c.tier <= 2)]
       : [...DEFS.filter(c => c.home || c.tier === 1), ...EXTRA_CITIES.filter(c => c.tier === 1)];
 
-  // Filter by viewport bounds (home cities + pinned always shown)
+  // User's exact home location — always polled regardless of viewport/zoom
+  const homeDef = (userProfile?.home_lat && userProfile?.home_lng)
+    ? [{ n: userProfile.home_label || 'Home', la: userProfile.home_lat, lo: userProfile.home_lng, home: true, tier: 1 }]
+    : [];
+
+  // Filter by viewport bounds (pinned always shown; home handled separately above)
   const allDefs = [
-    ...baseCities.filter(c => c.home || !bounds || (
+    ...homeDef,
+    ...baseCities.filter(c => !bounds || (
       c.la >= bounds.minLat && c.la <= bounds.maxLat &&
       c.lo >= bounds.minLng && c.lo <= bounds.maxLng
     )),
@@ -3173,6 +3291,7 @@ function rescaleStations(k) {
     el.attr('r', +el.attr('data-base-r') * s)
       .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
   });
+  gStations.selectAll('.station-hit').attr('r', 14 * s);
   // ── LABELS: zoom-threshold filter + proximity deduplication ──
   // Phase 1 — collect all labels with their screen-space positions
   const t = currentTransform || d3.zoomIdentity;
@@ -3269,6 +3388,23 @@ function drawStations() {
     .attr('fill', s => stationColor(s));
   dotSel.exit().remove();
 
+  // ── HIT TARGETS (mobile tap area — invisible, fixed screen-space radius) ──
+  // Scaled by 1/k so they stay ~14px regardless of zoom level
+  const hitK = (currentTransform || d3.zoomIdentity).k;
+  const hitSel = gStations.selectAll('.station-hit').data(stationData, d => d.n);
+  hitSel.enter().append('circle')
+    .attr('class', 'station-hit')
+    .attr('fill', 'transparent')
+    .style('cursor', 'pointer')
+    .on('click', (event, d) => { event.stopPropagation(); selectStation(d); })
+    .on('mouseenter', (event, d) => showTooltip(d, event))
+    .on('mouseleave', hideTooltip)
+    .merge(hitSel)
+    .attr('cx', s => { const pt = projection([s.lo, s.la]); return pt ? pt[0] : 0; })
+    .attr('cy', s => { const pt = projection([s.lo, s.la]); return pt ? pt[1] : 0; })
+    .attr('r', 14 / hitK);
+  hitSel.exit().remove();
+
   // ── LABELS ──
   const labelSel = gStations.selectAll('.station-label:not(.home-pin)').data(stationData, d => d.n);
   labelSel.enter().append('text')
@@ -3323,8 +3459,8 @@ function drawHomePin() {
     .attr('data-home', '1')
     .attr('fill', 'rgba(245,166,35,0.55)').attr('stroke', 'var(--amber)').attr('stroke-width', 1.8 * s)
     .style('cursor', 'pointer')
-    .on('click', (event) => { event.stopPropagation(); const h = stations.find(st => st.home); if (h) selectStation(h); })
-    .on('mouseenter', (event) => { const h = stations.find(st => st.home); if (h) showTooltip(h, event); })
+    .on('click', (event) => { event.stopPropagation(); const h = getHomeStation(); if (h) selectStation(h); })
+    .on('mouseenter', (event) => { const h = getHomeStation(); if (h) showTooltip(h, event); })
     .on('mouseleave', hideTooltip);
   // Label
   gStations.append('text').attr('class', 'station-label home-pin')
@@ -3391,8 +3527,11 @@ function showTooltip(s, event) {
   const col = rColor(s.risk), [lab] = rLabel(s.risk);
   const gustLine = s.gusts && s.gusts > s.w
     ? `<div class="tt-row"><span class="tt-key">GUSTS</span><span class="tt-val">${s.gusts} mph</span></div>` : '';
+  const ttTitle = s.home && s.n && s.n !== 'Home'
+    ? `<span style="color:var(--amber)">HOME</span> <span style="color:rgba(255,255,255,.4);font-weight:400">(${s.n})</span>`
+    : s.home ? `<span style="color:var(--amber)">HOME</span>` : s.n;
   tt.innerHTML = `
-    <div class="tt-city">${s.n}</div>
+    <div class="tt-city">${ttTitle}</div>
     <div class="tt-row"><span class="tt-key">TEMP</span><span class="tt-val">${s.tF}°F</span></div>
     <div class="tt-row"><span class="tt-key">HUMIDITY</span><span class="tt-val">${s.h}%</span></div>
     <div class="tt-row"><span class="tt-key">WIND</span><span class="tt-val">${s.w} mph ${s.wd!==undefined?compass(s.wd):''}</span></div>
@@ -3440,8 +3579,8 @@ function selectStation(s) {
   METRIC_DEFS.forEach(([key, fn, unit]) => setMetric(key, fn(s), unit));
 
   // Update name labels
-  document.getElementById('selectedName').textContent  = s.n;
-  document.getElementById('selectedNameM').textContent = s.n;
+  document.getElementById('selectedName').textContent  = s.home ? (s.n && s.n !== 'Home' ? `Home (${s.n})` : 'Home') : s.n;
+  document.getElementById('selectedNameM').textContent = s.home ? (s.n && s.n !== 'Home' ? `Home (${s.n})` : 'Home') : s.n;
 
   // Risk score
   const [lab, cls] = rLabel(s.risk);
@@ -4639,6 +4778,7 @@ async function saveHomeLocation(lat, lng) {
   updateHomeLocationDisplay();
   updateHomeTileLabel();
   drawHomePin();
+  fetchHomeStation(); // fetch weather for new home coords immediately
   showToast('watch', 'Home Set', homeCityName || `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W`);
 
   // Option 4 — auto-pin home city so it always appears on the map
