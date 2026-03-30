@@ -2223,7 +2223,7 @@ function initMap(us) {
       const d = d3.select(dot).datum();
       if (d) { selectStation(d); return; }
       // Home pin dot has no datum bound — use dedicated homeStation variable
-      if (homeStation) selectStation(homeStation);
+      const h = getHomeStation(); if (h) selectStation(h);
       return;
     }
     // Map background tap — switch to cond tab immediately for feedback, then fetch
@@ -3055,6 +3055,17 @@ function retryStationFetch() {
   loadCitiesForView();
 }
 
+// Returns the home station from any available source: dedicated fetch, or city weather cache.
+// This makes home hover/click resilient regardless of which fetch completed first.
+function getHomeStation() {
+  if (homeStation) return homeStation;
+  if (!userProfile?.home_lat || !userProfile?.home_lng) return null;
+  const key = `${parseFloat(userProfile.home_lat).toFixed(2)},${parseFloat(userProfile.home_lng).toFixed(2)}`;
+  const cached = cityWeatherCache.get(key);
+  if (cached) { homeStation = cached; return homeStation; }
+  return null;
+}
+
 // Fetch weather for the user's exact home coordinates, independent of stations[].
 // Stores result in module-level homeStation so drawHomePin handlers always find it.
 async function fetchHomeStation() {
@@ -3247,6 +3258,7 @@ function rescaleStations(k) {
     el.attr('r', +el.attr('data-base-r') * s)
       .attr('stroke-width', (el.attr('data-home') ? 1.8 : 1) * s);
   });
+  gStations.selectAll('.station-hit').attr('r', 14 * s);
   // ── LABELS: zoom-threshold filter + proximity deduplication ──
   // Phase 1 — collect all labels with their screen-space positions
   const t = currentTransform || d3.zoomIdentity;
@@ -3343,6 +3355,23 @@ function drawStations() {
     .attr('fill', s => stationColor(s));
   dotSel.exit().remove();
 
+  // ── HIT TARGETS (mobile tap area — invisible, fixed screen-space radius) ──
+  // Scaled by 1/k so they stay ~14px regardless of zoom level
+  const hitK = (currentTransform || d3.zoomIdentity).k;
+  const hitSel = gStations.selectAll('.station-hit').data(stationData, d => d.n);
+  hitSel.enter().append('circle')
+    .attr('class', 'station-hit')
+    .attr('fill', 'transparent')
+    .style('cursor', 'pointer')
+    .on('click', (event, d) => { event.stopPropagation(); selectStation(d); })
+    .on('mouseenter', (event, d) => showTooltip(d, event))
+    .on('mouseleave', hideTooltip)
+    .merge(hitSel)
+    .attr('cx', s => { const pt = projection([s.lo, s.la]); return pt ? pt[0] : 0; })
+    .attr('cy', s => { const pt = projection([s.lo, s.la]); return pt ? pt[1] : 0; })
+    .attr('r', 14 / hitK);
+  hitSel.exit().remove();
+
   // ── LABELS ──
   const labelSel = gStations.selectAll('.station-label:not(.home-pin)').data(stationData, d => d.n);
   labelSel.enter().append('text')
@@ -3397,8 +3426,8 @@ function drawHomePin() {
     .attr('data-home', '1')
     .attr('fill', 'rgba(245,166,35,0.55)').attr('stroke', 'var(--amber)').attr('stroke-width', 1.8 * s)
     .style('cursor', 'pointer')
-    .on('click', (event) => { event.stopPropagation(); if (homeStation) selectStation(homeStation); })
-    .on('mouseenter', (event) => { if (homeStation) showTooltip(homeStation, event); })
+    .on('click', (event) => { event.stopPropagation(); const h = getHomeStation(); if (h) selectStation(h); })
+    .on('mouseenter', (event) => { const h = getHomeStation(); if (h) showTooltip(h, event); })
     .on('mouseleave', hideTooltip);
   // Label
   gStations.append('text').attr('class', 'station-label home-pin')
