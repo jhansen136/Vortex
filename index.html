@@ -2198,38 +2198,35 @@ function initMap(us) {
   svg.call(zoom);
 
   // ── Mobile tap-to-fetch ───────────────────────────────────
-  // D3 zoom's clickDistance(5) swallows finger taps (natural movement 8-15px),
-  // preventing both empty-map and station-dot taps from working on mobile.
-  // Handle all taps via touchend directly, bypassing D3's click filter entirely.
+  // D3 zoom's clickDistance(5) swallows finger taps (natural movement 8-15px) by
+  // calling stopImmediatePropagation() on the synthesized click. Use pointerdown/
+  // pointerup instead — D3 zoom doesn't filter those, so they fire reliably.
+  // Skip mouse pointerType so desktop click handlers continue working normally.
   let _tapStart = null;
-  svgEl.addEventListener('touchstart', (e) => {
-    _tapStart = e.touches.length === 1
-      ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
-      : null;
+  svgEl.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse' || !e.isPrimary) return;
+    _tapStart = { x: e.clientX, y: e.clientY };
   }, { passive: true });
-  svgEl.addEventListener('touchend', (e) => {
-    if (!_tapStart || e.changedTouches.length !== 1) { _tapStart = null; return; }
+  svgEl.addEventListener('pointerup', (e) => {
+    if (!_tapStart || e.pointerType === 'mouse' || !e.isPrimary) { _tapStart = null; return; }
     const start = _tapStart;
     _tapStart = null;
-    const dx = e.changedTouches[0].clientX - start.x;
-    const dy = e.changedTouches[0].clientY - start.y;
-    if (Math.hypot(dx, dy) > 12) return; // drag/pan — not a tap
-    // Cluster rings and hazard paths use the pointerdown/pointerup guard — leave those alone
+    if (Math.hypot(e.clientX - start.x, e.clientY - start.y) > 12) return; // drag/pan
+    // Cluster rings and hazard paths use their own pointerdown/pointerup guards
     if (e.target.closest?.('.cluster-ring,.warn-path,.eq-marker,.fire-perim')) return;
-    // Suppress the synthesized click — D3 zoom would swallow it if movement > clickDistance(5) anyway
-    e.preventDefault();
-    // Station dot tap — get datum directly and call selectStation
+    // Station dot tap — get datum and call selectStation directly
     const dot = e.target.closest?.('.station-dot');
     if (dot) {
       const d = d3.select(dot).datum();
       if (d) { selectStation(d); return; }
-      // Home pin dot has no datum — find the home station
+      // Home pin dot has no datum bound — find home station
       const h = stations.find(st => st.home);
       if (h) selectStation(h);
       return;
     }
-    // Map background / state fill tap
-    handleMapClick(e.changedTouches[0]);
+    // Map background tap — switch to cond tab immediately for feedback, then fetch
+    if (isMobile()) mobileNav('cond');
+    handleMapClick(e);
   });
 
   // ── Cluster-click guard ───────────────────────────────────
