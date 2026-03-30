@@ -891,7 +891,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
         <button onclick="openStripePortal()" style="background:transparent;border:1px solid var(--amber);color:var(--amber);font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:1px;border-radius:3px;padding:7px 16px;cursor:pointer;">⚡ MANAGE SUBSCRIPTION</button>
       </div>
 
-      <div class="modal-field">
+      <div class="modal-field" id="ntfyField">
         <label>ntfy.sh Channel URL <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></label>
         <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
         <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
@@ -933,7 +933,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
           </div>
         </div>
       </div>
-      <div class="modal-field">
+      <div class="modal-field" id="phoneField">
         <label>Phone Number <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span> <span style="color:var(--text-dim);font-weight:400;font-size:10px;letter-spacing:0;">— for tornado warning calls</span></label>
         <div style="display:flex;gap:6px;align-items:center;">
           <input type="tel" id="phoneNumber" placeholder="+1 (555) 000-0000"
@@ -5190,9 +5190,9 @@ async function openSetup() {
   // Dim Pro fields for free users
   const proFieldOpacity = pro ? '1' : '0.45';
   const proFieldPointer = pro ? '' : 'none';
-  ['pushToken','phoneNumber'].forEach(id => {
+  ['ntfyField','phoneField'].forEach(id => {
     const el = document.getElementById(id);
-    if (el) { el.parentElement.style.opacity = proFieldOpacity; el.parentElement.style.pointerEvents = proFieldPointer; }
+    if (el) { el.style.opacity = proFieldOpacity; el.style.pointerEvents = proFieldPointer; }
   });
 
   switchSetupTab('settings');
