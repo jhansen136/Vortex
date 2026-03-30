@@ -4236,6 +4236,10 @@ function setRadarSpeed(ms) { RADAR_FRAME_MS = parseInt(ms, 10); if (radarPlaying
 
 // FIX(bug): use data-layer attribute instead of brittle onclick regex
 function toggleLayer(name, btn) {
+  if ((name === 'earthquakes' || name === 'wildfires') && !isProUser()) {
+    showUpgradeModal('Earthquake and wildfire overlays require VORTEX Pro.');
+    return;
+  }
   const OVERLAYS = new Set(['wind','warnings','radar','earthquakes','wildfires']);
   if (!OVERLAYS.has(name)) {
     const wasTemp = activeLayer === 'temp';
@@ -4890,17 +4894,6 @@ async function addPinnedCity(name, lat, lng, opts = {}) {
     return;
   }
   const inDefs = DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
-
-  // Free users: block adding DEFS cities entirely (already on map, can't use alerts)
-  if (!isProUser() && inDefs && !opts.silent) {
-    showToast('watch', 'Already on Map', `${name} is already shown on your map.`);
-    return;
-  }
-  // Free users limited to 1 pinned (non-DEFS) city
-  if (!isProUser() && pinnedCityDefs.length >= 1 && !opts.silent) {
-    showUpgradeModal('Free accounts can pin 1 city. Upgrade to Pro for unlimited pinned cities.');
-    return;
-  }
 
   const { data, error } = await supa.from('user_cities')
     .insert({ user_id: currentUser.id, name, lat: la, lng: lo })
