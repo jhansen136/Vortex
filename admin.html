@@ -313,7 +313,7 @@
       onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
     <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password"
       onkeydown="if(event.key==='Enter')doLogin()">
-    <button onclick="doLogin()">SIGN IN</button>
+    <button type="button" id="loginBtn" onclick="doLogin()">SIGN IN</button>
     <div id="authError"></div>
   </div>
 </div>
@@ -413,12 +413,23 @@ let sortDir = -1; // -1 = newest first
 
 // ── Auth ──────────────────────────────────────────────────────────
 async function doLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const pass  = document.getElementById('loginPass').value;
-  document.getElementById('authError').textContent = '';
-  const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
-  if (error) { document.getElementById('authError').textContent = error.message; return; }
-  await checkAuth(data.session);
+  const email  = document.getElementById('loginEmail').value.trim();
+  const pass   = document.getElementById('loginPass').value;
+  const btn    = document.getElementById('loginBtn');
+  const errEl  = document.getElementById('authError');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Enter email and password.'; return; }
+  btn.textContent = 'SIGNING IN…'; btn.disabled = true;
+  try {
+    const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+    if (error) { errEl.textContent = error.message; return; }
+    await checkAuth(data.session);
+  } catch (e) {
+    errEl.textContent = e.message || 'Unexpected error. Check console.';
+    console.error('[ADMIN] doLogin error:', e);
+  } finally {
+    btn.textContent = 'SIGN IN'; btn.disabled = false;
+  }
 }
 
 async function doLogout() {
@@ -428,20 +439,28 @@ async function doLogout() {
 
 async function checkAuth(session) {
   if (!session?.user) return;
-  // Verify admin role
-  const { data: profile } = await supa.from('profiles')
-    .select('role, display_name')
-    .eq('id', session.user.id)
-    .maybeSingle();
-  if (profile?.role !== 'admin') {
-    document.getElementById('authError').textContent = 'Access denied — admin role required.';
-    await supa.auth.signOut();
-    return;
+  try {
+    const { data: profile, error } = await supa.from('profiles')
+      .select('role, display_name')
+      .eq('id', session.user.id)
+      .maybeSingle();
+    if (error) {
+      document.getElementById('authError').textContent = 'Profile lookup failed: ' + error.message;
+      return;
+    }
+    if (profile?.role !== 'admin') {
+      document.getElementById('authError').textContent = 'Access denied — admin role required.';
+      await supa.auth.signOut();
+      return;
+    }
+    document.getElementById('authOverlay').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    document.getElementById('headerUser').textContent = profile.display_name || session.user.email;
+    loadData();
+  } catch (e) {
+    document.getElementById('authError').textContent = e.message || 'Auth error. Check console.';
+    console.error('[ADMIN] checkAuth error:', e);
   }
-  document.getElementById('authOverlay').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
-  document.getElementById('headerUser').textContent = profile.display_name || session.user.email;
-  loadData();
 }
 
 supa.auth.onAuthStateChange(async (event, session) => {
