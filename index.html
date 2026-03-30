@@ -1916,6 +1916,8 @@ async function loadUserSettings(userId) {
     updateCfgUI();
     loadAlertHistory();
     drawHomePin();
+    // Home location is now available — re-run city loader so home coords get polled
+    loadCitiesForView();
   } catch (err) {
     // Settings failed to load — log it but don't block data polling
     console.warn('[VORTEX] loadUserSettings error (non-fatal):', err);
@@ -3081,9 +3083,15 @@ async function loadCitiesForView() {
       ? [...DEFS, ...EXTRA_CITIES.filter(c => c.tier <= 2)]
       : [...DEFS.filter(c => c.home || c.tier === 1), ...EXTRA_CITIES.filter(c => c.tier === 1)];
 
-  // Filter by viewport bounds (home cities + pinned always shown)
+  // User's exact home location — always polled regardless of viewport/zoom
+  const homeDef = (userProfile?.home_lat && userProfile?.home_lng)
+    ? [{ n: userProfile.home_label || 'Home', la: userProfile.home_lat, lo: userProfile.home_lng, home: true, tier: 1 }]
+    : [];
+
+  // Filter by viewport bounds (pinned always shown; home handled separately above)
   const allDefs = [
-    ...baseCities.filter(c => c.home || !bounds || (
+    ...homeDef,
+    ...baseCities.filter(c => !bounds || (
       c.la >= bounds.minLat && c.la <= bounds.maxLat &&
       c.lo >= bounds.minLng && c.lo <= bounds.maxLng
     )),
@@ -3423,8 +3431,11 @@ function showTooltip(s, event) {
   const col = rColor(s.risk), [lab] = rLabel(s.risk);
   const gustLine = s.gusts && s.gusts > s.w
     ? `<div class="tt-row"><span class="tt-key">GUSTS</span><span class="tt-val">${s.gusts} mph</span></div>` : '';
+  const ttTitle = s.home && s.n && s.n !== 'Home'
+    ? `<span style="color:var(--amber)">HOME</span> <span style="color:rgba(255,255,255,.4);font-weight:400">(${s.n})</span>`
+    : s.home ? `<span style="color:var(--amber)">HOME</span>` : s.n;
   tt.innerHTML = `
-    <div class="tt-city">${s.n}</div>
+    <div class="tt-city">${ttTitle}</div>
     <div class="tt-row"><span class="tt-key">TEMP</span><span class="tt-val">${s.tF}°F</span></div>
     <div class="tt-row"><span class="tt-key">HUMIDITY</span><span class="tt-val">${s.h}%</span></div>
     <div class="tt-row"><span class="tt-key">WIND</span><span class="tt-val">${s.w} mph ${s.wd!==undefined?compass(s.wd):''}</span></div>
@@ -3472,8 +3483,8 @@ function selectStation(s) {
   METRIC_DEFS.forEach(([key, fn, unit]) => setMetric(key, fn(s), unit));
 
   // Update name labels
-  document.getElementById('selectedName').textContent  = s.n;
-  document.getElementById('selectedNameM').textContent = s.n;
+  document.getElementById('selectedName').textContent  = s.home ? (s.n && s.n !== 'Home' ? `Home (${s.n})` : 'Home') : s.n;
+  document.getElementById('selectedNameM').textContent = s.home ? 'Home' : s.n;
 
   // Risk score
   const [lab, cls] = rLabel(s.risk);
@@ -4671,6 +4682,7 @@ async function saveHomeLocation(lat, lng) {
   updateHomeLocationDisplay();
   updateHomeTileLabel();
   drawHomePin();
+  loadCitiesForView(); // fetch weather for new home coords immediately
   showToast('watch', 'Home Set', homeCityName || `${lat.toFixed(3)}°N ${Math.abs(lng).toFixed(3)}°W`);
 
   // Option 4 — auto-pin home city so it always appears on the map
