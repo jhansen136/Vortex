@@ -950,21 +950,21 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
               <div class="notif-label">Tornado Warning Calls</div>
               <div class="notif-sub">Call when a tornado warning is issued for your area</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="callTornado" data-sync-group="call-tornado" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+            <label class="toggle"><input type="checkbox" id="callTornado" data-sync-group="call-tornado" onchange="toggleNotif('call-tornado',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
           <div class="notif-row" style="padding:4px 0;">
             <div>
               <div class="notif-label">Flash Flood Warning Calls <span style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 5px;letter-spacing:1px;vertical-align:middle;">DEFAULT OFF</span></div>
               <div class="notif-sub">Call when a flash flood warning is issued for your area</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="callFlood" data-sync-group="call-flood" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+            <label class="toggle"><input type="checkbox" id="callFlood" data-sync-group="call-flood" onchange="toggleNotif('call-flood',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
           <div class="notif-row" style="padding:4px 0;">
             <div>
               <div class="notif-label">Severe Threshold Calls <span id="callThresholdDefault" style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 5px;letter-spacing:1px;vertical-align:middle;">DEFAULT OFF</span></div>
               <div class="notif-sub">Call when CAPE≥1500, SRH≥250, or Risk≥70</div>
             </div>
-            <label class="toggle"><input type="checkbox" id="callThreshold" data-sync-group="call-threshold" onchange="onCallThresholdChange()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+            <label class="toggle"><input type="checkbox" id="callThreshold" data-sync-group="call-threshold" onchange="toggleNotif('call-threshold',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
         </div>
       </div>
@@ -1901,6 +1901,10 @@ async function loadUserSettings(userId) {
       syncToggleGroup('push-winter',          p.push_winter_enabled           ?? true);
       syncToggleGroup('push-wind',            p.push_wind_enabled             ?? true);
       syncToggleGroup('call-threshold',       p.call_threshold_enabled        ?? false);
+      // Free users: force all Pro-gated toggles off regardless of DB state
+      if (!isProUser()) {
+        ['push','hue','call-tornado','call-flood','call-threshold'].forEach(g => syncToggleGroup(g, false));
+      }
       // Show/hide DEFAULT OFF badge based on current state
       const defBadge = document.getElementById('callThresholdDefault');
       if (defBadge) defBadge.style.display = (p.call_threshold_enabled ?? false) ? 'none' : 'inline';
@@ -5452,14 +5456,15 @@ function syncLayerBtn(name, srcBtn) {
   }
 }
 
-// FIX(medium): toggleNotif uses data-sync-group instead of hardcoded peer map
+/// FIX(medium): toggleNotif uses data-sync-group instead of hardcoded peer map
 function toggleNotif(type, cb) {
-  // Push and Hue are Pro features — gate before checking config
-  if ((type === 'push' || type === 'hue') && cb.checked && !isProUser()) {
-    const label = type === 'push' ? 'Background push notifications' : 'Smart light alerts';
-    showUpgradeModal(`${label} require VORTEX Pro. Get alerts even when your phone is asleep.`);
+  const PRO_TYPES = new Set(['push', 'hue', 'call-tornado', 'call-flood', 'call-threshold']);
+  if (PRO_TYPES.has(type) && cb.checked && !isProUser()) {
+    showUpgradeModal('Alert notifications and phone calls require VORTEX Pro.');
     syncToggleGroup(type, false); return;
   }
+  // call-threshold also updates the DEFAULT OFF badge
+  if (type === 'call-threshold') { onCallThresholdChange(); return; }
   if (type === 'push' && cb.checked && !cfg.push) {
     showToast('watch','Not Configured','Add ntfy.sh URL in Configure.');
     syncToggleGroup('push', false); return;
