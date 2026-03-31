@@ -4535,7 +4535,7 @@ function renderNWS() {
           .style('pointer-events','none');
         // Colored border
         gWarn.append('path').datum(feat).attr('d', pathGen)
-          .attr('fill',col).attr('fill-opacity', local?0.32:isWarning?0.22:0.10)
+          .attr('fill',col).attr('fill-opacity', local?0.15:isWarning?0.12:0.08)
           .attr('stroke',col).attr('stroke-width',strokeW)
           .attr('stroke-dasharray',cls==='watch'?'6,3':'none')
           .attr('stroke-opacity',1).attr('stroke-linejoin','round').attr('stroke-linecap','round')
