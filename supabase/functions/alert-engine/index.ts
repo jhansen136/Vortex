@@ -185,6 +185,54 @@ function distToGeometryMiles(lat: number, lon: number, geometry: any): number {
   return minDist;
 }
 
+// Bearing (degrees 0-360) from point A to point B
+function bearingBetween(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const φ1 = lat1 * Math.PI / 180;
+  const φ2 = lat2 * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const y   = Math.sin(Δλ) * Math.cos(φ2);
+  const x   = Math.cos(φ1) * Math.sin(φ2) - Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Returns true if the storm in `alert` is moving toward (userLat, userLon).
+// Uses bearing from eventMotionDescription vs. bearing from storm to user.
+// If bearing data is missing, returns true (conservative — assume approaching).
+function isStormApproaching(userLat: number, userLon: number, alert: any): boolean {
+  const gps = parseStormGPS(alert);
+  if (!gps) return true; // no GPS — can't tell, assume approaching
+  const emd: string = (alert.properties?.parameters?.eventMotionDescription || [])[0] || '';
+  const degMatch = emd.match(/(\d+)\s*DEG/i);
+  if (!degMatch) return true; // no bearing — assume approaching
+  const stormBearing  = parseInt(degMatch[1]);       // direction storm is heading
+  const bearingToUser = bearingBetween(gps.lat, gps.lon, userLat, userLon);
+  const diff = Math.abs(((stormBearing - bearingToUser) + 360) % 360);
+  const angleDiff = diff > 180 ? 360 - diff : diff;
+  return angleDiff < 90; // within 90° → storm heading into user's half of map
+}
+
+// Pre-filter allAlerts to tornado/flood warnings whose polygon centroid is
+// within (radiusMiles + buffer) of the given point. Fast bounding-box check
+// so we don't run haversine against every alert in the country.
+function alertsNearPoint(lat: number, lon: number, radiusMiles: number, alerts: any[]): any[] {
+  const buffer   = 15; // extra miles beyond proximity radius for bounding box
+  const latDelta = (radiusMiles + buffer) / 69;
+  const lonDelta = (radiusMiles + buffer) / (69 * Math.cos(lat * Math.PI / 180));
+  return alerts.filter((f: any) => {
+    const event = f.properties?.event || '';
+    if (event !== 'Tornado Warning' && event !== 'Flash Flood Warning') return false;
+    if (!f.geometry) return false;
+    const geo  = f.geometry;
+    const ring: number[][] = geo.type === 'Polygon'
+      ? geo.coordinates[0]
+      : geo.type === 'MultiPolygon' ? geo.coordinates[0][0] : [];
+    if (!ring.length) return false;
+    const cLon = ring.reduce((s: number, c: number[]) => s + c[0], 0) / ring.length;
+    const cLat = ring.reduce((s: number, c: number[]) => s + c[1], 0) / ring.length;
+    return Math.abs(cLat - lat) <= latDelta && Math.abs(cLon - lon) <= lonDelta;
+  });
+}
+
 // Parse storm GPS coordinates from NWS eventMotionDescription parameter.
 // Format: "TIMESTAMP...DEGdeg...KTkt...lat,lon"
 // Returns { lat, lon } if found, null otherwise.
@@ -487,38 +535,41 @@ serve(async (req) => {
         }
       }
 
-      // ── Polygon proximity check — second call ────────────────────────────────
-      // For active tornado/flood warnings with polygon geometry, check if the
-      // storm's edge is within the user's configured proximity radius.
+      // ── Proximity check — second call ────────────────────────────────────────
+      // Checks ALL active tornado/flood warnings within the user's proximity
+      // radius, not just those in their county. Also gates on storm approaching.
       if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
-        const proximityMiles = th.proximity_miles ?? 5;
-        for (const alert of userAlerts) {
+        const proximityMiles  = th.proximity_miles ?? 5;
+        const nearbyAlerts    = alertsNearPoint(homeLat, homeLon, proximityMiles, allAlerts);
+        for (const alert of nearbyAlerts) {
           const event        = alert.properties?.event;
           const isTornado    = event === 'Tornado Warning';
           const isFlashFlood = event === 'Flash Flood Warning';
-          if (!isTornado && !isFlashFlood) continue;
           if (!alert.geometry) continue;
 
           const proxKey = `proximity:${alert.properties.id}`;
           if (hasSent(proxKey)) continue;
 
           const { dist, method } = distToAlertMiles(homeLat, homeLon, alert);
-          if (dist <= proximityMiles) {
-            const distDesc = method === 'gps'
-              ? `The tornado is ${dist < 1 ? 'less than 1' : Math.round(dist)} mile${dist < 2 ? '' : 's'} from your home`
-              : `The ${event.toLowerCase()} warning area is within ${proximityMiles} miles of your home`;
-            toSend.push({
-              key:          proxKey,
-              title:        `⚠️ ${event} — APPROACHING YOUR LOCATION`,
-              body:         `${distDesc}. Take cover immediately.`,
-              priority:     'max',
-              tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
-              event,
-              area:         'Your Location',
-              call:         true,
-              callType:     'proximity',
-            });
-          }
+          if (dist > proximityMiles) continue;
+
+          // Only call if storm is heading toward the user
+          if (!isStormApproaching(homeLat, homeLon, alert)) continue;
+
+          const distDesc = method === 'gps'
+            ? `The tornado is ${dist < 1 ? 'less than 1' : Math.round(dist)} mile${dist < 2 ? '' : 's'} from your home and approaching`
+            : `A ${event.toLowerCase()} is within ${proximityMiles} miles of your home and approaching`;
+          toSend.push({
+            key:      proxKey,
+            title:    `⚠️ ${event} — APPROACHING YOUR LOCATION`,
+            body:     `${distDesc}. Take cover immediately.`,
+            priority: 'max',
+            tags:     isTornado ? 'rotating_light,sos' : 'rain,warning',
+            event,
+            area:     'Your Location',
+            call:     true,
+            callType: 'proximity',
+          });
         }
       }
 
@@ -598,37 +649,40 @@ serve(async (req) => {
           }
         }
 
-        // Polygon proximity check for this city
+        // Proximity check for this city — all nearby warnings, approaching only
         if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
-          const proximityMiles = th.proximity_miles ?? 5;
-          for (const alert of (cityNwsAlerts || [])) {
+          const proximityMiles   = th.proximity_miles ?? 5;
+          const cityNearbyAlerts = alertsNearPoint(cityLat, cityLon, proximityMiles, allAlerts);
+          for (const alert of cityNearbyAlerts) {
             const event        = alert.properties?.event;
             const isTornado    = event === 'Tornado Warning';
             const isFlashFlood = event === 'Flash Flood Warning';
-            if (!isTornado && !isFlashFlood) continue;
             if (!alert.geometry) continue;
 
             const proxKey = `proximity:${alert.properties.id}:city:${city.id}`;
             if (hasSent(proxKey)) continue;
 
             const { dist: cityDist, method: cityMethod } = distToAlertMiles(cityLat, cityLon, alert);
-            if (cityDist <= proximityMiles) {
-              const cityDistDesc = cityMethod === 'gps'
-                ? `The tornado is ${cityDist < 1 ? 'less than 1' : Math.round(cityDist)} mile${cityDist < 2 ? '' : 's'} from ${city.name}`
-                : `The ${event.toLowerCase()} warning area is within ${proximityMiles} miles of ${city.name}`;
-              toSend.push({
-                key:          proxKey,
-                title:        `⚠️ ${event} — APPROACHING ${city.name.toUpperCase()}`,
-                body:         `${cityDistDesc}. Take cover immediately.`,
-                priority:     'max',
-                tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
-                event,
-                area:         city.name,
-                call:         true,
-                callType:     'proximity',
-                callLocation: city.name,
-              });
-            }
+            if (cityDist > proximityMiles) continue;
+
+            // Only call if storm is heading toward the city
+            if (!isStormApproaching(cityLat, cityLon, alert)) continue;
+
+            const cityDistDesc = cityMethod === 'gps'
+              ? `The tornado is ${cityDist < 1 ? 'less than 1' : Math.round(cityDist)} mile${cityDist < 2 ? '' : 's'} from ${city.name} and approaching`
+              : `A ${event.toLowerCase()} is within ${proximityMiles} miles of ${city.name} and approaching`;
+            toSend.push({
+              key:          proxKey,
+              title:        `⚠️ ${event} — APPROACHING ${city.name.toUpperCase()}`,
+              body:         `${cityDistDesc}. Take cover immediately.`,
+              priority:     'max',
+              tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
+              event,
+              area:         city.name,
+              call:         true,
+              callType:     'proximity',
+              callLocation: city.name,
+            });
           }
         }
       }
