@@ -185,6 +185,31 @@ function distToGeometryMiles(lat: number, lon: number, geometry: any): number {
   return minDist;
 }
 
+// Parse storm GPS coordinates from NWS eventMotionDescription parameter.
+// Format: "TIMESTAMP...DEGdeg...KTkt...lat,lon"
+// Returns { lat, lon } if found, null otherwise.
+function parseStormGPS(alert: any): { lat: number; lon: number } | null {
+  const emd: string = (alert.properties?.parameters?.eventMotionDescription || [])[0] || '';
+  const matches = [...emd.matchAll(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/g)];
+  if (!matches.length) return null;
+  const last = matches[matches.length - 1];
+  const lat = parseFloat(last[1]);
+  const lon = parseFloat(last[2]);
+  if (isNaN(lat) || isNaN(lon)) return null;
+  return { lat, lon };
+}
+
+// Distance from a point to an NWS alert.
+// Uses storm GPS (eventMotionDescription) when available — this is the actual
+// storm location. Falls back to polygon edge distance when GPS is not present.
+function distToAlertMiles(userLat: number, userLon: number, alert: any): { dist: number; method: 'gps' | 'polygon' } {
+  const gps = parseStormGPS(alert);
+  if (gps) {
+    return { dist: haversineMiles(userLat, userLon, gps.lat, gps.lon), method: 'gps' };
+  }
+  return { dist: distToGeometryMiles(userLat, userLon, alert.geometry), method: 'polygon' };
+}
+
 serve(async (req) => {
   // Verify cron secret — check Authorization header or ?secret= query param
   const url = new URL(req.url);
@@ -477,12 +502,15 @@ serve(async (req) => {
           const proxKey = `proximity:${alert.properties.id}`;
           if (hasSent(proxKey)) continue;
 
-          const dist = distToGeometryMiles(homeLat, homeLon, alert.geometry);
+          const { dist, method } = distToAlertMiles(homeLat, homeLon, alert);
           if (dist <= proximityMiles) {
+            const distDesc = method === 'gps'
+              ? `The tornado is ${dist < 1 ? 'less than 1' : Math.round(dist)} mile${dist < 2 ? '' : 's'} from your home`
+              : `The ${event.toLowerCase()} warning area is within ${proximityMiles} miles of your home`;
             toSend.push({
               key:          proxKey,
               title:        `⚠️ ${event} — APPROACHING YOUR LOCATION`,
-              body:         `The ${event.toLowerCase()} polygon is now within ${proximityMiles} miles of your home. Take cover immediately.`,
+              body:         `${distDesc}. Take cover immediately.`,
               priority:     'max',
               tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
               event,
@@ -583,12 +611,15 @@ serve(async (req) => {
             const proxKey = `proximity:${alert.properties.id}:city:${city.id}`;
             if (hasSent(proxKey)) continue;
 
-            const dist = distToGeometryMiles(cityLat, cityLon, alert.geometry);
-            if (dist <= proximityMiles) {
+            const { dist: cityDist, method: cityMethod } = distToAlertMiles(cityLat, cityLon, alert);
+            if (cityDist <= proximityMiles) {
+              const cityDistDesc = cityMethod === 'gps'
+                ? `The tornado is ${cityDist < 1 ? 'less than 1' : Math.round(cityDist)} mile${cityDist < 2 ? '' : 's'} from ${city.name}`
+                : `The ${event.toLowerCase()} warning area is within ${proximityMiles} miles of ${city.name}`;
               toSend.push({
                 key:          proxKey,
                 title:        `⚠️ ${event} — APPROACHING ${city.name.toUpperCase()}`,
-                body:         `The ${event.toLowerCase()} polygon is now within ${proximityMiles} miles of ${city.name}. Take cover immediately.`,
+                body:         `${cityDistDesc}. Take cover immediately.`,
                 priority:     'max',
                 tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
                 event,
