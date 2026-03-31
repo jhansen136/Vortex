@@ -286,6 +286,9 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .threshold-input{flex:1;background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:4px 8px;font-family:var(--font-mono);font-size:12px;color:var(--text-bright);outline:none;}
 .threshold-input:focus{border-color:var(--amber);}
 .threshold-unit{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);width:30px;flex-shrink:0;}
+.prox-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:3px;padding:5px 0;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);cursor:pointer;transition:all .15s;}
+.prox-btn:hover{border-color:var(--border-bright);color:var(--text);}
+.prox-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(245,166,35,.08);}
 .test-btn{background:rgba(0,212,255,.08);border:1px solid var(--cyan);color:var(--cyan);font-family:var(--font-mono);font-size:10px;padding:4px 10px;border-radius:3px;cursor:pointer;}
 .test-btn:hover{opacity:.7;}
 .hue-status{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:6px;}
@@ -961,8 +964,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
           </div>
           <div class="notif-row" style="padding:4px 0;">
             <div>
-              <div class="notif-label">Severe Threshold Calls <span id="callThresholdDefault" style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 5px;letter-spacing:1px;vertical-align:middle;">DEFAULT OFF</span></div>
-              <div class="notif-sub">Call when CAPE≥1500, SRH≥250, or Risk≥70</div>
+              <div class="notif-label">Proximity Warning Call <span id="callThresholdDefault" style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);background:var(--surface);border:1px solid var(--border);border-radius:2px;padding:1px 5px;letter-spacing:1px;vertical-align:middle;">DEFAULT OFF</span></div>
+              <div class="notif-sub">Second call when active warning polygon tracks within your proximity radius</div>
             </div>
             <label class="toggle"><input type="checkbox" id="callThreshold" data-sync-group="call-threshold" onchange="toggleNotif('call-threshold',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
@@ -1306,10 +1309,27 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     </div>
     <div class="panel-section">
       <div class="panel-label">Alert Thresholds</div>
-      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape" data-th="cape" value="1500"><div class="threshold-unit">J/kg</div></div>
-      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh" data-th="srh" value="250"><div class="threshold-unit">m²/s²</div></div>
-      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind" data-th="wind" value="60"><div class="threshold-unit">mph</div></div>
-      <div class="threshold-row" style="border:none;"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk" data-th="risk" value="70"><div class="threshold-unit">/ 100</div></div>
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <div style="font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;">Risk Score Trigger</div>
+          <div style="font-family:var(--font-mono);font-size:13px;color:var(--amber);" id="riskThreshVal">65</div>
+        </div>
+        <input type="range" id="th-risk" data-th="risk" min="65" max="100" value="65" style="width:100%;accent-color:var(--amber);cursor:pointer;">
+        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:3px;">
+          <span>65 ELV</span><span>75 HIGH</span><span>90 EXTR</span><span>100</span>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:5px;">Push when Risk Score exceeds this — no active warning required</div>
+      </div>
+      <div>
+        <div style="font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;margin-bottom:6px;">Warning Proximity Radius</div>
+        <div style="display:flex;gap:4px;" id="proxBtns">
+          <button type="button" class="prox-btn" data-prox="1">1 mi</button>
+          <button type="button" class="prox-btn" data-prox="3">3 mi</button>
+          <button type="button" class="prox-btn active" data-prox="5">5 mi</button>
+          <button type="button" class="prox-btn" data-prox="10">10 mi</button>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:5px;">Second call when active warning polygon tracks within this distance</div>
+      </div>
     </div>
     <div class="panel-section">
       <div class="panel-label">Light Alert Modes</div>
@@ -1454,10 +1474,27 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     </div>
     <div class="panel-section">
       <div class="panel-label">Alert Thresholds</div>
-      <div class="threshold-row"><div class="threshold-name">CAPE ></div><input class="threshold-input" type="number" id="th-cape-m" data-th="cape" value="1500"><div class="threshold-unit">J/kg</div></div>
-      <div class="threshold-row"><div class="threshold-name">SRH ></div><input class="threshold-input" type="number" id="th-srh-m" data-th="srh" value="250"><div class="threshold-unit">m²/s²</div></div>
-      <div class="threshold-row"><div class="threshold-name">WIND ></div><input class="threshold-input" type="number" id="th-wind-m" data-th="wind" value="60"><div class="threshold-unit">mph</div></div>
-      <div class="threshold-row"><div class="threshold-name">RISK ></div><input class="threshold-input" type="number" id="th-risk-m" data-th="risk" value="70"><div class="threshold-unit">/ 100</div></div>
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <div style="font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;">Risk Score Trigger</div>
+          <div style="font-family:var(--font-mono);font-size:13px;color:var(--amber);" id="riskThreshValM">65</div>
+        </div>
+        <input type="range" id="th-risk-m" data-th="risk" min="65" max="100" value="65" style="width:100%;accent-color:var(--amber);cursor:pointer;">
+        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:3px;">
+          <span>65 ELV</span><span>75 HIGH</span><span>90 EXTR</span><span>100</span>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:5px;">Push when Risk Score exceeds this — no active warning required</div>
+      </div>
+      <div>
+        <div style="font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;margin-bottom:6px;">Warning Proximity Radius</div>
+        <div style="display:flex;gap:4px;" id="proxBtnsM">
+          <button type="button" class="prox-btn" data-prox="1">1 mi</button>
+          <button type="button" class="prox-btn" data-prox="3">3 mi</button>
+          <button type="button" class="prox-btn active" data-prox="5">5 mi</button>
+          <button type="button" class="prox-btn" data-prox="10">10 mi</button>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:5px;">Second call when active warning polygon tracks within this distance</div>
+      </div>
     </div>
     <div class="panel-section" style="border:none;display:flex;gap:8px;flex-wrap:wrap;">
       <button class="test-btn" onclick="testPush()" style="flex:1;padding:10px;">TEST PUSH</button>
@@ -1675,8 +1712,8 @@ let _zoomMoved = false; // true only when the transform actually changed (real p
 const BUILD_TS = Date.now(); // replaced by build step; good enough as a unique-per-load marker
 let dataInitialized  = false;
 
-// FIX(medium): cached threshold values — updated on input change, read by checkTh()
-let thCache = { cape: 1500, srh: 250, wind: 60, risk: 70 };
+// Cached threshold values — updated on input change, read by checkTh()
+let thCache = { risk: 65, proximity: 5 };
 
 // FIX(low): AbortSignal.timeout polyfill
 if (!AbortSignal.timeout) {
@@ -1883,10 +1920,14 @@ async function loadUserSettings(userId) {
     }
     if (thRes.data) {
       const t = thRes.data;
-      ['cape','srh','wind','risk'].forEach(k => {
-        thCache[k] = +t[k] || thCache[k];
-        document.querySelectorAll(`[data-th="${k}"]`).forEach(el => { el.value = thCache[k]; });
-      });
+      thCache.risk      = t.risk_score      || 65;
+      thCache.proximity = t.proximity_miles || 5;
+      document.querySelectorAll('[data-th="risk"]').forEach(el => { el.value = thCache.risk; });
+      document.getElementById('riskThreshVal')?.setAttribute('data-val', thCache.risk) || null;
+      document.getElementById('riskThreshValM')?.setAttribute('data-val', thCache.risk) || null;
+      if (document.getElementById('riskThreshVal'))  document.getElementById('riskThreshVal').textContent  = thCache.risk;
+      if (document.getElementById('riskThreshValM')) document.getElementById('riskThreshValM').textContent = thCache.risk;
+      syncProxBtns(thCache.proximity);
     }
     if (prefRes.data) {
       const p = prefRes.data;
@@ -1956,7 +1997,7 @@ async function saveUserSettings(updates) {
   }
   if (updates.thresholds) {
     await supa.from('thresholds').upsert({
-      user_id: uid, cape: thCache.cape, srh: thCache.srh, wind: thCache.wind, risk: thCache.risk, updated_at: now
+      user_id: uid, risk_score: thCache.risk, proximity_miles: thCache.proximity, updated_at: now
     }, { onConflict: 'user_id' });
   }
   if (updates.preferences) {
@@ -4617,33 +4658,25 @@ async function fireAlert(ev, area, col, local=false) {
 // THRESHOLDS — FIX(medium): reads cached values, not DOM each tick
 // ══════════════════════════════════════════════════════════
 function checkTh() {
-  const tc = thCache.cape, ts = thCache.srh, tw = thCache.wind, tr = thCache.risk;
-  const homeTriggered = stations.filter(s => s.home && s.cape>tc && s.srh>ts && s.w>tw && s.risk>tr);
-  const allTriggered  = stations.filter(s => s.cape>tc && s.srh>ts && s.w>tw && s.risk>tr);
+  const tr = thCache.risk;
+  const homeTriggered = stations.filter(s => s.home && s.risk >= tr);
+  const allTriggered  = stations.filter(s => s.risk >= tr);
   allTriggered.forEach(s => {
     const hueOn = document.querySelector('[data-sync-group="hue"]')?.checked;
-    if (hueOn && cfg.hueIP) { document.getElementById('hueStatus').style.display='flex'; document.getElementById('hueStatusText').textContent=`Threshold: ${s.n} (Risk ${s.risk})`; }
+    if (hueOn && cfg.hueIP) { document.getElementById('hueStatus').style.display='flex'; document.getElementById('hueStatusText').textContent=`Risk Score: ${s.n} (${s.risk}/100)`; }
   });
   if (homeTriggered.length) {
     const worst = homeTriggered.sort((a,b) => b.risk-a.risk)[0];
-    const key = `th_home_${worst.n}_${Math.floor(Date.now()/300000)}`;
+    const key = `th_home_${Math.floor(Date.now()/1800000)}`; // 30-min dedup window
     if (!seenIds.has(key)) {
       trackSeen(key); seenIds.add(key);
-      showToast('tornado', `🚨 HOME AREA THRESHOLD: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`);
-      const pushOn = document.querySelector('[data-sync-group="push"]')?.checked;
-      if (pushOn && cfg.push) {
-        const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
-        sendPush({
-          title:    '🚨 VORTEX: Threshold Alert — YOUR AREA',
-          body:     `🚨 NW Arkansas threshold exceeded\n${worst.n} — Risk ${worst.risk}/100\nCAPE ${worst.cape} J/kg · SRH ${worst.srh} · Wind ${worst.w} mph\n${time} CDT`,
-          priority: 'urgent', tags: 'rotating_light,sos'
-        }).catch(() => {});
-      }
+      const tier = worst.risk >= 90 ? 'EXTREME' : worst.risk >= 75 ? 'HIGH' : 'ELEVATED';
+      showToast('tornado', `🚨 RISK SCORE ${tier}: ${worst.n}`, `Risk ${worst.risk}/100 — conditions dangerous near your location`);
     }
   } else if (allTriggered.length) {
     const worst = allTriggered.sort((a,b) => b.risk-a.risk)[0];
-    const key   = `th_${worst.n}_${Math.floor(Date.now()/300000)}`;
-    if (!seenIds.has(key)) { trackSeen(key); seenIds.add(key); showToast('watch', `⚡ Threshold Alert: ${worst.n}`, `Risk ${worst.risk} · CAPE ${worst.cape} J/kg · SRH ${worst.srh}`); }
+    const key   = `th_${worst.n}_${Math.floor(Date.now()/1800000)}`;
+    if (!seenIds.has(key)) { trackSeen(key); seenIds.add(key); showToast('watch', `⚡ Risk Score Alert: ${worst.n}`, `Risk ${worst.risk}/100 — dangerous conditions nearby`); }
   }
 }
 
@@ -5482,18 +5515,34 @@ function toggleNotif(type, cb) {
 
 // ══════════════════════════════════════════════════════════
 // THRESHOLDS — auto-save with cache update
-// FIX(medium): inputs update thCache so checkTh reads from memory, not DOM
 // ══════════════════════════════════════════════════════════
 let thSaveTimer = null;
-document.querySelectorAll('[data-th]').forEach(el => {
-  el.addEventListener('change', () => {
-    const key = el.getAttribute('data-th');
+
+function syncProxBtns(miles) {
+  document.querySelectorAll('.prox-btn').forEach(btn => {
+    btn.classList.toggle('active', +btn.getAttribute('data-prox') === miles);
+  });
+}
+
+// Risk Score slider — live value display + sync desktop/mobile
+document.querySelectorAll('[data-th="risk"]').forEach(el => {
+  el.addEventListener('input', () => {
     const val = +el.value;
-    if (key && val > 0) {
-      thCache[key] = val;
-      // Sync all inputs with the same data-th key
-      document.querySelectorAll(`[data-th="${key}"]`).forEach(peer => { peer.value = val; });
-    }
+    thCache.risk = val;
+    document.querySelectorAll('[data-th="risk"]').forEach(peer => { peer.value = val; });
+    if (document.getElementById('riskThreshVal'))  document.getElementById('riskThreshVal').textContent  = val;
+    if (document.getElementById('riskThreshValM')) document.getElementById('riskThreshValM').textContent = val;
+    clearTimeout(thSaveTimer);
+    thSaveTimer = setTimeout(() => saveUserSettings({ thresholds: true }), 1500);
+  });
+});
+
+// Proximity buttons
+document.querySelectorAll('.prox-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const miles = +btn.getAttribute('data-prox');
+    thCache.proximity = miles;
+    syncProxBtns(miles);
     clearTimeout(thSaveTimer);
     thSaveTimer = setTimeout(() => saveUserSettings({ thresholds: true }), 1500);
   });

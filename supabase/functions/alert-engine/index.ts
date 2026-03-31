@@ -29,17 +29,17 @@ const NWS_EVENTS = [
   'Extreme Wind Warning',
 ];
 
-// Push cooldown — suppress repeated threshold pushes within 30 min
+// Push cooldown — suppress repeated threshold / pressure pushes within 30 min
 const THRESHOLD_COOLDOWN_MS = 30 * 60 * 1000;
 
-// Call cooldown — suppress repeated threshold calls within 3 hours
+// Call cooldown — suppress repeated proximity calls within 3 hours
 const CALL_COOLDOWN_MS = 3 * 60 * 60 * 1000;
 
 // Daily call cap per user
 const DAILY_CALL_CAP = 5;
 
-// Severe parameter thresholds that trigger a phone call (in addition to push)
-const SEVERE = { cape: 1500, srh: 250, risk: 70 };
+// Minimum pressure drop (mb in 30 min) to trigger a pressure push
+const PRESSURE_DROP_THRESHOLD = 2.0;
 
 // Risk score constants — must stay in sync with client-side values in index.html
 const SRH_CAPE_FACTOR = 0.13;
@@ -72,7 +72,7 @@ async function fetchWeather(lat: number, lon: number) {
   const res = await fetch(
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
-    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m` +
+    `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure` +
     `&hourly=cape,lifted_index,wind_speed_80m` +
     `&wind_speed_unit=mph&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`
   );
@@ -89,14 +89,15 @@ async function fetchWeather(lat: number, lon: number) {
   const dF   = Math.round(dewpoint((tF - 32) * 5 / 9, h) * 9 / 5 + 32);
   const sh   = Math.round(Math.max(w80 - w, 0) * SHEAR_SCALE + w * SHEAR_BASE);
   const srh  = Math.round(cape * SRH_CAPE_FACTOR + w * SRH_WIND_FACTOR);
-  const risk = calcRisk(cape, srh, sh, h, dF, lift);
-  return { tF, h, w, cape, srh, sh, lift, dF, risk };
+  const risk        = calcRisk(cape, srh, sh, h, dF, lift);
+  const pressure_mb = parseFloat((cur.surface_pressure ?? 0).toFixed(2));
+  return { tF, h, w, cape, srh, sh, lift, dF, risk, pressure_mb };
 }
 
 // ── Twilio voice call ──────────────────────────────────────────────────────────
 // Plays the NWS EAS audio (if TWILIO_ALERT_AUDIO_URL is set) then a TTS message.
 // When you have the NWS recording: npx supabase secrets set TWILIO_ALERT_AUDIO_URL=https://...
-async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood', locationName?: string): Promise<void> {
+async function makeCall(phone: string, type: 'warning' | 'flood' | 'proximity' | 'pressure', locationName?: string): Promise<void> {
   if (!TWILIO_SID || !TWILIO_TOKEN || !TWILIO_FROM) return;
 
   const audioTag = TWILIO_AUDIO_URL
@@ -108,7 +109,9 @@ async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood', 
     ? `This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active ${loc}. Open the Vortex app immediately.`
     : type === 'flood'
     ? `This is an emergency alert from Vortex Storm Intelligence. A flash flood warning is active ${loc}. Move to higher ground immediately.`
-    : `This is a Vortex weather alert. Severe storm conditions are developing ${loc}. Check the Vortex app for current conditions.`;
+    : type === 'proximity'
+    ? `This is an urgent alert from Vortex Storm Intelligence. A severe weather system is now within your proximity alert radius ${loc}. Take cover immediately and open the Vortex app.`
+    : `This is a Vortex weather alert. Rapid pressure drop detected ${loc}. A severe storm may be approaching. Open the Vortex app for current conditions.`;
 
   // Message repeated twice — second repetition helps iOS DND repeated-calls bypass
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -135,6 +138,51 @@ async function makeCall(phone: string, type: 'warning' | 'threshold' | 'flood', 
       }).toString(),
     }
   );
+}
+
+// ── Geo helpers for polygon proximity ─────────────────────────────────────────
+function haversineMiles(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 3958.8;
+  const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+  const Δφ = (lat2 - lat1) * Math.PI / 180;
+  const Δλ = (lon2 - lon1) * Math.PI / 180;
+  const a  = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Returns distance (miles) from point to nearest vertex of a polygon ring.
+// Returns 0 if the point is inside the polygon (ray-casting).
+function distToPolygonRingMiles(lat: number, lon: number, ring: number[][]): number {
+  // Ray-casting point-in-polygon
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]; // [lon, lat]
+    const [xj, yj] = ring[j];
+    if ((yi > lat) !== (yj > lat) && lon < (xj - xi) * (lat - yi) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  if (inside) return 0;
+  // Outside — return min haversine distance to any vertex
+  let minDist = Infinity;
+  for (const [vLon, vLat] of ring) {
+    minDist = Math.min(minDist, haversineMiles(lat, lon, vLat, vLon));
+  }
+  return minDist;
+}
+
+// Extract the outermost ring(s) from a GeoJSON geometry and return min distance
+function distToGeometryMiles(lat: number, lon: number, geometry: any): number {
+  if (!geometry) return Infinity;
+  let minDist = Infinity;
+  if (geometry.type === 'Polygon') {
+    minDist = distToPolygonRingMiles(lat, lon, geometry.coordinates[0]);
+  } else if (geometry.type === 'MultiPolygon') {
+    for (const poly of geometry.coordinates) {
+      minDist = Math.min(minDist, distToPolygonRingMiles(lat, lon, poly[0]));
+    }
+  }
+  return minDist;
 }
 
 serve(async (req) => {
@@ -185,11 +233,13 @@ serve(async (req) => {
     }
 
     const ids = users.map((u: any) => u.id);
-    const [{ data: thresholds }, { data: integrations }, { data: preferences }, { data: alertCities }] = await Promise.all([
+    const cutoff45m = new Date(Date.now() - 45 * 60 * 1000).toISOString();
+    const [{ data: thresholds }, { data: integrations }, { data: preferences }, { data: alertCities }, { data: recentPressure }] = await Promise.all([
       supa.from('thresholds').select('*').in('user_id', ids),
       supa.from('integrations').select('*').in('user_id', ids),
       supa.from('preferences').select('*').in('user_id', ids),
       supa.from('user_cities').select('id, user_id, name, lat, lng, alert_lat, alert_lng, alert_fips').eq('alert_enabled', true).in('user_id', ids),
+      supa.from('pressure_readings').select('user_id, recorded_at, pressure_mb').in('user_id', ids).gte('recorded_at', cutoff45m).order('recorded_at', { ascending: false }),
     ]);
 
     // ── 3. Load recent sent_alerts (last 48h for deduplication) ──────────────
@@ -256,6 +306,7 @@ serve(async (req) => {
     const newAlerts: { user_id: string; alert_key: string }[] = [];
     const historyAlerts: { user_id: string; event: string; area: string; alert_key: string; notified_push: boolean; notified_call: boolean; }[] = [];
     const profileUpdates: { id: string; last_threshold_call_at: string }[] = [];
+    const pressureInserts: { user_id: string; pressure_mb: number; recorded_at: string }[] = [];
 
     for (const user of users) {
       const th   = (thresholds   || []).find((t: any) => t.user_id === user.id);
@@ -351,37 +402,95 @@ serve(async (req) => {
         });
       }
 
-      // ── Threshold alerts ─────────────────────────────────────────────────────
-      // Trigger logic:
-      //   Moderate threshold hit → push only
-      //   Severe threshold hit (CAPE≥1500, SRH≥250, Risk≥70) → push + call (3hr cooldown)
-      if (th) {
+      // ── Risk Score threshold push (pre-warning signal, no call) ─────────────
+      // Triggers when Risk Score ≥ user's configured threshold and no NWS warning
+      // is already active for their location (avoid double-alerting).
+      const hasActiveWarning = userAlerts.some((f: any) =>
+        ['Tornado Warning', 'Flash Flood Warning'].includes(f.properties?.event)
+      );
+      if (th && !hasActiveWarning) {
         try {
           const wx = await getWeather(homeLat, homeLon);
-          const checks = [
-            { key: 'threshold:cape', value: wx.cape, limit: th.cape, label: 'CAPE',      unit: ' J/kg',  severe: wx.cape >= SEVERE.cape },
-            { key: 'threshold:srh',  value: wx.srh,  limit: th.srh,  label: 'SRH',       unit: ' m²/s²', severe: wx.srh  >= SEVERE.srh  },
-            { key: 'threshold:wind', value: wx.w,    limit: th.wind, label: 'Wind Speed', unit: ' mph',   severe: false },
-            { key: 'threshold:risk', value: wx.risk, limit: th.risk, label: 'Risk Score', unit: ' / 100', severe: wx.risk >= SEVERE.risk },
-          ];
-          for (const c of checks) {
-            if (c.value >= c.limit && !sentRecently(c.key)) {
-              const triggerCall = c.severe && !!phone && thresholdCallOk && (pref?.call_threshold_enabled !== false);
+          const riskLimit = th.risk_score ?? 65;
+          const riskKey   = `threshold:risk:${Math.floor(Date.now() / THRESHOLD_COOLDOWN_MS)}`;
+          if (wx.risk >= riskLimit && !sentRecently(riskKey)) {
+            const tier = wx.risk >= 90 ? 'EXTREME' : wx.risk >= 75 ? 'HIGH' : 'ELEVATED';
+            toSend.push({
+              key:      riskKey,
+              title:    `VORTEX: Risk Score ${tier} — ${wx.risk}/100`,
+              body:     `Storm Risk Score is ${wx.risk}/100 at your home location — conditions are dangerous. No active warning yet. Monitor closely.`,
+              priority: wx.risk >= 75 ? 'high' : 'default',
+              tags:     'warning,chart_increasing',
+              event:    'Risk Score Alert',
+              area:     'Your Location',
+              call:     false,
+            });
+          }
+
+          // ── Pressure tendency push ─────────────────────────────────────────
+          // Trigger when pressure drops ≥ 2mb in the last 30 min.
+          const userPressureReadings = (recentPressure || [])
+            .filter((r: any) => r.user_id === user.id)
+            .sort((a: any, b: any) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
+
+          // Store new reading for next run
+          pressureInserts.push({ user_id: user.id, pressure_mb: wx.pressure_mb, recorded_at: new Date().toISOString() });
+
+          // Compare current to reading ~25-35 min ago
+          const old30m = userPressureReadings.find((r: any) => {
+            const age = Date.now() - new Date(r.recorded_at).getTime();
+            return age >= 25 * 60 * 1000 && age <= 35 * 60 * 1000;
+          });
+          if (old30m && wx.pressure_mb > 0 && old30m.pressure_mb > 0) {
+            const drop = old30m.pressure_mb - wx.pressure_mb;
+            const pressKey = `pressure:drop:${Math.floor(Date.now() / THRESHOLD_COOLDOWN_MS)}`;
+            if (drop >= PRESSURE_DROP_THRESHOLD && !sentRecently(pressKey)) {
               toSend.push({
-                key:      c.key,
-                title:    `VORTEX: ${c.label} Alert`,
-                body:     `${c.label} is ${Math.round(c.value)}${c.unit} — your threshold is ${c.limit}${c.unit}`,
-                priority: c.severe ? 'max' : 'high',
-                tags:     'warning,chart_increasing',
-                event:    `${c.label} Alert`,
+                key:      pressKey,
+                title:    `VORTEX: Rapid Pressure Drop`,
+                body:     `Barometric pressure has dropped ${drop.toFixed(1)} mb in 30 minutes at your home location. A severe storm may be approaching.`,
+                priority: 'high',
+                tags:     'warning,cloud_with_rain',
+                event:    'Pressure Drop Alert',
                 area:     'Your Location',
-                call:     triggerCall,
-                callType: 'threshold',
+                call:     false,
               });
             }
           }
         } catch (e: any) {
           results.errors.push(`weather:${user.id}: ${e.message}`);
+        }
+      }
+
+      // ── Polygon proximity check — second call ────────────────────────────────
+      // For active tornado/flood warnings with polygon geometry, check if the
+      // storm's edge is within the user's configured proximity radius.
+      if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
+        const proximityMiles = th.proximity_miles ?? 5;
+        for (const alert of userAlerts) {
+          const event        = alert.properties?.event;
+          const isTornado    = event === 'Tornado Warning';
+          const isFlashFlood = event === 'Flash Flood Warning';
+          if (!isTornado && !isFlashFlood) continue;
+          if (!alert.geometry) continue;
+
+          const proxKey = `proximity:${alert.properties.id}`;
+          if (hasSent(proxKey)) continue;
+
+          const dist = distToGeometryMiles(homeLat, homeLon, alert.geometry);
+          if (dist <= proximityMiles) {
+            toSend.push({
+              key:          proxKey,
+              title:        `⚠️ ${event} — APPROACHING YOUR LOCATION`,
+              body:         `The ${event.toLowerCase()} polygon is now within ${proximityMiles} miles of your home. Take cover immediately.`,
+              priority:     'max',
+              tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
+              event,
+              area:         'Your Location',
+              call:         true,
+              callType:     'proximity',
+            });
+          }
         }
       }
 
@@ -393,11 +502,11 @@ serve(async (req) => {
         const citySame = city.alert_fips ? ['0' + city.alert_fips] : [];
 
         // NWS alerts matching this city's county
-        if (citySame.length) {
-          const cityNwsAlerts = allAlerts.filter((f: any) => {
-            const same: string[] = f.properties?.geocode?.SAME || [];
-            return same.some((code: string) => citySame.includes(code));
-          });
+        const cityNwsAlerts = citySame.length ? allAlerts.filter((f: any) => {
+          const same: string[] = f.properties?.geocode?.SAME || [];
+          return same.some((code: string) => citySame.includes(code));
+        }) : [];
+        if (cityNwsAlerts.length) {
           for (const alert of cityNwsAlerts) {
             const key          = `nws:${alert.properties.id}:city:${city.id}`;
             const event        = alert.properties.event;
@@ -434,35 +543,61 @@ serve(async (req) => {
           }
         }
 
-        // Threshold alerts for this city's coordinates
-        if (th) {
+        // Risk Score threshold push for this city (no call — push only for cities)
+        const cityHasActiveWarning = cityNwsAlerts?.some((f: any) =>
+          ['Tornado Warning', 'Flash Flood Warning'].includes(f.properties?.event)
+        );
+        if (th && !cityHasActiveWarning) {
           try {
-            const wx = await getWeather(cityLat, cityLon);
-            const checks = [
-              { key: `threshold:cape:city:${city.id}`, value: wx.cape, limit: th.cape, label: 'CAPE',       unit: ' J/kg',  severe: wx.cape >= SEVERE.cape },
-              { key: `threshold:srh:city:${city.id}`,  value: wx.srh,  limit: th.srh,  label: 'SRH',        unit: ' m²/s²', severe: wx.srh  >= SEVERE.srh  },
-              { key: `threshold:wind:city:${city.id}`, value: wx.w,    limit: th.wind, label: 'Wind Speed',  unit: ' mph',   severe: false },
-              { key: `threshold:risk:city:${city.id}`, value: wx.risk, limit: th.risk, label: 'Risk Score',  unit: ' / 100', severe: wx.risk >= SEVERE.risk },
-            ];
-            for (const c of checks) {
-              if (c.value >= c.limit && !sentRecently(c.key)) {
-                const triggerCall = c.severe && !!phone && thresholdCallOk && (pref?.call_threshold_enabled !== false);
-                toSend.push({
-                  key:      c.key,
-                  title:    `VORTEX: ${c.label} Alert — ${city.name}`,
-                  body:     `${c.label} is ${Math.round(c.value)}${c.unit} near ${city.name} — your threshold is ${c.limit}${c.unit}`,
-                  priority: c.severe ? 'max' : 'high',
-                  tags:     'warning,chart_increasing',
-                  event:    `${c.label} Alert`,
-                  area:     city.name,
-                  call:     triggerCall,
-                  callType: 'threshold',
-                  callLocation: city.name,
-                });
-              }
+            const wx        = await getWeather(cityLat, cityLon);
+            const riskLimit = th.risk_score ?? 65;
+            const riskKey   = `threshold:risk:city:${city.id}:${Math.floor(Date.now() / THRESHOLD_COOLDOWN_MS)}`;
+            if (wx.risk >= riskLimit && !sentRecently(riskKey)) {
+              const tier = wx.risk >= 90 ? 'EXTREME' : wx.risk >= 75 ? 'HIGH' : 'ELEVATED';
+              toSend.push({
+                key:      riskKey,
+                title:    `VORTEX: Risk Score ${tier} — ${city.name}`,
+                body:     `Storm Risk Score is ${wx.risk}/100 near ${city.name}. No active warning yet. Monitor closely.`,
+                priority: wx.risk >= 75 ? 'high' : 'default',
+                tags:     'warning,chart_increasing',
+                event:    'Risk Score Alert',
+                area:     city.name,
+                call:     false,
+              });
             }
           } catch (e: any) {
             results.errors.push(`weather:city:${city.id}: ${e.message}`);
+          }
+        }
+
+        // Polygon proximity check for this city
+        if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
+          const proximityMiles = th.proximity_miles ?? 5;
+          for (const alert of (cityNwsAlerts || [])) {
+            const event        = alert.properties?.event;
+            const isTornado    = event === 'Tornado Warning';
+            const isFlashFlood = event === 'Flash Flood Warning';
+            if (!isTornado && !isFlashFlood) continue;
+            if (!alert.geometry) continue;
+
+            const proxKey = `proximity:${alert.properties.id}:city:${city.id}`;
+            if (hasSent(proxKey)) continue;
+
+            const dist = distToGeometryMiles(cityLat, cityLon, alert.geometry);
+            if (dist <= proximityMiles) {
+              toSend.push({
+                key:          proxKey,
+                title:        `⚠️ ${event} — APPROACHING ${city.name.toUpperCase()}`,
+                body:         `The ${event.toLowerCase()} polygon is now within ${proximityMiles} miles of ${city.name}. Take cover immediately.`,
+                priority:     'max',
+                tags:         isTornado ? 'rotating_light,sos' : 'rain,warning',
+                event,
+                area:         city.name,
+                call:         true,
+                callType:     'proximity',
+                callLocation: city.name,
+              });
+            }
           }
         }
       }
@@ -492,7 +627,7 @@ serve(async (req) => {
           }
         }
 
-        // Twilio phone call (tornado warning or severe threshold)
+        // Twilio phone call (tornado/flood warning or proximity escalation)
         if (alert.call && phone) {
           const todayKey = `call:cap:${new Date().toISOString().slice(0, 10)}`;
           if (dailyCallCount >= DAILY_CALL_CAP) {
@@ -521,7 +656,7 @@ serve(async (req) => {
               dailyCallCount++;
               callSent = true;
               newAlerts.push({ user_id: user.id, alert_key: `call:${alert.key}` });
-              if (alert.callType === 'threshold') calledForThreshold = true;
+              if (alert.callType === 'proximity') calledForThreshold = true;
             } catch (e: any) {
               results.errors.push(`call:${user.id}: ${e.message}`);
             }
@@ -567,7 +702,15 @@ serve(async (req) => {
         .eq('id', u.id)
     ));
 
-    // ── 9. Clean up sent_alerts older than 48h ────────────────────────────────
+    // ── 9. Write pressure readings + clean up old ones ────────────────────────
+    if (pressureInserts.length) {
+      await supa.from('pressure_readings').insert(pressureInserts);
+    }
+    // Keep only last hour of pressure readings (only need 30-min window)
+    const cutoff1h = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    await supa.from('pressure_readings').delete().lt('recorded_at', cutoff1h);
+
+    // ── 10. Clean up sent_alerts older than 48h ───────────────────────────────
     await supa.from('sent_alerts').delete().lt('sent_at', cutoff48h);
 
   } catch (e: any) {
