@@ -4712,19 +4712,6 @@ function renderTornadoMarkers() {
       .attr('r', 7).attr('fill', col).attr('stroke', '#000').attr('stroke-width', 1.2)
       .attr('pointer-events', 'none');
 
-    // Label
-    const label = confirmed ? '🌪 TORNADO' : '⚠ POSSIBLE';
-    gWarn.append('text')
-      .attr('class', 'tornado-marker tornado-loc-label')
-      .attr('x', pt[0]).attr('y', pt[1])
-      .attr('data-base-x', pt[0]).attr('data-base-y', pt[1])
-      .attr('text-anchor', 'middle')
-      .attr('fill', col).attr('font-family', 'var(--font-cond)').attr('font-size', 10)
-      .attr('font-weight', '700').attr('letter-spacing', '1px')
-      .attr('stroke', '#000').attr('stroke-width', 2.5).attr('paint-order', 'stroke')
-      .attr('pointer-events', 'none')
-      .text(label);
-
     // Motion vector — dashed line to 45-min projected position
     const dist45 = speedMph * (45 / 60);
     const p45geo = geoProjectPoint(lat, lon, bearing, dist45);
@@ -4783,14 +4770,11 @@ function rescaleTornadoMarkers(k) {
     d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s)
       .attr('stroke-width', 0.8 * s);
   });
-  gWarn.selectAll('.tornado-loc-label, .tornado-proj-label').each(function() {
+  gWarn.selectAll('.tornado-proj-label').each(function() {
     const el = d3.select(this);
-    const bx = +el.attr('data-base-x'), by = +el.attr('data-base-y');
-    const isMain = el.classed('tornado-loc-label');
-    const offset = (isMain ? -10 : 8) * s;
-    el.attr('font-size', (isMain ? 10 : 8) * s)
-      .attr('stroke-width', (isMain ? 2.5 : 2) * s)
-      .attr('dy', offset);
+    el.attr('font-size', 8 * s)
+      .attr('stroke-width', 2 * s)
+      .attr('dy', 8 * s);
   });
   gWarn.selectAll('.tornado-motion-line').attr('stroke-width', 1.5 * s)
     .attr('stroke-dasharray', `${5*s},${3*s}`);
