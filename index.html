@@ -3324,6 +3324,7 @@ function scheduleRescale(k) {
     rescaleRafId = null;
     rescaleStations(pendingK);
     rescaleHazards();
+    rescaleTornadoMarkers(pendingK);
   });
 }
 
@@ -4613,10 +4614,187 @@ function renderNWS() {
 
   if (currentTransform) rescaleStations(currentTransform.k);
   checkPersonalAlerts();
+  renderTornadoMarkers();
 }
 
 // ══════════════════════════════════════════════════════════
-// PUSH — direct ntfy.sh post (personal tool, single user)
+// TORNADO LOCATION + MOTION VECTOR
+// ══════════════════════════════════════════════════════════
+
+// Parse storm location, bearing and speed from NWS alert parameters.
+// Primary: eventMotionDescription ("TIMESTAMP...DEGdeg...KTkt...lat,lon")
+// Fallback: tornadoMotion text + polygon centroid
+function parseTornadoMotion(feat) {
+  if (feat.properties?.event !== 'Tornado Warning') return null;
+  const params    = feat.properties?.parameters || {};
+  const detected  = ((params.tornadoDetection || [])[0] || '').toUpperCase();
+  const confirmed = detected.includes('OBSERVED') || detected.includes('CONFIRMED');
+
+  // Try eventMotionDescription first — most reliable source
+  const emd = (params.eventMotionDescription || [])[0] || '';
+  const degMatch = emd.match(/(\d+)\s*DEG/i);
+  const ktMatch  = emd.match(/(\d+(?:\.\d+)?)\s*KT/i);
+  const coords   = [...emd.matchAll(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/g)];
+  if (degMatch && ktMatch && coords.length) {
+    const last = coords[coords.length - 1];
+    return {
+      lat:      parseFloat(last[1]),
+      lon:      parseFloat(last[2]),
+      bearing:  parseInt(degMatch[1]),
+      speedMph: Math.round(parseFloat(ktMatch[1]) * 1.15078),
+      confirmed
+    };
+  }
+
+  // Fallback: tornadoMotion text + polygon centroid for location
+  const tm          = (params.tornadoMotion || [])[0] || '';
+  const speedMphM   = tm.match(/(\d+)\s*mph/i);
+  const speedKtM    = tm.match(/(\d+)\s*(?:kt|knots?)/i);
+  const dirM        = tm.match(/(NNE|NNW|NE|NW|SSE|SSW|SE|SW|ENE|ESE|WNW|WSW|N|E|S|W)\b/i);
+  const speedMph    = speedMphM ? +speedMphM[1] : speedKtM ? Math.round(+speedKtM[1] * 1.15078) : null;
+  const BEARINGS    = {N:0,NNE:22.5,NE:45,ENE:67.5,E:90,ESE:112.5,SE:135,SSE:157.5,S:180,SSW:202.5,SW:225,WSW:247.5,W:270,WNW:292.5,NW:315,NNW:337.5};
+  if (speedMph !== null && dirM && feat.geometry) {
+    const c = getTornadoPolygonCentroid(feat.geometry);
+    if (c) return { lat: c[1], lon: c[0], bearing: BEARINGS[dirM[1].toUpperCase()] ?? 0, speedMph, confirmed };
+  }
+  return null;
+}
+
+function getTornadoPolygonCentroid(geometry) {
+  let ring;
+  if (geometry?.type === 'Polygon')      ring = geometry.coordinates[0];
+  else if (geometry?.type === 'MultiPolygon') ring = geometry.coordinates[0][0];
+  else return null;
+  const lon = ring.reduce((s, c) => s + c[0], 0) / ring.length;
+  const lat = ring.reduce((s, c) => s + c[1], 0) / ring.length;
+  return [lon, lat];
+}
+
+// Project a lat/lon point along a bearing (degrees) for a given distance (miles)
+function geoProjectPoint(lat, lon, bearingDeg, distanceMiles) {
+  const R = 3958.8, d = distanceMiles / R;
+  const b = bearingDeg * Math.PI / 180;
+  const φ1 = lat * Math.PI / 180, λ1 = lon * Math.PI / 180;
+  const φ2 = Math.asin(Math.sin(φ1)*Math.cos(d) + Math.cos(φ1)*Math.sin(d)*Math.cos(b));
+  const λ2 = λ1 + Math.atan2(Math.sin(b)*Math.sin(d)*Math.cos(φ1), Math.cos(d) - Math.sin(φ1)*Math.sin(φ2));
+  return [λ2 * 180 / Math.PI, φ2 * 180 / Math.PI]; // [lon, lat]
+}
+
+function renderTornadoMarkers() {
+  if (!gWarn || !projection) return;
+  // Clear previous markers
+  gWarn.selectAll('.tornado-marker').remove();
+
+  nwsAlerts.forEach(feat => {
+    if (feat.properties?.event !== 'Tornado Warning') return;
+    const motion = parseTornadoMotion(feat);
+    if (!motion) return;
+
+    const { lat, lon, bearing, speedMph, confirmed } = motion;
+    const pt = projection([lon, lat]);
+    if (!pt) return;
+
+    const col = confirmed ? '#e63946' : '#f5a623';
+
+    // Glow
+    gWarn.append('circle')
+      .attr('class', 'tornado-marker tornado-loc-glow')
+      .attr('cx', pt[0]).attr('cy', pt[1])
+      .attr('data-base-r', 14)
+      .attr('r', 14).attr('fill', col).attr('opacity', 0.2)
+      .attr('pointer-events', 'none');
+
+    // Dot
+    gWarn.append('circle')
+      .attr('class', 'tornado-marker tornado-loc-dot')
+      .attr('cx', pt[0]).attr('cy', pt[1])
+      .attr('data-base-r', 7)
+      .attr('r', 7).attr('fill', col).attr('stroke', '#000').attr('stroke-width', 1.2)
+      .attr('pointer-events', 'none');
+
+    // Label
+    const label = confirmed ? '🌪 TORNADO' : '⚠ POSSIBLE';
+    gWarn.append('text')
+      .attr('class', 'tornado-marker tornado-loc-label')
+      .attr('x', pt[0]).attr('y', pt[1])
+      .attr('data-base-x', pt[0]).attr('data-base-y', pt[1])
+      .attr('text-anchor', 'middle')
+      .attr('fill', col).attr('font-family', 'var(--font-cond)').attr('font-size', 10)
+      .attr('font-weight', '700').attr('letter-spacing', '1px')
+      .attr('stroke', '#000').attr('stroke-width', 2.5).attr('paint-order', 'stroke')
+      .attr('pointer-events', 'none')
+      .text(label);
+
+    // Motion vector — dashed line to 45-min projected position
+    const dist45 = speedMph * (45 / 60);
+    const p45geo = geoProjectPoint(lat, lon, bearing, dist45);
+    const p45    = projection(p45geo);
+    if (!p45) return;
+
+    gWarn.append('line')
+      .attr('class', 'tornado-marker tornado-motion-line')
+      .attr('x1', pt[0]).attr('y1', pt[1])
+      .attr('x2', p45[0]).attr('y2', p45[1])
+      .attr('stroke', col).attr('stroke-width', 1.5)
+      .attr('stroke-dasharray', '5,3').attr('stroke-opacity', 0.8)
+      .attr('pointer-events', 'none');
+
+    // Projected position dots at 15, 30, 45 min
+    [15, 30, 45].forEach((mins, i) => {
+      const dist = speedMph * (mins / 60);
+      const pgeo = geoProjectPoint(lat, lon, bearing, dist);
+      const pp   = projection(pgeo);
+      if (!pp) return;
+      const r = i === 2 ? 5 : 4; // 45-min dot slightly larger
+      gWarn.append('circle')
+        .attr('class', 'tornado-marker tornado-proj-dot')
+        .attr('cx', pp[0]).attr('cy', pp[1])
+        .attr('data-base-r', r)
+        .attr('r', r).attr('fill', col).attr('fill-opacity', 1 - i * 0.2)
+        .attr('stroke', '#000').attr('stroke-width', 0.8)
+        .attr('pointer-events', 'none');
+      gWarn.append('text')
+        .attr('class', 'tornado-marker tornado-proj-label')
+        .attr('x', pp[0]).attr('y', pp[1])
+        .attr('data-base-x', pp[0]).attr('data-base-y', pp[1])
+        .attr('text-anchor', 'middle')
+        .attr('fill', col).attr('font-family', 'var(--font-mono)').attr('font-size', 8)
+        .attr('stroke', '#000').attr('stroke-width', 2).attr('paint-order', 'stroke')
+        .attr('pointer-events', 'none')
+        .text(`${mins}m`);
+    });
+  });
+
+  // Apply current zoom scale immediately
+  if (currentTransform) rescaleTornadoMarkers(currentTransform.k);
+}
+
+function rescaleTornadoMarkers(k) {
+  if (!gWarn) return;
+  const s = 1 / k;
+  gWarn.selectAll('.tornado-loc-glow').each(function() {
+    d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s);
+  });
+  gWarn.selectAll('.tornado-loc-dot').each(function() {
+    d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s)
+      .attr('stroke-width', 1.2 * s);
+  });
+  gWarn.selectAll('.tornado-proj-dot').each(function() {
+    d3.select(this).attr('r', +d3.select(this).attr('data-base-r') * s)
+      .attr('stroke-width', 0.8 * s);
+  });
+  gWarn.selectAll('.tornado-loc-label, .tornado-proj-label').each(function() {
+    const el = d3.select(this);
+    const bx = +el.attr('data-base-x'), by = +el.attr('data-base-y');
+    const isMain = el.classed('tornado-loc-label');
+    const offset = (isMain ? -10 : 8) * s;
+    el.attr('font-size', (isMain ? 10 : 8) * s)
+      .attr('stroke-width', (isMain ? 2.5 : 2) * s)
+      .attr('dy', offset);
+  });
+  gWarn.selectAll('.tornado-motion-line').attr('stroke-width', 1.5 * s)
+    .attr('stroke-dasharray', `${5*s},${3*s}`);
+}
 // The ntfy topic URL is stored in Supabase integrations table.
 // For higher security, restrict the ntfy topic to "publish-only"
 // in the ntfy.sh dashboard so only you can subscribe.
