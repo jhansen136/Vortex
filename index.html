@@ -4507,7 +4507,7 @@ function renderNWS() {
   nwsAlerts.forEach(feat => {
     const p   = feat.properties, ev = p.event||'', area = p.areaDesc||'';
     const exp = p.expires ? new Date(p.expires).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CDT' : '--';
-    const id  = p.id;
+    const id  = p.id || `${p.event||''}__${p.areaDesc||''}`.replace(/\s+/g,'_').slice(0,60);
     const headline = (p.headline||'').replace(/^.*?(issued|until)/i,'').trim().slice(0,80);
     let cls, col, ico, lbl;
     if (ev.includes('Tornado Warning'))           {cls='tornado';col='#e63946';ico='🌪';lbl='Tornado Warning';ct.t++;}
