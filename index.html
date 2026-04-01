@@ -4635,6 +4635,11 @@ function parseTornadoMotion(feat) {
   const degMatch = emd.match(/(\d+)\s*DEG/i);
   const ktMatch  = emd.match(/(\d+(?:\.\d+)?)\s*KT/i);
   const coords   = [...emd.matchAll(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/g)];
+  // Parse ISO timestamp from start of string e.g. "2025-03-30T22:00:00-05:00..."
+  const tsMatch  = emd.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})/);
+  const posTime  = tsMatch ? new Date(tsMatch[1]).toLocaleTimeString('en-US', {
+    hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
+  }) : null;
   if (degMatch && ktMatch && coords.length) {
     const last = coords[coords.length - 1];
     return {
@@ -4642,7 +4647,8 @@ function parseTornadoMotion(feat) {
       lon:      parseFloat(last[2]),
       bearing:  parseInt(degMatch[1]),
       speedMph: Math.round(parseFloat(ktMatch[1]) * 1.15078),
-      confirmed
+      confirmed,
+      posTime
     };
   }
 
@@ -4712,6 +4718,20 @@ function renderTornadoMarkers() {
       .attr('r', 7).attr('fill', col).attr('stroke', '#000').attr('stroke-width', 1.2)
       .attr('pointer-events', 'none');
 
+    // Timestamp label — shows when NWS last recorded this position
+    if (motion.posTime) {
+      gWarn.append('text')
+        .attr('class', 'tornado-marker tornado-ts-label')
+        .attr('x', pt[0]).attr('y', pt[1])
+        .attr('data-base-x', pt[0]).attr('data-base-y', pt[1])
+        .attr('text-anchor', 'middle')
+        .attr('fill', col).attr('fill-opacity', 0.85)
+        .attr('font-family', 'var(--font-mono)').attr('font-size', 8)
+        .attr('stroke', '#000').attr('stroke-width', 2).attr('paint-order', 'stroke')
+        .attr('pointer-events', 'none')
+        .text(`pos ${motion.posTime}`);
+    }
+
     // Motion vector — dashed line to 45-min projected position
     const dist45 = speedMph * (45 / 60);
     const p45geo = geoProjectPoint(lat, lon, bearing, dist45);
@@ -4775,6 +4795,14 @@ function rescaleTornadoMarkers(k) {
     el.attr('font-size', 8 * s)
       .attr('stroke-width', 2 * s)
       .attr('dy', 8 * s);
+  });
+  gWarn.selectAll('.tornado-ts-label').each(function() {
+    const el = d3.select(this);
+    const bx = +el.attr('data-base-x'), by = +el.attr('data-base-y');
+    el.attr('font-size', 7 * s)
+      .attr('stroke-width', 2 * s)
+      .attr('x', bx).attr('y', by)
+      .attr('dy', 18 * s);
   });
   gWarn.selectAll('.tornado-motion-line').attr('stroke-width', 1.5 * s)
     .attr('stroke-dasharray', `${5*s},${3*s}`);
