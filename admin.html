@@ -466,13 +466,20 @@ async function checkAuth(session) {
 }
 
 supa.auth.onAuthStateChange(async (event, session) => {
-  if (event === 'SIGNED_IN' && session?.user) {
+  if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
     await checkAuth(session);
   }
   if (event === 'SIGNED_OUT') {
     _authChecked = false;
   }
 });
+
+// Also handle case where signInWithPassword succeeds but SIGNED_IN doesn't re-fire
+// (happens when user was already signed in with same account)
+const _existingSession = await supa.auth.getSession();
+if (_existingSession?.data?.session?.user) {
+  await checkAuth(_existingSession.data.session);
+}
 
 // ── Data ──────────────────────────────────────────────────────────
 async function loadData() {
