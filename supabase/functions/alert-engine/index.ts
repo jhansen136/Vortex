@@ -283,7 +283,7 @@ serve(async (req) => {
     const eventParam = NWS_EVENTS.map(e => encodeURIComponent(e)).join(',');
     const nwsRes = await fetch(
       `https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=${eventParam}`,
-      { headers: { 'User-Agent': 'VORTEX Storm Intelligence (jhansen136@gmail.com)' } }
+      { headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' } }
     );
     const nwsJson   = await nwsRes.json();
     const allAlerts = nwsJson.features || [];
@@ -322,9 +322,12 @@ serve(async (req) => {
       .select('user_id, alert_key, sent_at')
       .gte('sent_at', cutoff48h);
 
-    // ── 4. Weather cache — persistent in Supabase, 15-min TTL ────────────────
-    // Within a single run, also deduplicated in-memory to avoid redundant DB reads.
-    const WEATHER_TTL_MS = 5 * 60 * 1000;
+    // ── 4. Weather cache — persistent in Supabase, 60-min TTL ────────────────
+    // Primary refresh is handled by the weather-prewarm job (runs at :05/hr).
+    // This engine should always hit cache. The TTL + fallback fetch here are a
+    // safety net for new users added after the last prewarm run, or if prewarm
+    // fails. Open-Meteo updates hourly so a 60-min TTL has no accuracy impact.
+    const WEATHER_TTL_MS = 60 * 60 * 1000;
     const wxCache = new Map<string, any>();
 
     async function getWeather(lat: number, lon: number) {
