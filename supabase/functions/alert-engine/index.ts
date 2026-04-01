@@ -535,9 +535,10 @@ serve(async (req) => {
         }
       }
 
-      // ── Proximity check — second call ────────────────────────────────────────
+      // ── Proximity alert call ──────────────────────────────────────────────────
       // Checks ALL active tornado/flood warnings within the user's proximity
-      // radius, not just those in their county. Also gates on storm approaching.
+      // radius, not just those in their county. May be the first and only call
+      // a user receives (e.g. cross-county tornado). Also gates on approaching.
       if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
         const proximityMiles  = th.proximity_miles ?? 5;
         const nearbyAlerts    = alertsNearPoint(homeLat, homeLon, proximityMiles, allAlerts);
@@ -712,7 +713,7 @@ serve(async (req) => {
           }
         }
 
-        // Twilio phone call (tornado/flood warning or proximity escalation)
+        // Twilio phone call (warning call or proximity alert call)
         if (alert.call && phone) {
           const todayKey = `call:cap:${new Date().toISOString().slice(0, 10)}`;
           if (dailyCallCount >= DAILY_CALL_CAP) {
