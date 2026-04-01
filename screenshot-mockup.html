@@ -249,44 +249,46 @@ header{height:48px;background:var(--panel);border-bottom:1px solid var(--border)
 
   <!-- MAP -->
   <div class="map-wrap">
-    <svg id="mapSvg" viewBox="110 280 790 545" xmlns="http://www.w3.org/2000/svg">
+    <svg id="mapSvg" viewBox="230 280 600 358" xmlns="http://www.w3.org/2000/svg">
 
       <!-- Background -->
-      <rect width="1100" height="860" fill="#05070a"/>
+      <rect width="1100" height="900" fill="#05070a"/>
 
-      <!-- ══ STATE FILLS — fill:#0c1018 stroke:#1c2535 stroke-width:0.6 ══ -->
+      <!-- ══ STATE FILLS (geographic border approximation) ══ -->
+      <!-- Oklahoma: west of OK/AR border, south of KS/OK line -->
+      <polygon points="0,373 519,373 519,429 525,457 530,486 534,542 532,600 530,750 0,750"
+        fill="#0c1018"/>
+      <!-- Kansas + states above KS/OK line -->
+      <polygon points="0,0 1100,0 1100,373 0,373"
+        fill="#0c1018"/>
+      <!-- Missouri: northeast box between KS border and MO/AR line -->
+      <polygon points="519,373 1100,373 1100,429 519,429"
+        fill="#0c1018"/>
+      <!-- Arkansas: east of OK/AR border, south of MO/AR line -->
+      <polygon points="519,429 1100,429 1100,750 530,750 532,600 534,542 530,486 525,457 519,429"
+        fill="#0c1018"/>
 
-      <!-- Kansas -->
-      <polygon points="0,245 820,245 820,22 0,22"
-        fill="#0c1018" stroke="#1c2535" stroke-width="0.6"/>
-      <!-- Kansas state border top layer -->
-      <polygon points="0,245 820,245 820,22 0,22"
-        fill="none" stroke="#243040" stroke-width="0.4"/>
-
-      <!-- Oklahoma (simplified — panhandle omitted for clarity) -->
-      <polygon points="0,245 540,245 540,360 608,360 608,745 0,745"
-        fill="#0c1018" stroke="#1c2535" stroke-width="0.6"/>
-      <polygon points="0,245 540,245 540,360 608,360 608,745 0,745"
-        fill="none" stroke="#243040" stroke-width="0.4"/>
-
-      <!-- Arkansas -->
-      <polygon points="540,245 540,360 608,360 608,430 930,430 930,820 540,820 540,245"
-        fill="#0c1018" stroke="#1c2535" stroke-width="0.6"/>
-      <polygon points="540,245 540,360 608,360 608,430 930,430 930,820 540,820 540,245"
-        fill="none" stroke="#243040" stroke-width="0.4"/>
-
-      <!-- Missouri (partial, top) -->
-      <polygon points="540,150 930,150 930,245 540,245"
-        fill="#0c1018" stroke="#1c2535" stroke-width="0.6"/>
-      <polygon points="540,150 930,150 930,245 540,245"
-        fill="none" stroke="#243040" stroke-width="0.4"/>
+      <!-- ══ STATE BORDER LINES ══ -->
+      <!-- KS/OK + KS/MO line (~37°N horizontal) -->
+      <line x1="0" y1="373" x2="1100" y2="373" stroke="#1c2535" stroke-width="0.8"/>
+      <line x1="0" y1="373" x2="1100" y2="373" stroke="#243040" stroke-width="0.5"/>
+      <!-- MO/OK short vertical (~94.6°W between 36.5–37°N) -->
+      <line x1="519" y1="373" x2="519" y2="429" stroke="#1c2535" stroke-width="0.8"/>
+      <line x1="519" y1="373" x2="519" y2="429" stroke="#243040" stroke-width="0.5"/>
+      <!-- MO/AR horizontal line (~36.5°N) -->
+      <line x1="519" y1="429" x2="1100" y2="429" stroke="#1c2535" stroke-width="0.8"/>
+      <line x1="519" y1="429" x2="1100" y2="429" stroke="#243040" stroke-width="0.5"/>
+      <!-- OK/AR border (geographic diagonal, NW→S) -->
+      <polyline points="519,429 525,457 530,486 534,542 532,600 530,750"
+        fill="none" stroke="#1c2535" stroke-width="0.8" stroke-linejoin="round"/>
+      <polyline points="519,429 525,457 530,486 534,542 532,600 530,750"
+        fill="none" stroke="#243040" stroke-width="0.5" stroke-linejoin="round"/>
 
       <!-- State labels (very faint) -->
-      <text x="350" y="152" fill="rgba(255,255,255,.05)" font-family="Barlow Condensed" font-size="20" font-weight="700" letter-spacing="6" text-anchor="middle">KANSAS</text>
-      <text x="250" y="480" fill="rgba(255,255,255,.05)" font-family="Barlow Condensed" font-size="20" font-weight="700" letter-spacing="6" text-anchor="middle">OKLAHOMA</text>
-      <text x="720" y="610" fill="rgba(255,255,255,.05)" font-family="Barlow Condensed" font-size="20" font-weight="700" letter-spacing="6" text-anchor="middle">ARKANSAS</text>
-      <text x="720" y="200" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="18" font-weight="700" letter-spacing="5" text-anchor="middle">MISSOURI</text>
-      <text x="200" y="790" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="18" font-weight="700" letter-spacing="5" text-anchor="middle">TEXAS</text>
+      <text x="370" y="520" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="22" font-weight="700" letter-spacing="6" text-anchor="middle">OKLAHOMA</text>
+      <text x="700" y="560" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="22" font-weight="700" letter-spacing="6" text-anchor="middle">ARKANSAS</text>
+      <text x="680" y="400" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="16" font-weight="700" letter-spacing="5" text-anchor="middle">MISSOURI</text>
+      <text x="380" y="342" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="16" font-weight="700" letter-spacing="5" text-anchor="middle">KANSAS</text>
 
       <!-- ══ TORNADO WARNING 1 — Benton County AR (heading NE) ══ -->
       <polygon points="524,474 515,452 531,423 566,429 558,472 524,474"
@@ -431,14 +433,71 @@ header{height:48px;background:var(--panel);border-bottom:1px solid var(--border)
       <text x="640" y="456" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">HARRISON</text>
 
       <!-- Bartlesville -->
-      <circle cx="460" cy="412" r="3" fill="#e63946" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <circle cx="409" cy="401" r="3" fill="#f5a623" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="409" y="393" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">BARTLESVILLE</text>
+
+      <!-- Claremore -->
+      <circle cx="439" cy="451" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="451" y="448" text-anchor="start" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">CLAREMORE</text>
 
       <!-- Muskogee -->
-      <circle cx="487" cy="498" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <circle cx="458" cy="514" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="458" y="526" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">MUSKOGEE</text>
+
+      <!-- Tahlequah -->
+      <circle cx="490" cy="495" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="490" y="507" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">TAHLEQUAH</text>
+
+      <!-- McAlester -->
+      <circle cx="426" cy="607" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      <text x="426" y="619" text-anchor="middle" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">MCALESTER</text>
 
       <!-- Joplin -->
       <circle cx="523" cy="364" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
       <text x="523" y="356" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">JOPLIN</text>
+
+      <!-- Pittsburg KS -->
+      <circle cx="512" cy="327" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="512" y="319" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">PITTSBURG</text>
+
+      <!-- Siloam Springs -->
+      <circle cx="531" cy="464" r="3" fill="#f5a623" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="531" y="476" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">SILOAM SPRINGS</text>
+
+      <!-- Bentonville label -->
+      <text x="562" y="437" text-anchor="start" fill="rgba(255,255,255,.38)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">BENTONVILLE</text>
+
+      <!-- Eureka Springs -->
+      <circle cx="590" cy="441" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="598" y="438" text-anchor="start" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">EUREKA SPRINGS</text>
+
+      <!-- Mountain Home -->
+      <circle cx="699" cy="448" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="707" y="445" text-anchor="start" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">MOUNTAIN HOME</text>
+
+      <!-- Russellville -->
+      <circle cx="639" cy="567" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="639" y="579" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">RUSSELLVILLE</text>
+
+      <!-- Conway -->
+      <circle cx="695" cy="589" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="695" y="601" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">CONWAY</text>
+
+      <!-- Little Rock -->
+      <circle cx="708" cy="627" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="708" y="621" text-anchor="middle" fill="rgba(255,255,255,.38)" font-family="Barlow Condensed" font-size="9" font-weight="700" letter-spacing="1">LITTLE ROCK</text>
+
+      <!-- Batesville -->
+      <circle cx="760" cy="512" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="760" y="524" text-anchor="middle" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">BATESVILLE</text>
+
+      <!-- Searcy -->
+      <circle cx="752" cy="571" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      <text x="752" y="583" text-anchor="middle" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">SEARCY</text>
+
+      <!-- Cabot -->
+      <circle cx="729" cy="602" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      <text x="729" y="614" text-anchor="middle" fill="rgba(255,255,255,.30)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">CABOT</text>
 
       <!-- Ambient station dots -->
       <circle cx="180" cy="415" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
