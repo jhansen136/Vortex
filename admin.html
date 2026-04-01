@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VORTEX Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Barlow:wght@400;500&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    :root {
+      --bg: #0a0b0d;
+      --panel: #0f1114;
+      --surface: #13161a;
+      --border: #1e2229;
+      --border-bright: #2e3540;
+      --text: #c8d0dc;
+      --text-dim: #5a6475;
+      --text-bright: #e8edf5;
+      --amber: #f5a623;
+      --red: #e63946;
+      --green: #39d353;
+      --cyan: #00d4ff;
+      --orange: #ff7b00;
+      --font-mono: 'Share Tech Mono', monospace;
+      --font-cond: 'Barlow Condensed', sans-serif;
+      --font-body: 'Barlow', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Auth overlay ── */
+    #authOverlay {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .auth-box {
+      background: var(--panel);
+      border: 1px solid var(--border-bright);
+      border-radius: 8px;
+      padding: 32px;
+      width: 320px;
+    }
+    .auth-box h1 {
+      font-family: var(--font-cond);
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--amber);
+      margin-bottom: 4px;
+    }
+    .auth-box p {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--text-dim);
+      margin-bottom: 20px;
+    }
+    .auth-box input {
+      width: 100%; padding: 9px 12px;
+      background: var(--bg); border: 1px solid var(--border-bright);
+      border-radius: 4px; color: var(--text-bright);
+      font-family: var(--font-mono); font-size: 12px;
+      outline: none; margin-bottom: 10px;
+    }
+    .auth-box input:focus { border-color: var(--amber); }
+    .auth-box button {
+      width: 100%; padding: 10px;
+      background: var(--amber); border: none; border-radius: 4px;
+      color: #000; font-family: var(--font-cond); font-weight: 700;
+      font-size: 14px; letter-spacing: 2px; cursor: pointer;
+    }
+    #authError {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--red); margin-top: 8px; min-height: 14px;
+    }
+
+    /* ── Layout ── */
+    header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 24px;
+      background: var(--panel);
+      border-bottom: 1px solid var(--border);
+    }
+    .header-title {
+      font-family: var(--font-cond);
+      font-size: 18px; font-weight: 700;
+      letter-spacing: 3px; color: var(--amber);
+    }
+    .header-title span { color: var(--text-dim); font-size: 12px; font-weight: 400; margin-left: 10px; }
+    .header-right {
+      display: flex; align-items: center; gap: 14px;
+    }
+    #headerUser {
+      font-family: var(--font-mono); font-size: 10px; color: var(--text-dim);
+    }
+    .btn-logout {
+      font-family: var(--font-cond); font-size: 11px; font-weight: 700;
+      letter-spacing: 1px; color: var(--text-dim); background: none;
+      border: 1px solid var(--border-bright); border-radius: 3px;
+      padding: 4px 10px; cursor: pointer;
+    }
+    .btn-logout:hover { color: var(--text-bright); border-color: var(--text-dim); }
+
+    main { padding: 24px; max-width: 1200px; }
+
+    /* ── Section label ── */
+    .section-label {
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--text-dim); margin-bottom: 10px; margin-top: 24px;
+    }
+    .section-label:first-child { margin-top: 0; }
+
+    /* ── Stat grid ── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .stat-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px 10px;
+      text-align: center;
+    }
+    .stat-card.highlight { border-color: var(--border-bright); }
+    .stat-val {
+      font-family: var(--font-mono);
+      font-size: 26px; font-weight: 700;
+      line-height: 1;
+    }
+    .stat-sub {
+      font-family: var(--font-mono);
+      font-size: 9px; color: var(--text-dim);
+      margin-top: 4px;
+    }
+    .stat-breakdown {
+      display: flex; justify-content: center; gap: 8px;
+      margin-top: 6px;
+    }
+    .stat-badge {
+      font-family: var(--font-mono); font-size: 9px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-radius: 3px; padding: 2px 5px;
+      white-space: nowrap;
+    }
+
+    /* ── Filters ── */
+    .filter-bar {
+      display: flex; gap: 6px; flex-wrap: wrap;
+      margin: 20px 0 14px;
+    }
+    .filter-btn {
+      font-family: var(--font-cond); font-size: 11px; font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      background: var(--panel); border: 1px solid var(--border-bright);
+      border-radius: 3px; color: var(--text-dim);
+      padding: 5px 12px; cursor: pointer; transition: all .15s;
+    }
+    .filter-btn:hover { color: var(--text-bright); }
+    .filter-btn.active { background: var(--border-bright); color: var(--text-bright); border-color: var(--text-dim); }
+    .filter-sep {
+      width: 1px; background: var(--border-bright);
+      margin: 0 4px; align-self: stretch;
+    }
+    .search-wrap {
+      margin-left: auto;
+      position: relative;
+    }
+    #searchInput {
+      background: var(--panel); border: 1px solid var(--border-bright);
+      border-radius: 3px; color: var(--text-bright);
+      font-family: var(--font-mono); font-size: 11px;
+      padding: 5px 10px; width: 200px; outline: none;
+    }
+    #searchInput:focus { border-color: var(--amber); }
+
+    /* ── User table ── */
+    .table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    table {
+      width: 100%; border-collapse: collapse;
+    }
+    thead tr {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border-bright);
+    }
+    th {
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--text-dim); font-weight: 400;
+      padding: 9px 14px; text-align: left;
+    }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: var(--text-bright); }
+    tbody tr {
+      border-bottom: 1px solid var(--border);
+      transition: background .1s;
+    }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface); }
+    td {
+      padding: 9px 14px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--text);
+      vertical-align: middle;
+    }
+    td.name-cell {
+      font-size: 12px; color: var(--text-bright); max-width: 180px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    td.email-cell { color: var(--text-dim); font-size: 10px; max-width: 200px;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    td.date-cell { color: var(--text-dim); font-size: 10px; white-space: nowrap; }
+    .actions-cell { display: flex; gap: 6px; align-items: center; }
+
+    /* Type dropdown */
+    .type-select {
+      background: var(--bg); border: 1px solid var(--border-bright);
+      border-radius: 3px; color: var(--text); font-family: var(--font-mono);
+      font-size: 10px; padding: 3px 6px; cursor: pointer; outline: none;
+    }
+    .type-select.test  { color: var(--red);   border-color: var(--red); }
+    .type-select.known { color: var(--cyan);  border-color: var(--cyan); }
+    .type-select.organic { color: var(--green); border-color: var(--green); }
+
+    /* Plan badge */
+    .plan-badge {
+      font-family: var(--font-mono); font-size: 9px;
+      letter-spacing: 1px; padding: 2px 6px;
+      border-radius: 3px; white-space: nowrap;
+    }
+    .plan-pro   { color: var(--amber);    background: rgba(245,166,35,.1);  border: 1px solid rgba(245,166,35,.3); }
+    .plan-trial { color: var(--cyan);     background: rgba(0,212,255,.1);   border: 1px solid rgba(0,212,255,.3); }
+    .plan-free  { color: var(--text-dim); background: transparent;          border: 1px solid var(--border); }
+
+    /* Action buttons */
+    .btn-action {
+      font-family: var(--font-cond); font-size: 10px; font-weight: 700;
+      letter-spacing: 1px; border: none; border-radius: 3px;
+      padding: 3px 8px; cursor: pointer; white-space: nowrap;
+    }
+    .btn-pro  { background: rgba(245,166,35,.15); color: var(--amber); border: 1px solid rgba(245,166,35,.3); }
+    .btn-free { background: rgba(90,100,117,.15); color: var(--text-dim); border: 1px solid var(--border); }
+    .btn-disable { background: rgba(230,57,70,.1);  color: var(--red);  border: 1px solid rgba(230,57,70,.3); }
+    .btn-enable  { background: rgba(57,211,83,.1);  color: var(--green);border: 1px solid rgba(57,211,83,.3); }
+    .btn-action:hover { opacity: .8; }
+    .btn-action:disabled { opacity: .4; cursor: default; }
+
+    /* Empty / loading */
+    .table-msg {
+      padding: 24px; text-align: center;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-dim);
+    }
+
+    /* MRR strip */
+    .mrr-strip {
+      display: flex; gap: 0;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      margin-bottom: 24px;
+    }
+    .mrr-item {
+      flex: 1; padding: 10px 14px; text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .mrr-item:last-child { border-right: none; }
+    .mrr-val {
+      font-family: var(--font-mono); font-size: 18px; font-weight: 700;
+    }
+    .mrr-label {
+      font-family: var(--font-cond); font-size: 9px;
+      letter-spacing: 1.5px; text-transform: uppercase;
+      color: var(--text-dim); margin-top: 3px;
+    }
+
+    #toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--panel); border: 1px solid var(--border-bright);
+      border-radius: 6px; padding: 10px 16px;
+      font-family: var(--font-mono); font-size: 11px; color: var(--text-bright);
+      opacity: 0; transition: opacity .2s; pointer-events: none;
+      z-index: 200;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- Auth overlay -->
+<div id="authOverlay">
+  <div class="auth-box">
+    <h1>VORTEX</h1>
+    <p>ADMIN DASHBOARD — SIGN IN REQUIRED</p>
+    <input type="email" id="loginEmail" placeholder="Email" autocomplete="username"
+      onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
+    <input type="password" id="loginPass" placeholder="Password" autocomplete="current-password"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <button type="button" id="loginBtn" onclick="doLogin()">SIGN IN</button>
+    <div id="authError"></div>
+  </div>
+</div>
+
+<!-- Main dashboard (hidden until authed) -->
+<div id="dashboard" style="display:none;">
+  <header>
+    <div>
+      <div class="header-title">VORTEX <span>ADMIN DASHBOARD</span></div>
+    </div>
+    <div class="header-right">
+      <div id="headerUser"></div>
+      <button class="btn-logout" onclick="doLogout()">SIGN OUT</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- MRR / revenue strip -->
+    <div class="section-label">Revenue</div>
+    <div class="mrr-strip">
+      <div class="mrr-item">
+        <div class="mrr-val" id="mrrTotal" style="color:var(--green);">—</div>
+        <div class="mrr-label">MRR</div>
+      </div>
+      <div class="mrr-item">
+        <div class="mrr-val" id="mrrMonthly" style="color:var(--text-bright);">—</div>
+        <div class="mrr-label">Monthly Subs</div>
+      </div>
+      <div class="mrr-item">
+        <div class="mrr-val" id="mrrAnnual" style="color:var(--text-bright);">—</div>
+        <div class="mrr-label">Annual Subs</div>
+      </div>
+      <div class="mrr-item">
+        <div class="mrr-val" id="mrrComped" style="color:var(--amber);">—</div>
+        <div class="mrr-label">Comped Pro</div>
+      </div>
+    </div>
+
+    <!-- Count tiles -->
+    <div class="section-label">All Users</div>
+    <div class="stat-grid" id="tilesAll"></div>
+
+    <div class="section-label" style="margin-top:16px;">Free Users</div>
+    <div class="stat-grid" id="tilesFree"></div>
+
+    <div class="section-label" style="margin-top:16px;">Pro Users</div>
+    <div class="stat-grid" id="tilesPro"></div>
+
+    <!-- Filter + search bar -->
+    <div class="filter-bar">
+      <button class="filter-btn active" data-plan="all"     onclick="setFilter('plan','all',this)">ALL PLANS</button>
+      <button class="filter-btn"        data-plan="free"    onclick="setFilter('plan','free',this)">FREE</button>
+      <button class="filter-btn"        data-plan="pro"     onclick="setFilter('plan','pro',this)">PRO</button>
+      <button class="filter-btn"        data-plan="trial"   onclick="setFilter('plan','trial',this)">TRIAL</button>
+      <div class="filter-sep"></div>
+      <button class="filter-btn active" data-type="all"     onclick="setFilter('type','all',this)">ALL TYPES</button>
+      <button class="filter-btn"        data-type="organic" onclick="setFilter('type','organic',this)">ORGANIC</button>
+      <button class="filter-btn"        data-type="known"   onclick="setFilter('type','known',this)">KNOWN</button>
+      <button class="filter-btn"        data-type="test"    onclick="setFilter('type','test',this)">TEST</button>
+      <div class="search-wrap">
+        <input id="searchInput" type="text" placeholder="Search name…" oninput="renderTable()">
+      </div>
+    </div>
+
+    <!-- User table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Plan</th>
+            <th>Home Set</th>
+            <th class="sortable" onclick="toggleSort('joined')">Joined ↕</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="userTableBody">
+          <tr><td colspan="6" class="table-msg">Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div id="tableFooter" style="font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:8px;text-align:right;"></div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SUPA_URL = 'https://dajqwkniduebplujkxht.supabase.co';
+const SUPA_KEY = 'sb_publishable_GJ3cf0S5z8RxdBVu0gksbA_jlvX-hrI';
+const supa = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+let allUsers = [];
+let filters = { plan: 'all', type: 'all' };
+let sortDir = -1; // -1 = newest first
+
+// ── Auth ──────────────────────────────────────────────────────────
+let _authChecked = false;
+
+async function doLogin() {
+  const email  = document.getElementById('loginEmail').value.trim();
+  const pass   = document.getElementById('loginPass').value;
+  const btn    = document.getElementById('loginBtn');
+  const errEl  = document.getElementById('authError');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Enter email and password.'; return; }
+  btn.textContent = 'SIGNING IN…'; btn.disabled = true;
+  const { error } = await supa.auth.signInWithPassword({ email, password: pass });
+  if (error) {
+    errEl.textContent = error.message;
+    btn.textContent = 'SIGN IN'; btn.disabled = false;
+  }
+  // onAuthStateChange fires automatically on success and calls checkAuth
+}
+
+async function doLogout() {
+  await supa.auth.signOut();
+  location.reload();
+}
+
+async function checkAuth(session) {
+  if (_authChecked) return;
+  _authChecked = true;
+  const errEl = document.getElementById('authError');
+  const btn   = document.getElementById('loginBtn');
+
+  const { data: profile, error } = await supa.from('profiles')
+    .select('role, display_name')
+    .eq('id', session.user.id)
+    .maybeSingle();
+
+  if (error) {
+    errEl.textContent = 'Profile lookup failed: ' + error.message;
+    _authChecked = false;
+    if (btn) { btn.textContent = 'SIGN IN'; btn.disabled = false; }
+    return;
+  }
+  if (profile?.role !== 'admin') {
+    errEl.textContent = `Access denied — role "${profile?.role || 'none'}" is not admin.`;
+    _authChecked = false;
+    if (btn) { btn.textContent = 'SIGN IN'; btn.disabled = false; }
+    await supa.auth.signOut();
+    return;
+  }
+  document.getElementById('authOverlay').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+  document.getElementById('headerUser').textContent = profile.display_name || session.user.email;
+  loadData();
+}
+
+supa.auth.onAuthStateChange(async (event, session) => {
+  if (event === 'SIGNED_IN' && session?.user) {
+    await checkAuth(session);
+  }
+  if (event === 'SIGNED_OUT') {
+    _authChecked = false;
+  }
+});
+
+// ── Data ──────────────────────────────────────────────────────────
+async function loadData() {
+  const { data, error } = await supa
+    .from('profiles')
+    .select('id, display_name, role, disabled, subscription_status, plan_interval, stripe_customer_id, user_type, home_lat, home_lng, created_at')
+    .order('created_at', { ascending: false });
+
+  if (error || !data) {
+    document.getElementById('userTableBody').innerHTML =
+      `<tr><td colspan="6" class="table-msg">Error loading users: ${error?.message}</td></tr>`;
+    return;
+  }
+  allUsers = data;
+  renderStats();
+  renderTable();
+}
+
+// ── Stats tiles ───────────────────────────────────────────────────
+function renderStats() {
+  const users = allUsers;
+
+  // Revenue
+  const proUsers   = users.filter(u => u.subscription_status === 'pro');
+  const paidPro    = proUsers.filter(u => !!u.stripe_customer_id);
+  const compedPro  = proUsers.filter(u => !u.stripe_customer_id).length;
+  const monthly    = paidPro.filter(u => (u.plan_interval ?? 'month') === 'month').length;
+  const annual     = paidPro.filter(u => u.plan_interval === 'year').length;
+  const mrr        = (monthly * 4.99) + (annual * 39.99 / 12);
+  document.getElementById('mrrTotal').textContent   = mrr === 0 ? '$0' : `$${mrr.toFixed(2)}`;
+  document.getElementById('mrrMonthly').textContent = monthly;
+  document.getElementById('mrrAnnual').textContent  = annual;
+  document.getElementById('mrrComped').textContent  = compedPro;
+
+  buildTileRow('tilesAll',  users);
+  buildTileRow('tilesFree', users.filter(u => !['pro','trial'].includes(u.subscription_status)));
+  buildTileRow('tilesPro',  users.filter(u => u.subscription_status === 'pro'));
+}
+
+function buildTileRow(containerId, subset) {
+  const total   = subset.length;
+  const organic = subset.filter(u => (u.user_type || 'organic') === 'organic').length;
+  const known   = subset.filter(u => u.user_type === 'known').length;
+  const test    = subset.filter(u => u.user_type === 'test').length;
+
+  const tiles = [
+    { label: 'Total',   val: total,   color: 'var(--text-bright)' },
+    { label: 'Organic', val: organic, color: 'var(--green)' },
+    { label: 'Known',   val: known,   color: 'var(--cyan)' },
+    { label: 'Test',    val: test,    color: 'var(--red)' },
+  ];
+
+  document.getElementById(containerId).innerHTML = tiles.map(t => `
+    <div class="stat-card">
+      <div class="stat-val" style="color:${t.color};">${t.val}</div>
+      <div class="stat-sub">${t.label}</div>
+    </div>
+  `).join('');
+}
+
+// ── Table ─────────────────────────────────────────────────────────
+function setFilter(key, val, btn) {
+  filters[key] = val;
+  // Update active state for this group
+  document.querySelectorAll(`[data-${key}]`).forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTable();
+}
+
+function toggleSort(col) {
+  sortDir *= -1;
+  renderTable();
+}
+
+function renderTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  let rows = allUsers.filter(u => {
+    if (filters.plan === 'free'  && ['pro','trial'].includes(u.subscription_status)) return false;
+    if (filters.plan === 'pro'   && u.subscription_status !== 'pro') return false;
+    if (filters.plan === 'trial' && u.subscription_status !== 'trial') return false;
+    const utype = u.user_type || 'organic';
+    if (filters.type !== 'all' && utype !== filters.type) return false;
+    if (search) {
+      const name = (u.display_name || '').toLowerCase();
+      if (!name.includes(search)) return false;
+    }
+    return true;
+  });
+
+  // Sort by joined date
+  rows.sort((a, b) => sortDir * (new Date(b.created_at) - new Date(a.created_at)));
+
+  document.getElementById('tableFooter').textContent =
+    `Showing ${rows.length} of ${allUsers.length} users`;
+
+  const tbody = document.getElementById('userTableBody');
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="6" class="table-msg">No users match the current filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(u => {
+    const utype      = u.user_type || 'organic';
+    const isPro      = u.subscription_status === 'pro';
+    const isTrial    = u.subscription_status === 'trial';
+    const isComped   = isPro && !u.stripe_customer_id;
+    const isDisabled = u.disabled === true;
+    const hasHome    = !!(u.home_lat && u.home_lng);
+
+    const planLabel = isPro ? (isComped ? 'PRO 🎁' : 'PRO') : isTrial ? 'TRIAL' : 'FREE';
+    const planClass = isPro ? 'plan-pro' : isTrial ? 'plan-trial' : 'plan-free';
+
+    const joinedDate = u.created_at
+      ? new Date(u.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+      : '—';
+
+    return `<tr>
+      <td class="name-cell" title="${u.display_name || u.id}">${u.display_name || '<span style="color:var(--text-dim)">(no name)</span>'}</td>
+      <td>
+        <select class="type-select ${utype}" onchange="setUserType('${u.id}', this)">
+          <option value="organic" ${utype==='organic'?'selected':''}>organic</option>
+          <option value="known"   ${utype==='known'  ?'selected':''}>known</option>
+          <option value="test"    ${utype==='test'   ?'selected':''}>test</option>
+        </select>
+      </td>
+      <td><span class="plan-badge ${planClass}">${planLabel}</span></td>
+      <td style="color:${hasHome ? 'var(--green)' : 'var(--text-dim)'};">${hasHome ? '✓' : '—'}</td>
+      <td class="date-cell">${joinedDate}</td>
+      <td>
+        <div class="actions-cell">
+          <button class="btn-action ${isPro ? 'btn-free' : 'btn-pro'}"
+            onclick="togglePlan('${u.id}', ${isPro}, this)">
+            ${isPro ? 'MAKE FREE' : 'MAKE PRO'}
+          </button>
+          <button class="btn-action ${isDisabled ? 'btn-enable' : 'btn-disable'}"
+            onclick="toggleDisabled('${u.id}', ${isDisabled}, this)">
+            ${isDisabled ? 'ENABLE' : 'DISABLE'}
+          </button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+// ── Actions ───────────────────────────────────────────────────────
+async function setUserType(id, select) {
+  const newType = select.value;
+  select.className = `type-select ${newType}`;
+  const { error } = await supa.from('profiles').update({ user_type: newType }).eq('id', id);
+  if (error) { toast('Error: ' + error.message); return; }
+  const u = allUsers.find(u => u.id === id);
+  if (u) u.user_type = newType;
+  renderStats();
+  toast(`Type set to ${newType}`);
+}
+
+async function togglePlan(id, currentlyPro, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const newStatus = currentlyPro ? 'free' : 'pro';
+  const { error } = await supa.from('profiles').update({ subscription_status: newStatus }).eq('id', id);
+  if (error) { btn.disabled = false; btn.textContent = currentlyPro ? 'MAKE PRO' : 'MAKE FREE'; toast('Error: ' + error.message); return; }
+  const u = allUsers.find(u => u.id === id);
+  if (u) u.subscription_status = newStatus;
+  renderStats();
+  renderTable();
+  toast(currentlyPro ? 'Reverted to Free' : 'Upgraded to Pro');
+}
+
+async function toggleDisabled(id, currentlyDisabled, btn) {
+  btn.disabled = true; btn.textContent = '…';
+  const { error } = await supa.from('profiles').update({ disabled: !currentlyDisabled }).eq('id', id);
+  if (error) { btn.disabled = false; btn.textContent = currentlyDisabled ? 'ENABLE' : 'DISABLE'; toast('Error: ' + error.message); return; }
+  const u = allUsers.find(u => u.id === id);
+  if (u) u.disabled = !currentlyDisabled;
+  renderTable();
+  toast(currentlyDisabled ? 'User enabled' : 'User disabled');
+}
+
+// ── Toast ─────────────────────────────────────────────────────────
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>VORTEX — Help & FAQ</title>
+<meta name="theme-color" content="#0a0b0d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;900&family=Barlow:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:     #0a0b0d;
+    --panel:  #0f1114;
+    --surface:#13161b;
+    --border: #1e2229;
+    --border-bright: #2e3540;
+    --text:   #c8d0dc;
+    --text-dim:#5a6475;
+    --text-bright:#e8edf5;
+    --amber:  #f5a623;
+    --red:    #e63946;
+    --green:  #39d353;
+    --cyan:   #00d4ff;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-cond: 'Barlow Condensed', sans-serif;
+    --font-body: 'Barlow', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  .header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: env(safe-area-inset-top) 20px 0;
+    height: calc(52px + env(safe-area-inset-top));
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 0;
+  }
+  .header-inner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    height: 52px;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .logo-text { font-family: var(--font-cond); font-weight: 900; font-size: 20px; letter-spacing: 4px; color: var(--amber); }
+  .header-divider { width: 1px; height: 22px; background: var(--border-bright); }
+  .header-title { font-family: var(--font-cond); font-weight: 700; font-size: 15px; letter-spacing: 2px; color: var(--text-dim); text-transform: uppercase; }
+  .back-link {
+    font-family: var(--font-cond);
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: var(--text-dim);
+    text-decoration: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: color .15s;
+  }
+  .back-link:hover { color: var(--amber); }
+
+  /* ── Layout ── */
+  .page { max-width: 720px; margin: 0 auto; padding: 32px 20px 80px; }
+
+  /* ── Section nav ── */
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin-bottom: 32px;
+  }
+  .toc-label {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 3px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+  }
+  .toc-links { display: flex; flex-wrap: wrap; gap: 8px; }
+  .toc-link {
+    font-family: var(--font-cond);
+    font-size: 13px;
+    letter-spacing: 1px;
+    color: var(--cyan);
+    text-decoration: none;
+    background: rgba(0,212,255,.07);
+    border: 1px solid rgba(0,212,255,.18);
+    border-radius: 3px;
+    padding: 4px 10px;
+    transition: background .15s;
+  }
+  .toc-link:hover { background: rgba(0,212,255,.15); }
+
+  /* ── Section ── */
+  .section { margin-bottom: 40px; }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 18px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-icon { font-size: 18px; }
+  .section-title {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 18px;
+    letter-spacing: 2px;
+    color: var(--text-bright);
+    text-transform: uppercase;
+  }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 18px 20px;
+    margin-bottom: 10px;
+  }
+  .card-title {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 1.5px;
+    color: var(--amber);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-body {
+    font-family: var(--font-body);
+    font-size: 13px;
+    color: var(--text);
+    line-height: 1.7;
+  }
+  .card-body p { margin-bottom: 8px; }
+  .card-body p:last-child { margin-bottom: 0; }
+
+  .card-highlight {
+    border-left: 2px solid var(--amber);
+    padding-left: 12px;
+    margin: 10px 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+
+  /* ── Tag pill ── */
+  .tag {
+    display: inline-block;
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border-radius: 3px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
+  .tag-call   { background: rgba(230,57,70,.2);  color: var(--red);   border: 1px solid rgba(230,57,70,.3); }
+  .tag-push   { background: rgba(0,212,255,.12); color: var(--cyan);  border: 1px solid rgba(0,212,255,.25); }
+  .tag-pro    { background: rgba(245,166,35,.12);color: var(--amber); border: 1px solid rgba(245,166,35,.25); }
+  .tag-soon   { background: rgba(90,100,117,.2); color: var(--text-dim); border: 1px solid var(--border-bright); }
+
+  /* ── Table ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+  .data-table th {
+    text-align: left;
+    font-family: var(--font-cond);
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border-bright);
+  }
+  .data-table td {
+    padding: 8px 10px;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table td:first-child { color: var(--text-bright); }
+  .td-pts { color: var(--amber) !important; font-weight: 700; }
+
+  /* ── Risk score ranges ── */
+  .risk-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .risk-bar {
+    height: 6px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+  .risk-label {
+    font-family: var(--font-cond);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 1px;
+    min-width: 72px;
+  }
+  .risk-desc { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+
+  /* ── Cap callout ── */
+  .callout {
+    background: rgba(245,166,35,.07);
+    border: 1px solid rgba(245,166,35,.25);
+    border-radius: 5px;
+    padding: 12px 16px;
+    margin-top: 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.6;
+  }
+  .callout strong { color: var(--amber); }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 24px 20px;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    border-top: 1px solid var(--border);
+  }
+  .footer a { color: var(--text-dim); text-decoration: none; }
+  .footer a:hover { color: var(--amber); }
+
+  @media (max-width: 480px) {
+    .page { padding: 20px 14px 60px; }
+    .data-table th, .data-table td { padding: 6px 8px; font-size: 10px; }
+    .header-title { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ── Header ── -->
+<div class="header">
+  <div class="header-inner">
+    <div class="header-left">
+      <span class="logo-text">VORTEX</span>
+      <div class="header-divider"></div>
+      <span class="header-title">Help & FAQ</span>
+    </div>
+    <a href="/" class="back-link">← Back to App</a>
+  </div>
+</div>
+
+<div class="page">
+
+  <!-- ── TOC ── -->
+  <div class="toc">
+    <div class="toc-label">Jump to</div>
+    <div class="toc-links">
+      <a class="toc-link" href="#phone-calls">Phone Calls</a>
+      <a class="toc-link" href="#push">Push Notifications</a>
+      <a class="toc-link" href="#risk-score">Risk Score</a>
+      <a class="toc-link" href="#data-sources">Data Sources</a>
+      <a class="toc-link" href="#cooldowns">Cooldowns & Limits</a>
+      <a class="toc-link" href="#locations">Alert Locations</a>
+    </div>
+  </div>
+
+  <!-- ── Phone Calls ── -->
+  <div class="section" id="phone-calls">
+    <div class="section-header">
+      <span class="section-icon">📞</span>
+      <span class="section-title">Phone Calls</span>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="color:var(--text-dim);font-family:var(--font-mono);font-size:11px;line-height:1.7;">
+        Phone calls are reserved for life-safety events — situations where a push notification might be missed. All calls play an alert tone followed by a voice message identifying the warning type and your location.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🌪 Tornado Warning Call <span class="tag tag-call">CALL</span><span class="tag tag-pro">PRO</span></div>
+      <div class="card-body">
+        <p>Triggered when the National Weather Service issues a Tornado Warning that includes your home location or a pinned city you've enabled alerts for.</p>
+        <p>You'll receive at most one call per active warning — if the same warning is extended or updated, you won't be called again for it.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">🌊 Flash Flood Warning Call <span class="tag tag-call">CALL</span><span class="tag tag-pro">PRO</span></div>
+      <div class="card-body">
+        <p>Triggered by a Flash Flood Warning issued for your location. Disabled by default — enable it in Settings under Call Alerts.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📍 Proximity Alert Call <span class="tag tag-call">CALL</span><span class="tag tag-pro">PRO</span></div>
+      <div class="card-body">
+        <p>Triggered when a tornado or flood warning's storm is within your configured proximity radius (default 5 miles) and moving toward you.</p>
+        <p>Unlike the warning call — which is based on your county — the proximity check scans all active tornado and flood warnings within range regardless of county lines. A tornado in the next county 3 miles away and heading your direction will trigger this call.</p>
+        <div class="card-highlight">
+          This may be the first and only call you receive. If the storm is in a neighboring county and your county hasn't been included in the warning, you won't get a warning call — but if the storm is within range and approaching, the proximity alert call will still fire.
+        </div>
+        <p>Two conditions must both pass before the call fires:</p>
+        <p>
+          <strong style="color:var(--text-bright);">1. Distance</strong> — the storm (using NWS GPS coordinates when available, warning polygon edge as fallback) is within your proximity radius.<br>
+          <strong style="color:var(--text-bright);">2. Direction</strong> — the storm's heading is within 90° of the bearing toward you. Storms moving away or parallel are suppressed.
+        </p>
+        <div class="card-highlight">
+          When GPS data is available: "The tornado is 3 miles from your home and approaching."
+        </div>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Daily call cap: 5 calls per day.</strong> If the cap is reached, VORTEX will send a push notification in place of any additional calls for the rest of that calendar day. The cap resets at midnight.
+    </div>
+  </div>
+
+  <!-- ── Push Notifications ── -->
+  <div class="section" id="push">
+    <div class="section-header">
+      <span class="section-icon">🔔</span>
+      <span class="section-title">Push Notifications</span>
+    </div>
+
+    <div class="card">
+      <div class="card-body" style="color:var(--text-dim);font-family:var(--font-mono);font-size:11px;line-height:1.7;">
+        Delivered via <strong style="color:var(--text);">ntfy.sh</strong>. Requires the ntfy app installed on your phone and your channel URL configured in Settings → Integrations. Each alert type can be toggled on or off individually.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">⚠️ NWS Warning Alerts <span class="tag tag-push">PUSH</span><span class="tag tag-pro">PRO</span></div>
+      <div class="card-body">
+        <p>Sent when the National Weather Service issues any of the following for your location:</p>
+        <p style="font-family:var(--font-mono);font-size:11px;color:var(--text-dim);line-height:2;">
+          🌪 Tornado Warning &nbsp;·&nbsp; 👁 Tornado Watch<br>
+          ⛈ Severe Thunderstorm Warning<br>
+          🌊 Flash Flood Warning &nbsp;·&nbsp; 💧 Flood Warning<br>
+          ❄️ Winter Storm / Blizzard / Ice Storm Warning<br>
+          💨 High Wind / Extreme Wind Warning
+        </p>
+        <p>Pushes are deduplicated — the same active alert won't push more than once.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📊 Risk Score Alert <span class="tag tag-push">PUSH</span><span class="tag tag-pro">PRO</span></div>
+      <div class="card-body">
+        <p>Sent when your atmospheric Risk Score exceeds your configured threshold, even when no NWS warning is active. This is your early signal that dangerous conditions are developing at your specific location — before an official warning is issued.</p>
+        <p>Push only — no call. 30-minute cooldown per trigger. Your threshold can be set between 65–100 in Settings.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📉 Pressure Drop Alert <span class="tag tag-push">PUSH</span><span class="tag tag-soon">COMING SOON</span></div>
+      <div class="card-body">
+        <p>Sent when barometric pressure drops rapidly at your location — a real-time signal that a severe storm is actively approaching. Triggers when pressure falls ≥ 2 mb in a 30-minute window. 30-minute cooldown.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Risk Score ── -->
+  <div class="section" id="risk-score">
+    <div class="section-header">
+      <span class="section-icon">⚡</span>
+      <span class="section-title">The Risk Score</span>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <p>The Risk Score (0–100) is VORTEX's composite index of how dangerous current atmospheric conditions are at your location. It's calculated from live forecast data and updated every minute by the background engine.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Score Factors</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Factor</th>
+            <th>Max pts</th>
+            <th>What it measures</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>CAPE</td><td class="td-pts">35</td><td>Atmospheric instability — energy available for storm development</td></tr>
+          <tr><td>Storm Helicity</td><td class="td-pts">30</td><td>Rotational potential in the lowest atmosphere</td></tr>
+          <tr><td>Wind Shear</td><td class="td-pts">15</td><td>Change in wind speed/direction with altitude</td></tr>
+          <tr><td>Lifted Index</td><td class="td-pts">10</td><td>How easily air parcels rise — negative values indicate instability</td></tr>
+          <tr><td>Dewpoint</td><td class="td-pts">6</td><td>Moisture available to fuel storms</td></tr>
+          <tr><td>Humidity</td><td class="td-pts">4</td><td>Surface moisture</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Score Ranges</div>
+      <div style="padding: 4px 0;">
+        <div class="risk-row">
+          <div class="risk-bar" style="width:48px;background:#2e3540;"></div>
+          <div class="risk-label" style="color:var(--text-dim);">0 – 49</div>
+          <div class="risk-desc">Normal — no significant threat</div>
+        </div>
+        <div class="risk-row">
+          <div class="risk-bar" style="width:48px;background:#4ade80;"></div>
+          <div class="risk-label" style="color:#4ade80;">50 – 64</div>
+          <div class="risk-desc">Elevated — monitor conditions</div>
+        </div>
+        <div class="risk-row">
+          <div class="risk-bar" style="width:48px;background:var(--amber);"></div>
+          <div class="risk-label" style="color:var(--amber);">65 – 74</div>
+          <div class="risk-desc">High — dangerous environment developing</div>
+        </div>
+        <div class="risk-row">
+          <div class="risk-bar" style="width:48px;background:var(--red);"></div>
+          <div class="risk-label" style="color:var(--red);">75 – 100</div>
+          <div class="risk-desc">Extreme — major severe weather possible</div>
+        </div>
+      </div>
+      <div class="callout" style="margin-top:14px;">
+        Push thresholds can be set between <strong>65–100</strong>. Scores below 65 are not eligible as triggers to prevent false-alarm fatigue.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Data Sources ── -->
+  <div class="section" id="data-sources">
+    <div class="section-header">
+      <span class="section-icon">🛰</span>
+      <span class="section-title">Data Sources & Refresh Rates</span>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Data</th>
+            <th>Source</th>
+            <th>In App</th>
+            <th>Background</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>NWS warnings & watches</td><td>api.weather.gov</td><td>1 min</td><td>1 min</td></tr>
+          <tr><td>Weather (CAPE, wind, etc.)</td><td>Open-Meteo</td><td>10 min</td><td>Hourly</td></tr>
+          <tr><td>Risk Score</td><td>Calculated</td><td>30 sec</td><td>Hourly</td></tr>
+          <tr><td>Radar</td><td>NEXRAD / Iowa State</td><td>2 min</td><td>—</td></tr>
+          <tr><td>Earthquakes</td><td>USGS</td><td>5 min</td><td>—</td></tr>
+          <tr><td>Wildfires</td><td>NASA / USFS</td><td>5 min</td><td>—</td></tr>
+        </tbody>
+      </table>
+      <div class="callout" style="margin-top:14px;">
+        <strong>Note on weather data:</strong> CAPE, wind, and humidity values are hourly forecast model data, not real-time sensor readings. Values update as the forecast model runs — typically once per hour. During fast-moving storms, NWS warning alerts are the more reliable real-time signal.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Cooldowns ── -->
+  <div class="section" id="cooldowns">
+    <div class="section-header">
+      <span class="section-icon">⏱</span>
+      <span class="section-title">Cooldowns & Limits</span>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Alert type</th>
+            <th>Cooldown</th>
+            <th>Daily cap</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Tornado / Flood warning call</td><td>Once per active warning</td><td>5 calls/day total</td></tr>
+          <tr><td>Proximity alert call</td><td>Once per active warning</td><td>Counts toward 5/day</td></tr>
+          <tr><td>Risk Score push</td><td>30 min</td><td>None</td></tr>
+          <tr><td>Pressure drop push</td><td>30 min</td><td>None</td></tr>
+          <tr><td>NWS warning pushes</td><td>Once per active event</td><td>None</td></tr>
+        </tbody>
+      </table>
+      <div class="callout" style="margin-top:14px;">
+        If the <strong>5-call daily cap</strong> is reached, VORTEX will send a push notification in place of any additional calls for the rest of that calendar day. The cap resets at midnight.
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Alert Locations ── -->
+  <div class="section" id="locations">
+    <div class="section-header">
+      <span class="section-icon">📍</span>
+      <span class="section-title">Alert Locations</span>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <p>All alerts apply to your <strong style="color:var(--text-bright);">home location</strong> by default. You can also enable alerts for any pinned city by toggling the Alert switch on that city in <strong style="color:var(--text-bright);">Settings → My Cities</strong>.</p>
+        <p>The background engine checks all alert-enabled locations on every run — home location and any alert-enabled cities are all monitored simultaneously.</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /page -->
+
+<div class="footer">
+  <a href="/">← Back to VORTEX</a> &nbsp;·&nbsp; <a href="mailto:support@vortexintel.app">support@vortexintel.app</a> &nbsp;·&nbsp; <a href="/terms.html">Terms</a>
+</div>
+
+</body>
+</html>

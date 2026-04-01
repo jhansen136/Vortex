@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=1440">
+<title>VORTEX Mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#0a0b0d;--panel:#0f1114;--border:#1e2229;--border-bright:#2e3540;
+  --text:#c8d0dc;--text-dim:#5a6475;--text-bright:#e8edf5;
+  --amber:#f5a623;--red:#e63946;--green:#39d353;--cyan:#00d4ff;--orange:#ff7b00;
+  --font-mono:'Share Tech Mono',monospace;
+  --font-cond:'Barlow Condensed',sans-serif;
+  --font-body:'Barlow',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);width:1440px;height:860px;overflow:hidden;display:flex;flex-direction:column;}
+
+/* ── HEADER ── */
+header{height:48px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 16px;flex-shrink:0;z-index:10;}
+.logo-wrap{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:28px;height:28px;border:2px solid var(--amber);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.logo-icon::before{content:'';width:10px;height:10px;border:2px solid var(--amber);border-radius:50%;opacity:.6;}
+.logo-text{font-family:var(--font-cond);font-weight:900;font-size:22px;letter-spacing:4px;color:var(--amber);line-height:1;}
+.logo-sub{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:2px;margin-top:-2px;}
+.header-status{display:flex;align-items:center;gap:20px;}
+.status-item{display:flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+.status-dot.warn{background:var(--amber);}
+.status-dot.alert{background:var(--red);}
+#clock{font-family:var(--font-mono);font-size:13px;color:var(--cyan);letter-spacing:1px;}
+.geo-btn{display:flex;align-items:center;gap:6px;background:none;border:1px solid var(--border);border-radius:20px;padding:4px 10px;font-family:var(--font-mono);font-size:10px;color:var(--green);border-color:var(--green);}
+.geo-btn-dot{width:6px;height:6px;border-radius:50%;background:var(--green);}
+.user-pill{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 8px;}
+.user-avatar{width:22px;height:22px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-family:var(--font-cond);font-size:11px;font-weight:700;color:#000;}
+.user-name{font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;}
+
+/* ── MAIN LAYOUT ── */
+.main{display:flex;flex:1;overflow:hidden;}
+
+/* ── LEFT SIDEBAR ── */
+.sidebar-left{width:240px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:hidden;flex-shrink:0;}
+.panel-section{border-bottom:1px solid var(--border);padding:12px;}
+.panel-label{font-family:var(--font-cond);font-weight:700;font-size:11px;letter-spacing:3px;color:var(--text-dim);text-transform:uppercase;margin-bottom:10px;}
+
+/* Layer buttons */
+.layer-btn{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;margin-bottom:4px;background:transparent;border:1px solid var(--border);border-radius:3px;width:100%;color:var(--text-dim);font-family:var(--font-cond);font-size:14px;font-weight:600;letter-spacing:1px;}
+.layer-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(245,166,35,.06);}
+.layer-btn:last-child{margin-bottom:0;}
+.layer-indicator{width:30px;height:17px;border-radius:9px;background:rgba(255,255,255,.07);border:1px solid var(--border-bright);position:relative;flex-shrink:0;}
+.layer-indicator::after{content:'';position:absolute;left:2px;top:2px;width:11px;height:11px;border-radius:50%;background:var(--text-dim);}
+.layer-btn.active .layer-indicator{background:rgba(245,166,35,.2);border-color:var(--amber);}
+.layer-btn.active .layer-indicator::after{left:calc(100% - 13px);background:var(--amber);}
+
+/* Metric grid */
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;}
+.metric-card{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:8px;}
+.metric-label{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1px;margin-bottom:4px;}
+.metric-value{font-family:var(--font-mono);font-size:18px;color:var(--text-bright);line-height:1;}
+.metric-unit{font-size:10px;color:var(--text-dim);}
+
+/* Local panel */
+.local-panel{background:rgba(245,166,35,.04);border:1px solid rgba(245,166,35,.25);border-radius:4px;padding:10px 12px;}
+.local-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;}
+.local-title{font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:2px;color:var(--amber);}
+.local-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:8px;}
+.local-card{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:6px 7px;}
+.local-card-label{font-family:var(--font-mono);font-size:8px;color:var(--text-dim);letter-spacing:.5px;margin-bottom:3px;}
+.local-card-val{font-family:var(--font-mono);font-size:14px;color:var(--text-bright);line-height:1;}
+.local-score-row{display:flex;align-items:center;gap:8px;}
+.local-score{font-family:var(--font-mono);font-size:22px;color:var(--text-bright);min-width:36px;}
+.local-score-bar-wrap{flex:1;}
+.gauge-bar{height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:4px;}
+.gauge-fill{height:100%;border-radius:3px;}
+.home-zoom-btn{font-family:var(--font-cond);font-size:11px;font-weight:600;letter-spacing:1px;color:var(--amber);background:transparent;border:1px solid rgba(245,166,35,.3);border-radius:3px;padding:3px 8px;}
+
+/* Risk gauge */
+.risk-gauge{margin:8px 0;}
+.risk-label-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;}
+.risk-score-big{font-family:var(--font-mono);font-size:28px;color:var(--text-bright);}
+.risk-level{font-family:var(--font-cond);font-weight:700;font-size:13px;letter-spacing:2px;padding:2px 8px;border-radius:2px;}
+.risk-level.ext{background:rgba(230,57,70,.15);color:var(--red);border:1px solid var(--red);}
+.indicator-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border);}
+.indicator-row:last-child{border-bottom:none;}
+.ind-name{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+.ind-bar{width:60px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;margin:0 8px;}
+.ind-fill{height:100%;border-radius:2px;}
+.ind-val{font-family:var(--font-mono);font-size:12px;color:var(--text-bright);}
+
+/* ── MAP ── */
+.map-wrap{flex:1;position:relative;background:#05070a;overflow:hidden;}
+#mapSvg{width:100%;height:100%;}
+
+/* ── RIGHT SIDEBAR ── */
+.sidebar-right{width:280px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:hidden;flex-shrink:0;}
+
+/* Alert items */
+.alert-item{background:var(--bg);border:1px solid var(--border);border-left:3px solid var(--border);border-radius:3px;padding:8px 10px;margin-bottom:6px;}
+.alert-item.tornado{border-left-color:var(--red);}
+.alert-item.watch{border-left-color:var(--amber);}
+.alert-item.local-flag.tornado{border-left-color:var(--red);background:rgba(230,57,70,.06);}
+.alert-type{font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;}
+.alert-item.tornado .alert-type{color:var(--red);}
+.alert-item.watch .alert-type{color:var(--amber);}
+.alert-location{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);margin-top:2px;}
+.alert-time{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:3px;}
+.alert-badge{background:var(--red);color:white;font-family:var(--font-mono);font-size:9px;padding:1px 5px;border-radius:10px;margin-left:6px;}
+.local-flag-badge{display:inline-block;font-family:var(--font-mono);font-size:8px;padding:1px 5px;border-radius:2px;background:rgba(245,166,35,.2);color:var(--amber);margin-left:6px;vertical-align:middle;letter-spacing:1px;}
+.section-divider{font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:8px;padding:4px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+
+/* Notif rows + toggles */
+.notif-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);}
+.notif-row:last-child{border-bottom:none;}
+.notif-label{font-family:var(--font-cond);font-size:14px;color:var(--text);}
+.notif-sub{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:1px;}
+.pro-badge{background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;}
+.beta-badge{background:rgba(0,212,255,.15);color:var(--cyan);font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;border:1px solid rgba(0,212,255,.3);}
+.toggle-on{width:36px;height:20px;background:var(--amber);border-radius:10px;position:relative;flex-shrink:0;}
+.toggle-on::after{content:'';position:absolute;top:3px;right:3px;width:14px;height:14px;background:var(--bg);border-radius:50%;}
+.toggle-off{width:36px;height:20px;background:var(--border);border-radius:10px;position:relative;flex-shrink:0;}
+.toggle-off::after{content:'';position:absolute;top:3px;left:3px;width:14px;height:14px;background:var(--bg);border-radius:50%;}
+.test-btn{font-family:var(--font-cond);font-size:11px;font-weight:600;letter-spacing:1px;background:transparent;border:1px solid var(--border-bright);border-radius:3px;padding:5px 10px;color:var(--text-dim);}
+
+/* Prox buttons */
+.prox-btn{flex:1;background:transparent;border:1px solid var(--border);border-radius:3px;padding:5px 0;font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-align:center;}
+.prox-btn.active{border-color:var(--amber);color:var(--amber);background:rgba(245,166,35,.08);}
+
+/* ── BOTTOM BAR ── */
+.bottom-bar{height:28px;background:var(--panel);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:24px;flex-shrink:0;}
+.bottom-stat{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:6px;}
+.bottom-stat span{color:var(--text);}
+
+/* ── ZOOM CONTROLS ── */
+.zoom-controls{position:absolute;top:12px;right:12px;display:flex;flex-direction:column;gap:4px;z-index:20;}
+.zoom-btn{width:30px;height:30px;background:rgba(15,17,20,.9);border:1px solid var(--border-bright);border-radius:3px;display:flex;align-items:center;justify-content:center;font-family:var(--font-mono);font-size:18px;color:var(--text);}
+.zoom-btn.home{font-size:14px;}
+
+/* ── RISK LEGEND ── */
+.map-legend{position:absolute;bottom:36px;left:12px;background:rgba(10,13,18,.85);border:1px solid var(--border);border-radius:4px;padding:8px 10px;z-index:20;min-width:100px;pointer-events:none;}
+.legend-title{font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;}
+.legend-row{display:flex;align-items:center;gap:7px;margin-bottom:4px;}
+.legend-dot{width:8px;height:8px;border-radius:50%;}
+.legend-label{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);}
+
+/* ── PULSE ANIMATION ── */
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:.5}}
+.pulse{animation:pulse 2s ease-in-out infinite;}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.spin{animation:spin 8s linear infinite;}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo-wrap">
+    <div class="logo-icon spin"></div>
+    <div>
+      <div class="logo-text">VORTEX</div>
+      <div class="logo-sub">STORM INTELLIGENCE PLATFORM</div>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-item"><div class="status-dot"></div>DATA LIVE</div>
+    <div class="status-item"><div class="status-dot alert"></div>6 ALERTS</div>
+    <div class="status-item">NWS: <span style="color:var(--green);margin-left:2px;">OK</span></div>
+    <div id="clock">04:18:00 UTC</div>
+    <div class="geo-btn"><div class="geo-dot" style="width:6px;height:6px;border-radius:50%;background:var(--green);"></div>MY LOCATION</div>
+    <div class="user-pill"><div class="user-avatar">J</div><div class="user-name">J. Carter</div></div>
+  </div>
+</header>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT SIDEBAR -->
+  <div class="sidebar-left">
+
+    <!-- Map Layers -->
+    <div class="panel-section">
+      <div class="panel-label">Map Layers</div>
+      <div class="layer-btn"><span>🌡 Temperature</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn"><span>💨 Wind Vectors</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn"><span>💧 Humidity</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn"><span>⚡ CAPE Index</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn"><span>🌫 Dewpoint</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn active"><span>🎯 Risk Score</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn active"><span>⚠️ NWS Warnings</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn"><span>🌧 Live Radar</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn"><span>🟣 Earthquakes</span><div class="layer-indicator"></div></div>
+      <div class="layer-btn" style="margin-bottom:0"><span>🔥 Wildfires</span><div class="layer-indicator"></div></div>
+    </div>
+
+    <!-- Selected Conditions -->
+    <div class="panel-section">
+      <div class="panel-label">Selected Conditions</div>
+      <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-bottom:8px;">FAYETTEVILLE, AR</div>
+      <div class="metric-grid">
+        <div class="metric-card"><div class="metric-label">TEMP</div><div class="metric-value">74<span class="metric-unit">°F</span></div></div>
+        <div class="metric-card"><div class="metric-label">HUMIDITY</div><div class="metric-value">71<span class="metric-unit">%</span></div></div>
+        <div class="metric-card"><div class="metric-label">WIND</div><div class="metric-value">22<span class="metric-unit">mph</span></div></div>
+        <div class="metric-card"><div class="metric-label">DEWPT</div><div class="metric-value">62<span class="metric-unit">°F</span></div></div>
+        <div class="metric-card"><div class="metric-label">CAPE</div><div class="metric-value">2840<span class="metric-unit">J</span></div></div>
+        <div class="metric-card"><div class="metric-label">SRH (est)</div><div class="metric-value">412<span class="metric-unit" style="font-size:8px;">m²/s²</span></div></div>
+      </div>
+    </div>
+
+    <!-- Home Station -->
+    <div class="panel-section">
+      <div class="local-panel">
+        <div class="local-header">
+          <div class="local-title">📍 NW ARKANSAS</div>
+          <div class="home-zoom-btn">ZOOM HOME</div>
+        </div>
+        <div class="local-grid">
+          <div class="local-card"><div class="local-card-label">AVG TEMP</div><div class="local-card-val">74°</div></div>
+          <div class="local-card"><div class="local-card-label">AVG WIND</div><div class="local-card-val">22 mph</div></div>
+          <div class="local-card"><div class="local-card-label">AVG CAPE</div><div class="local-card-val">2840 J</div></div>
+        </div>
+        <div class="local-score-row">
+          <div class="local-score" style="color:var(--red);">78</div>
+          <div class="local-score-bar-wrap">
+            <div style="font-family:var(--font-mono);font-size:8px;color:var(--text-dim);margin-bottom:3px;">AREA RISK SCORE</div>
+            <div class="gauge-bar"><div class="gauge-fill" style="width:78%;background:var(--red);"></div></div>
+            <div style="font-family:var(--font-cond);font-size:11px;font-weight:700;letter-spacing:2px;margin-top:3px;color:var(--red);">HIGH</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tornado Risk Score -->
+    <div class="panel-section" style="border-bottom:none;">
+      <div class="panel-label">Tornado Risk Score</div>
+      <div class="risk-gauge">
+        <div class="risk-label-row">
+          <div class="risk-score-big">78</div>
+          <div class="risk-level ext">EXTREME</div>
+        </div>
+        <div class="gauge-bar"><div class="gauge-fill" style="width:78%;background:var(--red);"></div></div>
+      </div>
+      <div class="indicator-row"><div class="ind-name">CAPE</div><div class="ind-bar"><div class="ind-fill" style="width:92%;background:var(--amber);"></div></div><div class="ind-val">2840</div></div>
+      <div class="indicator-row"><div class="ind-name">SRH</div><div class="ind-bar"><div class="ind-fill" style="width:82%;background:var(--amber);"></div></div><div class="ind-val">412</div></div>
+      <div class="indicator-row"><div class="ind-name">SHEAR</div><div class="ind-bar"><div class="ind-fill" style="width:55%;background:var(--cyan);"></div></div><div class="ind-val">45</div></div>
+      <div class="indicator-row"><div class="ind-name">LIFT IDX</div><div class="ind-bar"><div class="ind-fill" style="width:70%;background:var(--cyan);"></div></div><div class="ind-val">-4</div></div>
+    </div>
+
+  </div><!-- /sidebar-left -->
+
+  <!-- MAP -->
+  <div class="map-wrap">
+    <svg id="mapSvg" viewBox="230 280 600 358" xmlns="http://www.w3.org/2000/svg">
+
+      <!-- Background -->
+      <rect width="1100" height="900" fill="#05070a"/>
+
+      <!-- ══ STATE FILLS (geographic border approximation) ══ -->
+      <!-- Oklahoma: west of OK/AR border, south of KS/OK line -->
+      <polygon points="0,373 519,373 519,429 525,457 530,486 534,542 532,600 530,750 0,750"
+        fill="#0c1018"/>
+      <!-- Kansas + states above KS/OK line -->
+      <polygon points="0,0 1100,0 1100,373 0,373"
+        fill="#0c1018"/>
+      <!-- Missouri: northeast box between KS border and MO/AR line -->
+      <polygon points="519,373 1100,373 1100,429 519,429"
+        fill="#0c1018"/>
+      <!-- Arkansas: east of OK/AR border, south of MO/AR line -->
+      <polygon points="519,429 1100,429 1100,750 530,750 532,600 534,542 530,486 525,457 519,429"
+        fill="#0c1018"/>
+
+      <!-- ══ STATE BORDER LINES ══ -->
+      <!-- KS/OK + KS/MO line (~37°N horizontal) -->
+      <line x1="0" y1="373" x2="1100" y2="373" stroke="#1c2535" stroke-width="0.8"/>
+      <line x1="0" y1="373" x2="1100" y2="373" stroke="#243040" stroke-width="0.5"/>
+      <!-- MO/OK short vertical (~94.6°W between 36.5–37°N) -->
+      <line x1="519" y1="373" x2="519" y2="429" stroke="#1c2535" stroke-width="0.8"/>
+      <line x1="519" y1="373" x2="519" y2="429" stroke="#243040" stroke-width="0.5"/>
+      <!-- MO/AR horizontal line (~36.5°N) -->
+      <line x1="519" y1="429" x2="1100" y2="429" stroke="#1c2535" stroke-width="0.8"/>
+      <line x1="519" y1="429" x2="1100" y2="429" stroke="#243040" stroke-width="0.5"/>
+      <!-- OK/AR border (geographic diagonal, NW→S) -->
+      <polyline points="519,429 525,457 530,486 534,542 532,600 530,750"
+        fill="none" stroke="#1c2535" stroke-width="0.8" stroke-linejoin="round"/>
+      <polyline points="519,429 525,457 530,486 534,542 532,600 530,750"
+        fill="none" stroke="#243040" stroke-width="0.5" stroke-linejoin="round"/>
+
+      <!-- State labels (very faint) -->
+      <text x="370" y="520" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="22" font-weight="700" letter-spacing="6" text-anchor="middle">OKLAHOMA</text>
+      <text x="700" y="560" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="22" font-weight="700" letter-spacing="6" text-anchor="middle">ARKANSAS</text>
+      <text x="680" y="400" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="16" font-weight="700" letter-spacing="5" text-anchor="middle">MISSOURI</text>
+      <text x="380" y="342" fill="rgba(255,255,255,.04)" font-family="Barlow Condensed" font-size="16" font-weight="700" letter-spacing="5" text-anchor="middle">KANSAS</text>
+
+      <!-- ══ TORNADO WARNING 1 — Benton County AR (heading NE) ══ -->
+      <polygon points="524,474 515,452 531,423 566,429 558,472 524,474"
+        fill="#e63946" fill-opacity=".12"/>
+      <polygon points="524,474 515,452 531,423 566,429 558,472 524,474"
+        fill="none" stroke="rgba(0,0,0,.5)" stroke-width="5" stroke-linejoin="round"/>
+      <polygon points="524,474 515,452 531,423 566,429 558,472 524,474"
+        fill="none" stroke="#e63946" stroke-width="2" stroke-linejoin="round"/>
+      <polygon points="524,474 515,452 531,423 566,429 558,472 524,474"
+        fill="none" stroke="#e63946" stroke-width="1.2" stroke-dasharray="3,4" stroke-opacity=".45" stroke-linejoin="round"/>
+
+      <!-- ══ TORNADO WARNING 2 — Washington County AR (heading ENE toward HOME) ══ -->
+      <polygon points="545,509 539,477 563,463 593,472 588,507 545,509"
+        fill="#e63946" fill-opacity=".12"/>
+      <polygon points="545,509 539,477 563,463 593,472 588,507 545,509"
+        fill="none" stroke="rgba(0,0,0,.5)" stroke-width="5" stroke-linejoin="round"/>
+      <polygon points="545,509 539,477 563,463 593,472 588,507 545,509"
+        fill="none" stroke="#e63946" stroke-width="2" stroke-linejoin="round"/>
+      <polygon points="545,509 539,477 563,463 593,472 588,507 545,509"
+        fill="none" stroke="#e63946" stroke-width="1.2" stroke-dasharray="3,4" stroke-opacity=".45" stroke-linejoin="round"/>
+
+      <!-- ══ TORNADO WARNING 3 — NE Oklahoma Cherokee/Adair (heading NE) ══ -->
+      <polygon points="471,523 464,495 500,477 524,488 512,526 471,523"
+        fill="#e63946" fill-opacity=".10"/>
+      <polygon points="471,523 464,495 500,477 524,488 512,526 471,523"
+        fill="none" stroke="rgba(0,0,0,.5)" stroke-width="5" stroke-linejoin="round"/>
+      <polygon points="471,523 464,495 500,477 524,488 512,526 471,523"
+        fill="none" stroke="#e63946" stroke-width="2" stroke-linejoin="round"/>
+      <polygon points="471,523 464,495 500,477 524,488 512,526 471,523"
+        fill="none" stroke="#e63946" stroke-width="1.2" stroke-dasharray="3,4" stroke-opacity=".45" stroke-linejoin="round"/>
+
+      <!-- ══ FLASH FLOOD WARNING — Madison & Carroll County AR ══ -->
+      <polygon points="572,469 575,429 623,426 626,463 605,472 572,469"
+        fill="#00d4ff" fill-opacity=".07"/>
+      <polygon points="572,469 575,429 623,426 626,463 605,472 572,469"
+        fill="none" stroke="rgba(0,0,0,.5)" stroke-width="4" stroke-linejoin="round"/>
+      <polygon points="572,469 575,429 623,426 626,463 605,472 572,469"
+        fill="none" stroke="#00d4ff" stroke-width="1.8" stroke-dasharray="6,3" stroke-linejoin="round"/>
+
+      <!-- ══ SVR TSTORM WARNING 1 — Barry & McDonald County MO ══ -->
+      <polygon points="563,419 554,383 596,377 608,415 590,426 563,419"
+        fill="#ff7b00" fill-opacity=".08"/>
+      <polygon points="563,419 554,383 596,377 608,415 590,426 563,419"
+        fill="none" stroke="rgba(0,0,0,.5)" stroke-width="4" stroke-linejoin="round"/>
+      <polygon points="563,419 554,383 596,377 608,415 590,426 563,419"
+        fill="none" stroke="#ff7b00" stroke-width="1.6" stroke-dasharray="6,3" stroke-linejoin="round"/>
+
+      <!-- ══ SVR TSTORM WARNING 2 — Lawrence & Newton County MO ══ -->
+      <polygon points="525,385 518,348 560,342 572,369 557,388 525,385"
+        fill="#ff7b00" fill-opacity=".08"/>
+      <polygon points="525,385 518,348 560,342 572,369 557,388 525,385"
+        fill="none" stroke="rgba(0,0,0,.5)" stroke-width="4" stroke-linejoin="round"/>
+      <polygon points="525,385 518,348 560,342 572,369 557,388 525,385"
+        fill="none" stroke="#ff7b00" stroke-width="1.6" stroke-dasharray="6,3" stroke-linejoin="round"/>
+
+      <!-- ══ STATION GLOW RINGS (r=5, opacity .12) ══ -->
+      <!-- Tulsa — red (risk 82) -->
+      <circle cx="405" cy="465" r="5" fill="#e63946" opacity=".12"/>
+      <!-- OKC — green (risk 28) -->
+      <circle cx="281" cy="540" r="5" fill="#39d353" opacity=".12"/>
+      <!-- Fayetteville HOME — red (risk 78) -->
+      <circle cx="556" cy="478" r="8" fill="#e63946" opacity=".25"/>
+      <!-- Rogers — red (risk 71) -->
+      <circle cx="560" cy="450" r="5" fill="#e63946" opacity=".12"/>
+      <!-- Springdale — amber (risk 63) -->
+      <circle cx="554" cy="464" r="5" fill="#f5a623" opacity=".12"/>
+      <!-- Fort Smith — green -->
+      <circle cx="530" cy="552" r="5" fill="#39d353" opacity=".12"/>
+      <!-- Wichita — green -->
+      <circle cx="296" cy="298" r="5" fill="#39d353" opacity=".12"/>
+      <!-- Springfield — green -->
+      <circle cx="625" cy="350" r="5" fill="#39d353" opacity=".12"/>
+      <!-- Harrison — amber -->
+      <circle cx="640" cy="464" r="5" fill="#f5a623" opacity=".12"/>
+      <!-- Joplin — green -->
+      <circle cx="523" cy="364" r="5" fill="#39d353" opacity=".12"/>
+      <!-- Bartlesville — red -->
+      <circle cx="460" cy="412" r="5" fill="#e63946" opacity=".12"/>
+      <!-- Muskogee — green -->
+      <circle cx="487" cy="498" r="5" fill="#39d353" opacity=".12"/>
+      <!-- Ambient dots -->
+      <circle cx="180" cy="415" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="220" cy="352" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="350" cy="292" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="430" cy="334" r="5" fill="#3b82f6" opacity=".10"/>
+      <circle cx="480" cy="292" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="580" cy="312" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="652" cy="394" r="5" fill="#f5a623" opacity=".10"/>
+      <circle cx="700" cy="442" r="5" fill="#f5a623" opacity=".10"/>
+      <circle cx="752" cy="374" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="800" cy="494" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="160" cy="544" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="340" cy="572" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="440" cy="614" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="592" cy="574" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="680" cy="554" r="5" fill="#3b82f6" opacity=".10"/>
+      <circle cx="820" cy="434" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="860" cy="514" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="120" cy="272" r="5" fill="#39d353" opacity=".08"/>
+      <circle cx="260" cy="212" r="5" fill="#39d353" opacity=".08"/>
+
+      <!-- ══ STATION DOTS (r=3, stroke rgba(255,255,255,.4) sw=1) ══ -->
+      <!-- Tulsa -->
+      <circle cx="405" cy="465" r="3" fill="#e63946" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="405" y="457" text-anchor="middle" fill="rgba(255,255,255,.45)" font-family="Barlow Condensed" font-size="8" letter-spacing="1">TULSA</text>
+
+      <!-- OKC -->
+      <circle cx="281" cy="540" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="281" y="532" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">OKC</text>
+
+      <!-- Rogers -->
+      <circle cx="560" cy="450" r="3" fill="#e63946" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="574" y="447" text-anchor="start" fill="rgba(255,255,255,.4)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">ROGERS</text>
+
+      <!-- Bentonville -->
+      <circle cx="550" cy="443" r="3" fill="#e63946" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+
+      <!-- Springdale -->
+      <circle cx="554" cy="464" r="3" fill="#f5a623" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+
+      <!-- Fayetteville HOME dot (r=5, amber, special styling) -->
+      <circle cx="556" cy="478" r="5" fill="rgba(245,166,35,.55)" stroke="#f5a623" stroke-width="1.8"/>
+      <!-- Home ring -->
+      <circle cx="556" cy="478" r="14" fill="none" stroke="rgba(245,166,35,.3)" stroke-width="1.5" stroke-dasharray="3,3"/>
+      <!-- Home label -->
+      <text x="556" y="500" text-anchor="middle" fill="rgba(245,166,35,.7)" font-family="Barlow Condensed" font-size="8" letter-spacing="1">HOME</text>
+
+      <!-- Fort Smith -->
+      <circle cx="530" cy="552" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="530" y="567" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">FORT SMITH</text>
+
+      <!-- Wichita -->
+      <circle cx="296" cy="298" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="296" y="290" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">WICHITA</text>
+
+      <!-- Springfield -->
+      <circle cx="625" cy="350" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="625" y="342" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">SPRINGFIELD</text>
+
+      <!-- Harrison -->
+      <circle cx="640" cy="464" r="3" fill="#f5a623" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="640" y="456" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">HARRISON</text>
+
+      <!-- Bartlesville -->
+      <circle cx="409" cy="401" r="3" fill="#f5a623" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="409" y="393" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">BARTLESVILLE</text>
+
+      <!-- Claremore -->
+      <circle cx="439" cy="451" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="451" y="448" text-anchor="start" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">CLAREMORE</text>
+
+      <!-- Muskogee -->
+      <circle cx="458" cy="514" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="458" y="526" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">MUSKOGEE</text>
+
+      <!-- Tahlequah -->
+      <circle cx="490" cy="495" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="490" y="507" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">TAHLEQUAH</text>
+
+      <!-- McAlester -->
+      <circle cx="426" cy="607" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      <text x="426" y="619" text-anchor="middle" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">MCALESTER</text>
+
+      <!-- Joplin -->
+      <circle cx="523" cy="364" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="523" y="356" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">JOPLIN</text>
+
+      <!-- Pittsburg KS -->
+      <circle cx="512" cy="327" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="512" y="319" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">PITTSBURG</text>
+
+      <!-- Siloam Springs -->
+      <circle cx="531" cy="464" r="3" fill="#f5a623" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="531" y="476" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">SILOAM SPRINGS</text>
+
+      <!-- Bentonville label -->
+      <text x="562" y="437" text-anchor="start" fill="rgba(255,255,255,.38)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">BENTONVILLE</text>
+
+      <!-- Eureka Springs -->
+      <circle cx="590" cy="441" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="598" y="438" text-anchor="start" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">EUREKA SPRINGS</text>
+
+      <!-- Mountain Home -->
+      <circle cx="699" cy="448" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="707" y="445" text-anchor="start" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">MOUNTAIN HOME</text>
+
+      <!-- Russellville -->
+      <circle cx="639" cy="567" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="639" y="579" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">RUSSELLVILLE</text>
+
+      <!-- Conway -->
+      <circle cx="695" cy="589" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="695" y="601" text-anchor="middle" fill="rgba(255,255,255,.35)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">CONWAY</text>
+
+      <!-- Little Rock -->
+      <circle cx="708" cy="627" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="708" y="621" text-anchor="middle" fill="rgba(255,255,255,.38)" font-family="Barlow Condensed" font-size="9" font-weight="700" letter-spacing="1">LITTLE ROCK</text>
+
+      <!-- Batesville -->
+      <circle cx="760" cy="512" r="3" fill="#39d353" stroke="rgba(255,255,255,.4)" stroke-width="1"/>
+      <text x="760" y="524" text-anchor="middle" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">BATESVILLE</text>
+
+      <!-- Searcy -->
+      <circle cx="752" cy="571" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      <text x="752" y="583" text-anchor="middle" fill="rgba(255,255,255,.32)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">SEARCY</text>
+
+      <!-- Cabot -->
+      <circle cx="729" cy="602" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8"/>
+      <text x="729" y="614" text-anchor="middle" fill="rgba(255,255,255,.30)" font-family="Barlow Condensed" font-size="8" letter-spacing=".5">CABOT</text>
+
+      <!-- Ambient station dots -->
+      <circle cx="180" cy="415" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="220" cy="352" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="350" cy="292" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="430" cy="334" r="3" fill="#3b82f6" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="480" cy="292" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="580" cy="312" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="652" cy="394" r="3" fill="#f5a623" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".8"/>
+      <circle cx="700" cy="442" r="3" fill="#f5a623" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".8"/>
+      <circle cx="752" cy="374" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="800" cy="494" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="160" cy="544" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="340" cy="572" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="440" cy="614" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="592" cy="574" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="680" cy="554" r="3" fill="#3b82f6" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="820" cy="434" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="860" cy="514" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="120" cy="272" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+      <circle cx="260" cy="212" r="3" fill="#39d353" stroke="rgba(255,255,255,.35)" stroke-width=".8" opacity=".7"/>
+
+      <!-- ══ TORNADO MARKER 1 — Benton County, heading NE ══ -->
+      <circle cx="539" cy="454" r="18" fill="#e63946" opacity=".12" class="pulse"/>
+      <circle cx="539" cy="454" r="12" fill="#e63946" opacity=".18"/>
+      <circle cx="539" cy="454" r="6" fill="#e63946" stroke="#000" stroke-width="1.5"/>
+      <line x1="539" y1="454" x2="581" y2="417" stroke="#e63946" stroke-width="1.6" stroke-dasharray="5,3" stroke-opacity=".85"/>
+      <circle cx="553" cy="442" r="4" fill="#e63946" fill-opacity=".8" stroke="#000" stroke-width=".8"/>
+      <circle cx="567" cy="429" r="4" fill="#e63946" fill-opacity=".6" stroke="#000" stroke-width=".8"/>
+      <circle cx="581" cy="417" r="5" fill="#e63946" fill-opacity=".45" stroke="#000" stroke-width=".8"/>
+      <text x="553" y="437" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">15m</text>
+      <text x="567" y="424" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">30m</text>
+      <text x="581" y="412" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">45m</text>
+
+      <!-- ══ TORNADO MARKER 2 — Washington County, heading ENE toward HOME ══ -->
+      <circle cx="560" cy="488" r="16" fill="#e63946" opacity=".12" class="pulse"/>
+      <circle cx="560" cy="488" r="10" fill="#e63946" opacity=".18"/>
+      <circle cx="560" cy="488" r="6" fill="#e63946" stroke="#000" stroke-width="1.5"/>
+      <line x1="560" y1="488" x2="598" y2="464" stroke="#e63946" stroke-width="1.6" stroke-dasharray="5,3" stroke-opacity=".85"/>
+      <circle cx="573" cy="480" r="4" fill="#e63946" fill-opacity=".8" stroke="#000" stroke-width=".8"/>
+      <circle cx="585" cy="472" r="4" fill="#e63946" fill-opacity=".6" stroke="#000" stroke-width=".8"/>
+      <circle cx="598" cy="464" r="5" fill="#e63946" fill-opacity=".45" stroke="#000" stroke-width=".8"/>
+      <text x="573" y="475" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">15m</text>
+      <text x="585" y="467" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">30m</text>
+
+      <!-- ══ TORNADO MARKER 3 — NE Oklahoma, heading NE ══ -->
+      <circle cx="494" cy="502" r="16" fill="#e63946" opacity=".12" class="pulse"/>
+      <circle cx="494" cy="502" r="10" fill="#e63946" opacity=".18"/>
+      <circle cx="494" cy="502" r="6" fill="#e63946" stroke="#000" stroke-width="1.5"/>
+      <line x1="494" y1="502" x2="534" y2="479" stroke="#e63946" stroke-width="1.6" stroke-dasharray="5,3" stroke-opacity=".85"/>
+      <circle cx="507" cy="495" r="4" fill="#e63946" fill-opacity=".8" stroke="#000" stroke-width=".8"/>
+      <circle cx="521" cy="488" r="4" fill="#e63946" fill-opacity=".6" stroke="#000" stroke-width=".8"/>
+      <circle cx="534" cy="479" r="5" fill="#e63946" fill-opacity=".45" stroke="#000" stroke-width=".8"/>
+      <text x="507" y="490" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">15m</text>
+      <text x="521" y="483" text-anchor="middle" fill="#e63946" font-family="Share Tech Mono" font-size="7" stroke="#000" stroke-width="2" paint-order="stroke">30m</text>
+
+    </svg>
+
+    <!-- CITY HOVER TOOLTIP — Fayetteville, AR — left side, away from sidebar -->
+    <div style="display:block;position:absolute;top:310px;left:28px;background:rgba(15,17,20,.97);border:1px solid var(--border-bright);border-radius:4px;padding:11px 13px;font-family:var(--font-mono);font-size:11px;pointer-events:none;z-index:55;min-width:190px;box-shadow:0 6px 24px rgba(0,0,0,.8);">
+      <div style="font-family:var(--font-cond);font-weight:700;font-size:16px;color:var(--amber);margin-bottom:7px;letter-spacing:.5px;">FAYETTEVILLE, AR</div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">TEMP</span><span style="color:var(--text-bright);">74°F</span></div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">HUMIDITY</span><span style="color:var(--text-bright);">72%</span></div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">WIND</span><span style="color:var(--text-bright);">24 mph SSW</span></div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">DEWPT</span><span style="color:var(--text-bright);">63°F</span></div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">CAPE</span><span style="color:var(--text-bright);">2840 J/kg</span></div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">SRH (est)</span><span style="color:var(--text-bright);">412 m²/s²</span></div>
+      <div style="display:flex;justify-content:space-between;gap:12px;margin-bottom:3px;"><span style="color:var(--text-dim);">LIFT IDX</span><span style="color:var(--text-bright);">-5</span></div>
+      <div style="margin-top:7px;padding:3px 8px;text-align:center;font-family:var(--font-cond);font-weight:700;font-size:12px;letter-spacing:2px;border-radius:2px;background:rgba(230,57,70,.13);border:1px solid var(--red);color:var(--red);">RISK 78/100 — EXTREME</div>
+    </div>
+
+    <!-- RISK LEGEND (bottom-left, matching #mapLegend real position) -->
+    <div class="map-legend">
+      <div class="legend-title">RISK 0–100</div>
+      <div class="legend-row"><div class="legend-dot" style="background:#39d353;"></div><div class="legend-label">0 — Normal</div></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#3b82f6;"></div><div class="legend-label">30 — Elevated</div></div>
+      <div class="legend-row"><div class="legend-dot" style="background:#f5a623;"></div><div class="legend-label">55 — High</div></div>
+      <div class="legend-row" style="margin-bottom:0;"><div class="legend-dot" style="background:#e63946;"></div><div class="legend-label">70 — Extreme</div></div>
+    </div>
+
+    <!-- ZOOM CONTROLS -->
+    <div class="zoom-controls">
+      <div class="zoom-btn">+</div>
+      <div class="zoom-btn">−</div>
+      <div class="zoom-btn home">⌂</div>
+    </div>
+
+  </div><!-- /map-wrap -->
+
+  <!-- RIGHT SIDEBAR -->
+  <div class="sidebar-right">
+
+    <!-- Active Alerts -->
+    <div class="panel-section">
+      <div class="panel-label">Active Alerts <span class="alert-badge">6</span></div>
+
+      <div style="font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;padding:4px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">▲ AFFECTING YOUR AREA</div>
+
+      <!-- Tornado Warning 1 — local -->
+      <div class="alert-item tornado local-flag" style="margin-bottom:6px;">
+        <div class="alert-type">🌪 Tornado Warning<span class="local-flag-badge">📍 YOUR AREA</span></div>
+        <div class="alert-location">Bentonville, Benton County AR</div>
+        <div class="alert-time">Exp 11:27 PM CDT</div>
+      </div>
+
+      <!-- Tornado Warning 2 — local -->
+      <div class="alert-item tornado local-flag" style="margin-bottom:6px;">
+        <div class="alert-type">🌪 Tornado Warning<span class="local-flag-badge">📍 YOUR AREA</span></div>
+        <div class="alert-location">Fayetteville, Washington County AR</div>
+        <div class="alert-time">Exp 11:07 PM CDT</div>
+      </div>
+
+      <!-- Flash Flood Warning — local -->
+      <div class="alert-item local-flag" style="border-left-color:var(--cyan);margin-bottom:6px;">
+        <div class="alert-type" style="color:var(--cyan);">🌊 Flash Flood Warning<span class="local-flag-badge">📍 YOUR AREA</span></div>
+        <div class="alert-location">Madison and Carroll Counties AR</div>
+        <div class="alert-time">Exp 11:27 PM CDT</div>
+      </div>
+
+      <div style="font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--text-dim);margin-bottom:6px;padding:4px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border);">REGIONAL ALERTS</div>
+
+      <!-- Tornado Warning — Oklahoma -->
+      <div class="alert-item tornado" style="margin-bottom:6px;">
+        <div class="alert-type">🌪 Tornado Warning</div>
+        <div class="alert-location">Cherokee, Adair County OK</div>
+        <div class="alert-time">Exp 11:35 PM CDT</div>
+      </div>
+
+      <!-- SVR Tstorm 1 -->
+      <div class="alert-item" style="border-left-color:var(--orange);margin-bottom:6px;">
+        <div class="alert-type" style="color:var(--orange);">⛈ SVR Tstorm Warning</div>
+        <div class="alert-location">Barry, McDonald County MO</div>
+        <div class="alert-time">Exp 11:15 PM CDT</div>
+      </div>
+
+      <!-- SVR Tstorm 2 -->
+      <div class="alert-item" style="border-left-color:var(--orange);margin-bottom:0;">
+        <div class="alert-type" style="color:var(--orange);">⛈ SVR Tstorm Warning</div>
+        <div class="alert-location">Lawrence, Newton County MO</div>
+        <div class="alert-time">Exp 11:00 PM CDT</div>
+      </div>
+    </div>
+
+    <!-- Alert History -->
+    <div class="panel-section">
+      <div class="panel-label">Alert History</div>
+      <div class="alert-item tornado" style="margin-bottom:6px;">
+        <div class="alert-type">📞 Tornado Warning Call</div>
+        <div class="alert-location">11:12 PM CDT — Benton County, AR</div>
+      </div>
+      <div class="alert-item tornado" style="margin-bottom:6px;">
+        <div class="alert-type">📞 Proximity Alert Call</div>
+        <div class="alert-location">11:08 PM CDT — 3.2 mi, approaching</div>
+      </div>
+      <div class="alert-item watch" style="margin-bottom:0;">
+        <div class="alert-type" style="color:var(--amber);">🔔 Risk Score EXTREME</div>
+        <div class="alert-location">10:47 PM CDT — Fayetteville</div>
+      </div>
+    </div>
+
+    <!-- Notifications -->
+    <div class="panel-section">
+      <div class="panel-label">Notifications</div>
+      <div class="notif-row">
+        <div>
+          <div class="notif-label">Phone Push <span class="pro-badge">PRO</span></div>
+          <div class="notif-sub">ntfy.sh · Connected</div>
+        </div>
+        <div class="toggle-on"></div>
+      </div>
+      <div class="notif-row">
+        <div>
+          <div class="notif-label">Smart Lights <span class="pro-badge">PRO</span><span class="beta-badge">BETA</span></div>
+          <div class="notif-sub">Philips Hue</div>
+        </div>
+        <div class="toggle-off"></div>
+      </div>
+      <div class="notif-row">
+        <div>
+          <div class="notif-label">Audio Alarm</div>
+          <div class="notif-sub">Browser siren — while app is open</div>
+        </div>
+        <div class="toggle-off"></div>
+      </div>
+      <div class="notif-row" style="border:none;padding-top:8px;gap:6px;">
+        <div class="test-btn">TEST PUSH</div>
+        <div class="test-btn">TEST LIGHTS</div>
+        <div class="test-btn" style="border-color:var(--text-dim);color:var(--text-dim);">CONFIGURE</div>
+      </div>
+    </div>
+
+    <!-- Alert Thresholds -->
+    <div class="panel-section" style="border-bottom:none;">
+      <div class="panel-label">Alert Thresholds</div>
+      <div style="margin-bottom:14px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;">
+          <div style="font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;">Risk Score Trigger</div>
+          <div style="font-family:var(--font-mono);font-size:13px;color:var(--amber);">65</div>
+        </div>
+        <!-- Slider visual approximation -->
+        <div style="height:4px;background:var(--border);border-radius:2px;position:relative;margin-bottom:4px;">
+          <div style="position:absolute;left:0;top:0;width:0%;height:100%;background:var(--amber);border-radius:2px;"></div>
+          <div style="position:absolute;left:0;top:-4px;width:12px;height:12px;background:var(--amber);border-radius:50%;transform:translateX(-50%);"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:3px;">
+          <span>65 ELV</span><span>75 HIGH</span><span>90 EXTR</span><span>100</span>
+        </div>
+      </div>
+      <div>
+        <div style="font-family:var(--font-cond);font-size:13px;color:var(--text);letter-spacing:.5px;margin-bottom:6px;">Warning Proximity Radius</div>
+        <div style="display:flex;gap:4px;">
+          <div class="prox-btn">1 mi</div>
+          <div class="prox-btn">3 mi</div>
+          <div class="prox-btn active">5 mi</div>
+          <div class="prox-btn">10 mi</div>
+        </div>
+        <div style="font-family:var(--font-mono);font-size:9px;color:var(--text-dim);margin-top:5px;">Call when warning polygon is within this distance</div>
+      </div>
+    </div>
+
+  </div><!-- /sidebar-right -->
+
+</div><!-- /main -->
+
+<!-- BOTTOM BAR -->
+<div class="bottom-bar">
+  <div class="bottom-stat">SPC OUTLOOK: <span style="color:var(--orange);">DAY 2 ENH</span></div>
+  <div class="bottom-stat">ACTIVE ALERTS: <span>6</span></div>
+  <div class="bottom-stat">UPDATED: <span>04:18 UTC</span></div>
+  <div class="bottom-stat">CURSOR: <span>36.08° −94.16°</span></div>
+  <div class="bottom-stat" style="margin-left:auto;"><span style="color:var(--text-dim);">Open-Meteo · NWS · 18 stations</span></div>
+</div>
+
+</body>
+</html>
