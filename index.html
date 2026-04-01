@@ -515,8 +515,8 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .lp-browser-dots span:nth-child(2){background:#ffbd2e;}
 .lp-browser-dots span:last-child{background:#28ca41;}
 .lp-browser-url{font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(255,255,255,.3);background:rgba(255,255,255,.06);padding:3px 12px;border-radius:4px;letter-spacing:.5px;}
-.lp-browser-body{position:relative;width:100%;overflow:hidden;}
-.lp-preview-frame{display:block;width:1440px;height:860px;border:none;pointer-events:none;transform-origin:top left;}
+.lp-browser-body{position:relative;width:100%;overflow:hidden;aspect-ratio:1440/860;}
+.lp-preview-frame{position:absolute;top:0;left:0;display:block;width:1440px;height:860px;border:none;pointer-events:none;transform-origin:top left;}
 .lp-preview-glow{position:absolute;bottom:-40px;left:50%;transform:translateX(-50%);width:600px;height:80px;background:radial-gradient(ellipse,rgba(245,166,35,.15) 0%,transparent 70%);pointer-events:none;}
 @media(max-width:768px){.lp-preview-wrap{padding:0 16px 40px;}}
 .lp-footer{border-top:1px solid rgba(255,255,255,.06);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;}
@@ -1777,13 +1777,11 @@ function scaleLpPreview() {
   const frame = document.querySelector('.lp-preview-frame');
   const body  = document.querySelector('.lp-browser-body');
   if (!frame || !body) return;
-  const scale = body.offsetWidth / 1440;
-  frame.style.transform = `scale(${scale})`;
-  body.style.height = (860 * scale) + 'px';
+  const w = body.getBoundingClientRect().width;
+  if (!w) return;
+  frame.style.transform = `scale(${w / 1440})`;
 }
 window.addEventListener('resize', scaleLpPreview);
-document.addEventListener('DOMContentLoaded', scaleLpPreview);
-setTimeout(scaleLpPreview, 100);
 
 function showLoginFromLanding() {
   _authUserInitiated = true;
@@ -2172,6 +2170,7 @@ async function resolveAuth(session, source) {
       // Fresh unauthenticated visit — show the marketing landing page
       document.getElementById('landingPage').style.display = 'block';
       document.getElementById('authOverlay').style.display = 'none';
+      setTimeout(scaleLpPreview, 50);
     }
     if (window._pendingInviteToken) {
       showAuthRegister(window._pendingInviteToken);
