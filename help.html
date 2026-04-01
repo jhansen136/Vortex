@@ -47,12 +47,20 @@
     z-index: 100;
     background: var(--panel);
     border-bottom: 1px solid var(--border);
-    padding: 0 20px;
-    height: 52px;
+    padding: env(safe-area-inset-top) 20px 0;
+    height: calc(52px + env(safe-area-inset-top));
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 0;
+  }
+  .header-inner {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
+    width: 100%;
+    height: 52px;
   }
   .header-left { display: flex; align-items: center; gap: 14px; }
   .logo-text { font-family: var(--font-cond); font-weight: 900; font-size: 20px; letter-spacing: 4px; color: var(--amber); }
@@ -265,12 +273,14 @@
 
 <!-- ── Header ── -->
 <div class="header">
-  <div class="header-left">
-    <span class="logo-text">VORTEX</span>
-    <div class="header-divider"></div>
-    <span class="header-title">Help & FAQ</span>
+  <div class="header-inner">
+    <div class="header-left">
+      <span class="logo-text">VORTEX</span>
+      <div class="header-divider"></div>
+      <span class="header-title">Help & FAQ</span>
+    </div>
+    <a href="/" class="back-link">← Back to App</a>
   </div>
-  <a href="/" class="back-link">← Back to App</a>
 </div>
 
 <div class="page">
