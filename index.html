@@ -495,6 +495,19 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
 .lp-story-inner{max-width:600px;text-align:center;}
 .lp-story-quote{font-family:'Barlow',sans-serif;font-size:19px;color:#e8edf5;line-height:1.85;font-style:italic;margin-bottom:20px;}
 .lp-story-credit{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:var(--amber);}
+.lp-preview-wrap{position:relative;padding:0 24px 60px;display:flex;justify-content:center;}
+.lp-browser-chrome{width:100%;max-width:1000px;border-radius:10px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:0 32px 80px rgba(0,0,0,.7),0 0 0 1px rgba(255,255,255,.06);position:relative;z-index:1;}
+.lp-browser-bar{background:#1a1d21;padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid rgba(255,255,255,.07);}
+.lp-browser-dots{display:flex;gap:6px;}
+.lp-browser-dots span{width:10px;height:10px;border-radius:50%;background:rgba(255,255,255,.12);}
+.lp-browser-dots span:first-child{background:#ff5f57;}
+.lp-browser-dots span:nth-child(2){background:#ffbd2e;}
+.lp-browser-dots span:last-child{background:#28ca41;}
+.lp-browser-url{font-family:'Share Tech Mono',monospace;font-size:11px;color:rgba(255,255,255,.3);background:rgba(255,255,255,.06);padding:3px 12px;border-radius:4px;letter-spacing:.5px;}
+.lp-browser-body{position:relative;width:100%;overflow:hidden;}
+.lp-preview-frame{display:block;width:1440px;height:860px;border:none;pointer-events:none;transform-origin:top left;}
+.lp-preview-glow{position:absolute;bottom:-40px;left:50%;transform:translateX(-50%);width:600px;height:80px;background:radial-gradient(ellipse,rgba(245,166,35,.15) 0%,transparent 70%);pointer-events:none;}
+@media(max-width:768px){.lp-preview-wrap{padding:0 16px 40px;}}
 .lp-footer{border-top:1px solid rgba(255,255,255,.06);padding:24px 40px;display:flex;align-items:center;justify-content:space-between;}
 .lp-footer-copy{font-family:'Barlow Condensed',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--text-dim);}
 @media(max-width:768px){
@@ -696,6 +709,20 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <button class="lp-cta-secondary" onclick="showLoginFromLanding()">Sign In</button>
     </div>
   </section>
+
+  <!-- APP PREVIEW -->
+  <div class="lp-preview-wrap">
+    <div class="lp-browser-chrome">
+      <div class="lp-browser-bar">
+        <div class="lp-browser-dots"><span></span><span></span><span></span></div>
+        <div class="lp-browser-url">vortexintel.app</div>
+      </div>
+      <div class="lp-browser-body">
+        <iframe src="/screenshot-mockup.html" class="lp-preview-frame" scrolling="no" tabindex="-1"></iframe>
+      </div>
+    </div>
+    <div class="lp-preview-glow"></div>
+  </div>
 
   <div class="lp-stats">
     <div class="lp-stat">
@@ -1735,6 +1762,18 @@ function _hideAllAuthForms() {
   });
   document.getElementById('authError').textContent = '';
 }
+function scaleLpPreview() {
+  const frame = document.querySelector('.lp-preview-frame');
+  const body  = document.querySelector('.lp-browser-body');
+  if (!frame || !body) return;
+  const scale = body.offsetWidth / 1440;
+  frame.style.transform = `scale(${scale})`;
+  body.style.height = (860 * scale) + 'px';
+}
+window.addEventListener('resize', scaleLpPreview);
+document.addEventListener('DOMContentLoaded', scaleLpPreview);
+setTimeout(scaleLpPreview, 100);
+
 function showLoginFromLanding() {
   _authUserInitiated = true;
   document.getElementById('landingPage').style.display = 'none';
