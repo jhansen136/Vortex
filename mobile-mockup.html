@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390">
+<title>VORTEX Alert</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --amber:#f5a623;--red:#e63946;--cyan:#00d4ff;--green:#39d353;
+  --text:#c8d0dc;--text-dim:#5a6475;--text-bright:#e8edf5;
+  --font-mono:'Share Tech Mono',monospace;
+  --font-cond:'Barlow Condensed',sans-serif;
+}
+body{background:#04060a;width:390px;height:844px;overflow:hidden;position:relative;}
+
+/* ── BACKGROUND ── */
+.bg-glow{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 65%,rgba(230,57,70,.22) 0%,rgba(230,57,70,.07) 40%,transparent 68%);}
+.bg-glow2{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 35%,rgba(245,166,35,.07) 0%,transparent 55%);}
+
+/* ── STATUS BAR ── */
+.status-bar{position:absolute;top:0;left:0;right:0;height:44px;display:flex;align-items:center;justify-content:space-between;padding:14px 24px 0;z-index:10;}
+.status-time{font-family:var(--font-mono);font-size:15px;color:var(--text-bright);letter-spacing:.5px;}
+.status-icons{display:flex;align-items:center;gap:7px;}
+
+/* ── LOCK SCREEN TIME ── */
+.lock-screen{position:absolute;top:70px;left:0;right:0;text-align:center;}
+.lock-hour{font-family:var(--font-cond);font-size:92px;font-weight:200;color:var(--text-bright);letter-spacing:-3px;line-height:1;opacity:.85;}
+.lock-date{font-family:var(--font-cond);font-size:17px;font-weight:400;letter-spacing:1.5px;color:rgba(232,237,245,.55);margin-top:6px;}
+
+/* ── NOTIFICATION BANNERS ── */
+.notif-stack{position:absolute;top:58px;left:14px;right:14px;display:flex;flex-direction:column;gap:8px;z-index:20;}
+.notif-banner{background:rgba(12,14,20,.88);border:1px solid rgba(255,255,255,.09);border-radius:16px;padding:10px 14px;display:flex;align-items:center;gap:10px;backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);}
+.notif-icon-wrap{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.notif-icon-wrap.tor{background:rgba(230,57,70,.25);border:1px solid rgba(230,57,70,.4);}
+.notif-icon-wrap.ffw{background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.3);}
+.notif-body-wrap{flex:1;min-width:0;}
+.notif-app{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:2px;}
+.notif-title{font-family:var(--font-cond);font-size:13px;font-weight:700;letter-spacing:.5px;color:var(--text-bright);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.notif-sub{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.notif-time{font-family:var(--font-mono);font-size:9px;color:var(--text-dim);flex-shrink:0;}
+
+/* ── INCOMING CALL CARD ── */
+.call-card{position:absolute;bottom:0;left:0;right:0;background:linear-gradient(to bottom,transparent 0%,rgba(8,10,14,.97) 10%,#08090e 20%);border-radius:42px 42px 0 0;padding:28px 28px 52px;z-index:30;}
+
+/* Ring animation */
+.call-ring-wrap{display:flex;justify-content:center;align-items:center;margin-bottom:18px;position:relative;height:96px;}
+@keyframes ripple{0%{transform:translate(-50%,-50%) scale(1);opacity:.5}100%{transform:translate(-50%,-50%) scale(2.2);opacity:0}}
+.ring{position:absolute;top:50%;left:50%;width:96px;height:96px;border-radius:50%;border:1.5px solid var(--red);}
+.ring1{animation:ripple 2s ease-out infinite;}
+.ring2{animation:ripple 2s ease-out infinite .6s;}
+.ring3{animation:ripple 2s ease-out infinite 1.2s;}
+.call-avatar{width:80px;height:80px;border-radius:50%;background:rgba(230,57,70,.12);border:2px solid rgba(230,57,70,.5);display:flex;align-items:center;justify-content:center;position:relative;z-index:2;flex-shrink:0;}
+.call-avatar-inner{width:60px;height:60px;border-radius:50%;background:var(--amber);display:flex;align-items:center;justify-content:center;font-family:var(--font-cond);font-weight:900;font-size:16px;letter-spacing:2px;color:#000;}
+
+/* Call info */
+.call-label{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);text-align:center;letter-spacing:2.5px;text-transform:uppercase;margin-bottom:3px;}
+.call-name{font-family:var(--font-cond);font-size:36px;font-weight:900;letter-spacing:5px;color:var(--amber);text-align:center;margin-bottom:18px;}
+
+/* Warning card */
+.call-warning{background:rgba(230,57,70,.09);border:1px solid rgba(230,57,70,.28);border-radius:12px;padding:14px 16px;margin-bottom:26px;}
+.warning-type{font-family:var(--font-cond);font-size:14px;font-weight:700;letter-spacing:2px;color:var(--red);text-transform:uppercase;margin-bottom:4px;}
+.warning-loc{font-family:var(--font-mono);font-size:11px;color:var(--text);margin-bottom:5px;}
+.warning-msg{font-family:var(--font-mono);font-size:11px;color:var(--text-dim);line-height:1.55;}
+
+/* Action buttons */
+.call-buttons{display:flex;justify-content:space-around;align-items:center;}
+.call-btn{display:flex;flex-direction:column;align-items:center;gap:9px;}
+.call-btn-circle{width:68px;height:68px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:26px;}
+.call-btn-circle.decline{background:rgba(230,57,70,.18);border:2px solid rgba(230,57,70,.6);}
+.call-btn-circle.answer{background:rgba(57,211,83,.12);border:2px solid rgba(57,211,83,.5);}
+@keyframes answerPulse{0%,100%{box-shadow:0 0 0 0 rgba(57,211,83,.4)}50%{box-shadow:0 0 0 10px rgba(57,211,83,0)}}
+.call-btn-circle.answer{animation:answerPulse 1.8s ease-out infinite;}
+.call-btn-label{font-family:var(--font-cond);font-size:13px;letter-spacing:1px;color:var(--text-dim);}
+</style>
+</head>
+<body>
+
+<div class="bg-glow"></div>
+<div class="bg-glow2"></div>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <span class="status-time">2:47</span>
+  <div class="status-icons">
+    <!-- Signal bars -->
+    <svg width="17" height="12" viewBox="0 0 17 12" fill="rgba(232,237,245,.85)">
+      <rect x="0" y="5" width="3" height="7" rx="1" opacity=".45"/>
+      <rect x="4.5" y="3.5" width="3" height="8.5" rx="1" opacity=".65"/>
+      <rect x="9" y="1.5" width="3" height="10.5" rx="1" opacity=".85"/>
+      <rect x="13.5" y="0" width="3" height="12" rx="1"/>
+    </svg>
+    <!-- WiFi -->
+    <svg width="16" height="12" viewBox="0 0 16 12" fill="rgba(232,237,245,.85)">
+      <path d="M8 9.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>
+      <path d="M8 6C9.8 6 11.4 6.8 12.5 8.1l1.3-1.3C12.2 5.1 10.2 4 8 4S3.8 5.1 2.2 6.8l1.3 1.3C4.6 6.8 6.2 6 8 6z" opacity=".75"/>
+      <path d="M8 2.5C11 2.5 13.7 3.9 15.4 6.1L16.6 4.8C14.6 2.2 11.5.5 8 .5S1.4 2.2-.6 4.8l1.2 1.3C2.3 3.9 5 2.5 8 2.5z" opacity=".45"/>
+    </svg>
+    <!-- Battery -->
+    <svg width="27" height="13" viewBox="0 0 27 13" fill="none">
+      <rect x=".5" y=".5" width="22" height="12" rx="3.5" stroke="rgba(232,237,245,.35)"/>
+      <rect x="2" y="2" width="17" height="9" rx="2" fill="rgba(232,237,245,.85)"/>
+      <path d="M24 4.5v4a2 2 0 000-4z" fill="rgba(232,237,245,.45)"/>
+    </svg>
+  </div>
+</div>
+
+<!-- LOCK SCREEN TIME -->
+<div class="lock-screen">
+  <div class="lock-hour">2:47</div>
+  <div class="lock-date">Tuesday, April 1</div>
+</div>
+
+<!-- NOTIFICATION BANNERS -->
+<div class="notif-stack">
+  <div class="notif-banner">
+    <div class="notif-icon-wrap tor">🌪</div>
+    <div class="notif-body-wrap">
+      <div class="notif-app">VORTEX</div>
+      <div class="notif-title">Tornado Warning — YOUR AREA</div>
+      <div class="notif-sub">Benton County, AR · Exp 3:27 AM CDT</div>
+    </div>
+    <div class="notif-time">now</div>
+  </div>
+  <div class="notif-banner">
+    <div class="notif-icon-wrap ffw">🌊</div>
+    <div class="notif-body-wrap">
+      <div class="notif-app">VORTEX</div>
+      <div class="notif-title">Flash Flood Warning — YOUR AREA</div>
+      <div class="notif-sub">Madison & Carroll County, AR</div>
+    </div>
+    <div class="notif-time">1m</div>
+  </div>
+</div>
+
+<!-- INCOMING CALL CARD -->
+<div class="call-card">
+
+  <div class="call-ring-wrap">
+    <div class="ring ring1"></div>
+    <div class="ring ring2"></div>
+    <div class="ring ring3"></div>
+    <div class="call-avatar">
+      <div class="call-avatar-inner">V⚡</div>
+    </div>
+  </div>
+
+  <div class="call-label">Incoming Alert Call</div>
+  <div class="call-name">VORTEX</div>
+
+  <div class="call-warning">
+    <div class="warning-type">🌪 Tornado Warning</div>
+    <div class="warning-loc">Benton County, AR — YOUR AREA</div>
+    <div class="warning-msg">The tornado is 3.2 miles from your home<br>and approaching. Take shelter immediately.</div>
+  </div>
+
+  <div class="call-buttons">
+    <div class="call-btn">
+      <div class="call-btn-circle decline">📵</div>
+      <div class="call-btn-label">Decline</div>
+    </div>
+    <div class="call-btn">
+      <div class="call-btn-circle answer">📞</div>
+      <div class="call-btn-label">Answer</div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
