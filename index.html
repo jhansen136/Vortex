@@ -1741,8 +1741,57 @@ function openStripeCheckout(plan) {
   if (!base) { showToast('watch', 'Coming Soon', 'Stripe checkout not yet configured.'); return; }
   const email = currentUser?.email;
   const url = email ? `${base}?prefilled_email=${encodeURIComponent(email)}` : base;
+  // Flag so we know to re-check subscription when user returns to this tab
+  localStorage.setItem('vortex_checkout_pending', Date.now().toString());
   window.open(url, '_blank');
 }
+
+// ── Post-checkout tab-focus handler ──────────────────────────────────────────
+// Fires when the user switches back to this tab after completing Stripe checkout.
+// Re-fetches their profile and auto-activates Pro if the webhook has already fired.
+(function() {
+  let _checkoutPollTimer = null;
+
+  async function _pollForPro(attempts) {
+    if (!currentUser) return;
+    if (attempts <= 0) {
+      localStorage.removeItem('vortex_checkout_pending');
+      showToast('watch', 'Almost there', 'Refresh the page if Pro access hasn\'t activated in a moment.');
+      return;
+    }
+    await loadUserSettings(currentUser.id).catch(() => {});
+    if (isProUser()) {
+      localStorage.removeItem('vortex_checkout_pending');
+      clearTimeout(_checkoutPollTimer);
+      // Dismiss onboarding and show success
+      obComplete();
+      showToast('check', 'Welcome to Pro!', 'Your account is now active. Full access unlocked.');
+      return;
+    }
+    _checkoutPollTimer = setTimeout(() => _pollForPro(attempts - 1), 3000);
+  }
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible') return;
+    const pending = localStorage.getItem('vortex_checkout_pending');
+    if (!pending) return;
+    // Only act if flag was set in the last 30 minutes
+    if (Date.now() - parseInt(pending) > 30 * 60 * 1000) {
+      localStorage.removeItem('vortex_checkout_pending');
+      return;
+    }
+    if (isProUser()) {
+      // Already Pro — just clean up and dismiss
+      localStorage.removeItem('vortex_checkout_pending');
+      obComplete();
+      return;
+    }
+    // Not Pro yet — webhook may still be in flight, poll for up to ~30s
+    showToast('watch', 'Activating your account…', 'Just a moment.');
+    clearTimeout(_checkoutPollTimer);
+    _pollForPro(10);
+  });
+})();
 
 async function openStripePortal() {
   const session = await supa.auth.getSession();
