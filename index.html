@@ -1993,6 +1993,10 @@ async function loadUserSettings(userId) {
     userProfile = profRes.data || {};
     cfg.phone = userProfile.phone || '';
     updateHomeTileLabel();
+    // Zoom to user's actual home location now that profile is loaded.
+    // zoomHome() was called at map-init (t=600ms) before this resolved,
+    // so it fell back to NW Arkansas. Re-run it now with real coordinates.
+    if (userProfile.home_lat && userProfile.home_lng) zoomHome();
     if (intRes.data) {
       cfg.push  = intRes.data.ntfy_url  || '';
       cfg.hueIP = intRes.data.hue_ip    || '';
