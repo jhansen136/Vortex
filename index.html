@@ -5318,7 +5318,7 @@ async function toggleCityAlert(id, baseLat, baseLng, currentlyOn) {
     // Resolve county FIPS via NWS points API so alert engine can match NWS warnings
     try {
       const r = await fetch(`https://api.weather.gov/points/${baseLat},${baseLng}`,
-        { headers: { 'User-Agent': 'VORTEX Storm Intelligence (jhansen136@gmail.com)' } });
+        { headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' } });
       const j = await r.json();
       fips = j.properties?.county?.split('/').pop()?.replace('USC', '') ?? null;
     } catch (_) {}
@@ -5344,7 +5344,7 @@ async function saveCityCoords(id) {
   let fips = null;
   try {
     const r = await fetch(`https://api.weather.gov/points/${lat},${lng}`,
-      { headers: { 'User-Agent': 'VORTEX Storm Intelligence (jhansen136@gmail.com)' } });
+      { headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' } });
     const j = await r.json();
     fips = j.properties?.county?.split('/').pop()?.replace('USC', '') ?? null;
   } catch (_) {}
