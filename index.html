@@ -1997,6 +1997,11 @@ async function loadUserSettings(userId) {
     // zoomHome() was called at map-init (t=600ms) before this resolved,
     // so it fell back to NW Arkansas. Re-run it now with real coordinates.
     if (userProfile.home_lat && userProfile.home_lng) zoomHome();
+    // Re-run pinned city deduplication now that home_lat is known.
+    // loadCitiesForView() may have run before this resolved (race), meaning
+    // any pinned city at the home location wasn't filtered out yet.
+    pinnedCitiesLoaded = false;
+    loadCitiesForView();
     if (intRes.data) {
       cfg.push  = intRes.data.ntfy_url  || '';
       cfg.hueIP = intRes.data.hue_ip    || '';
@@ -3266,8 +3271,10 @@ async function loadCitiesForView() {
       .select('id, name, lat, lng').eq('user_id', currentUser.id);
     pinnedCityDefs = (data || [])
       // Skip cities already in DEFS — those are already on the map, no duplicate dot needed
+      // Also skip any city that matches the home location — home pin renders separately
       .filter(c => {
         const la = parseFloat(c.lat), lo = parseFloat(c.lng);
+        if (isHomeCity(c)) return false;
         return !DEFS.some(d => Math.abs((d.lat||d.la) - la) < 0.05 && Math.abs((d.lon||d.lo||d.lng) - lo) < 0.05);
       })
       // Deduplicate by location in case user added same city multiple times
