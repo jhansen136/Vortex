@@ -422,12 +422,20 @@ async function doLogin() {
   errEl.textContent = '';
   if (!email || !pass) { errEl.textContent = 'Enter email and password.'; return; }
   btn.textContent = 'SIGNING IN…'; btn.disabled = true;
-  const { error } = await supa.auth.signInWithPassword({ email, password: pass });
+  _authChecked = false; // reset so checkAuth can run after this login
+  const { data: signInData, error } = await supa.auth.signInWithPassword({ email, password: pass });
   if (error) {
     errEl.textContent = error.message;
     btn.textContent = 'SIGN IN'; btn.disabled = false;
+    return;
   }
-  // onAuthStateChange fires automatically on success and calls checkAuth
+  // Call checkAuth directly — don't rely on onAuthStateChange firing
+  if (signInData?.session?.user) {
+    await checkAuth(signInData.session);
+  } else {
+    errEl.textContent = 'Sign in succeeded but no session returned.';
+    btn.textContent = 'SIGN IN'; btn.disabled = false;
+  }
 }
 
 async function doLogout() {
