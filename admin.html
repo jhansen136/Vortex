@@ -476,10 +476,10 @@ supa.auth.onAuthStateChange(async (event, session) => {
 
 // Also handle case where signInWithPassword succeeds but SIGNED_IN doesn't re-fire
 // (happens when user was already signed in with same account)
-const _existingSession = await supa.auth.getSession();
-if (_existingSession?.data?.session?.user) {
-  await checkAuth(_existingSession.data.session);
-}
+(async () => {
+  const { data } = await supa.auth.getSession();
+  if (data?.session?.user) await checkAuth(data.session);
+})();
 
 // ── Data ──────────────────────────────────────────────────────────
 async function loadData() {
