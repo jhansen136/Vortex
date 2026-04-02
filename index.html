@@ -4795,10 +4795,13 @@ function parseTornadoMotion(feat) {
   }) : null;
   if (degMatch && ktMatch && coords.length) {
     const last = coords[coords.length - 1];
+    // NWS MOT bearing is the direction FROM which the storm is moving (wind convention).
+    // Add 180° to get the direction TO which it's moving for forward projection.
+    const motFrom = parseInt(degMatch[1]);
     return {
       lat:      parseFloat(last[1]),
       lon:      parseFloat(last[2]),
-      bearing:  parseInt(degMatch[1]),
+      bearing:  (motFrom + 180) % 360,
       speedMph: Math.round(parseFloat(ktMatch[1]) * 1.15078),
       confirmed,
       posTime
