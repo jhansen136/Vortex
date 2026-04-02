@@ -777,23 +777,23 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div class="lp-feature">
       <div class="lp-feature-icon">📞</div>
       <div class="lp-feature-title">Phone Call Alerts</div>
-      <div class="lp-feature-desc">When a tornado warning is issued for your location, VORTEX calls your phone. It also fires a proximity alert if a storm is tracking within miles of you — even if the warning is in a neighboring county. Push notifications cover watches, floods, winter storms, and wind warnings.</div>
+      <div class="lp-feature-desc">When a tornado warning is issued for your location, VORTEX calls your phone. It also fires a proximity alert if a storm is tracking within miles of you — even if the warning is in a neighboring county. Push notifications cover watches, floods, winter storms, wind warnings, and rapid pressure drops.</div>
     </div>
     <div class="lp-feature">
       <div class="lp-feature-icon">🗺</div>
       <div class="lp-feature-title">Live Weather Map</div>
-      <div class="lp-feature-desc">Interactive US map with real-time temperature, wind speed, live radar, active wildfires, and earthquake activity — all on one screen, updated continuously.</div>
+      <div class="lp-feature-desc">Interactive US map with live radar, active NWS warning polygons, risk score overlay, temperature, wind speed, active wildfires, and earthquake activity — all on one screen, updated continuously.</div>
     </div>
     <div class="lp-feature">
       <div class="lp-feature-icon">📊</div>
       <div class="lp-feature-title">Storm Risk Scoring</div>
-      <div class="lp-feature-desc">A 0–100 risk index for your exact location, recalculated every 30 seconds from live conditions so you always know your exposure.</div>
+      <div class="lp-feature-desc">A 0–100 composite danger index calculated from real atmospheric data — CAPE, storm helicity, wind shear, lifted index, and more. Know how dangerous conditions are at your exact location before the NWS issues anything.</div>
     </div>
   </div>
 
   <div class="lp-story">
     <div class="lp-story-inner">
-      <div class="lp-story-quote">Last summer, a tornado passed through a campground in Rogers, Arkansas while my family was sleeping in a camper. No warning. Not even sirens. I'm a software engineer. I built this so it doesn't happen to you.</div>
+      <div class="lp-story-quote">In the summer of 2024, a tornado passed through a campground in Rogers, Arkansas while my family was sleeping in a camper. No warning. Not even sirens. I'm a software engineer. I built this so it doesn't happen to you.</div>
       <div class="lp-story-credit">— The VORTEX Team</div>
     </div>
   </div>
@@ -804,10 +804,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="lp-price">$4.99<span>/mo</span></div>
       <div class="lp-price-period">or $39.99 / year — save 33%</div>
       <ul class="lp-pricing-features">
-        <li>Phone call alerts for tornado warnings</li>
-        <li>Real-time NWS push notifications</li>
-        <li>Live weather map + overlays</li>
+        <li>Phone calls for tornado warnings + proximity alerts</li>
+        <li>Flash flood warning calls (opt-in)</li>
+        <li>All NWS push notifications + pressure drop alerts</li>
+        <li>Live weather map with radar, warnings &amp; overlays</li>
         <li>Storm risk scoring 0–100</li>
+        <li>Multi-location monitoring — home + up to 3 cities</li>
+        <li>Background alerting 24/7, even when app is closed</li>
         <li>Cancel anytime</li>
       </ul>
       <button class="lp-cta-primary" style="width:100%;font-size:15px;padding:16px;" onclick="showTrialSignup()">Start 14-Day Free Trial →</button>
@@ -995,6 +998,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
               <div class="notif-sub">Push for high wind &amp; extreme wind warnings</div>
             </div>
             <label class="toggle"><input type="checkbox" id="pushWind" data-sync-group="push-wind" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Rapid Pressure Drop Push</div>
+              <div class="notif-sub">Push when barometric pressure drops ≥ 2 mb in 30 minutes — a real-time sign a severe storm is approaching</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushPressureDrop" data-sync-group="push-pressure-drop" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
         </div>
       </div>
@@ -2080,10 +2090,11 @@ async function loadUserSettings(userId) {
       syncToggleGroup('push-winter',          p.push_winter_enabled           ?? true);
       syncToggleGroup('push-wind',            p.push_wind_enabled             ?? true);
       syncToggleGroup('call-threshold',       p.call_threshold_enabled        ?? false);
+      syncToggleGroup('push-pressure-drop',   p.push_pressure_drop_enabled    ?? true);
       // Free users: force all Pro-gated toggles off regardless of DB state
       if (!isProUser()) {
         ['push','hue','call-tornado','call-flood','call-threshold',
-         'push-flood','push-tornado-watch','push-tstorm','push-winter','push-wind'
+         'push-flood','push-tornado-watch','push-tstorm','push-winter','push-wind','push-pressure-drop'
         ].forEach(g => syncToggleGroup(g, false));
       }
       // Show/hide DEFAULT OFF badge based on current state
@@ -2152,6 +2163,7 @@ async function saveUserSettings(updates) {
       push_winter_enabled:           document.querySelector('[data-sync-group="push-winter"]')?.checked         ?? true,
       push_wind_enabled:             document.querySelector('[data-sync-group="push-wind"]')?.checked           ?? true,
       call_threshold_enabled:        document.querySelector('[data-sync-group="call-threshold"]')?.checked      ?? false,
+      push_pressure_drop_enabled:    document.querySelector('[data-sync-group="push-pressure-drop"]')?.checked  ?? true,
       updated_at: now
     }, { onConflict: 'user_id' });
   }

@@ -387,7 +387,7 @@
     </div>
 
     <div class="card">
-      <div class="card-title">📉 Pressure Drop Alert <span class="tag tag-push">PUSH</span><span class="tag tag-soon">COMING SOON</span></div>
+      <div class="card-title">📉 Pressure Drop Alert <span class="tag tag-push">PUSH</span><span class="tag tag-pro">PRO</span></div>
       <div class="card-body">
         <p>Sent when barometric pressure drops rapidly at your location — a real-time signal that a severe storm is actively approaching. Triggers when pressure falls ≥ 2 mb in a 30-minute window. 30-minute cooldown.</p>
       </div>
@@ -448,8 +448,13 @@
         </div>
         <div class="risk-row">
           <div class="risk-bar" style="width:48px;background:var(--red);"></div>
-          <div class="risk-label" style="color:var(--red);">75 – 100</div>
-          <div class="risk-desc">Extreme — major severe weather possible</div>
+          <div class="risk-label" style="color:var(--red);">75 – 89</div>
+          <div class="risk-desc">High+ — major severe weather possible</div>
+        </div>
+        <div class="risk-row">
+          <div class="risk-bar" style="width:48px;background:#ff2040;"></div>
+          <div class="risk-label" style="color:#ff2040;">90 – 100</div>
+          <div class="risk-desc">Extreme — life-threatening conditions</div>
         </div>
       </div>
       <div class="callout" style="margin-top:14px;">
@@ -508,7 +513,7 @@
         </thead>
         <tbody>
           <tr><td>Tornado / Flood warning call</td><td>Once per active warning</td><td>5 calls/day total</td></tr>
-          <tr><td>Proximity alert call</td><td>Once per active warning</td><td>Counts toward 5/day</td></tr>
+          <tr><td>Proximity alert call</td><td>Once per active warning + 3-hour cooldown</td><td>Counts toward 5/day</td></tr>
           <tr><td>Risk Score push</td><td>30 min</td><td>None</td></tr>
           <tr><td>Pressure drop push</td><td>30 min</td><td>None</td></tr>
           <tr><td>NWS warning pushes</td><td>Once per active event</td><td>None</td></tr>
@@ -531,6 +536,7 @@
       <div class="card-body">
         <p>All alerts apply to your <strong style="color:var(--text-bright);">home location</strong> by default. You can also enable alerts for any pinned city by toggling the Alert switch on that city in <strong style="color:var(--text-bright);">Settings → My Cities</strong>.</p>
         <p>The background engine checks all alert-enabled locations on every run — home location and any alert-enabled cities are all monitored simultaneously.</p>
+        <p>Pro accounts can have up to <strong style="color:var(--text-bright);">3 alert-enabled cities</strong> in addition to the home location. You can pin unlimited cities to the map, but only 3 can have background alerting active at a time. Disable one to free up a slot.</p>
       </div>
     </div>
   </div>
