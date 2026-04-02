@@ -44,7 +44,7 @@ VORTEX is a Progressive Web App (PWA) — it runs in the browser, can be install
 
 VORTEX was built by Jordan Hansen, a software engineer based in Fayetteville, Arkansas.
 
-A tornado struck a campground in Rogers, Arkansas while Jordan's family was sleeping in a camper. There was no warning — no phone alert, no sirens. They got lucky.
+In the summer of 2024, a tornado struck a campground in Rogers, Arkansas while Jordan's family was sleeping in a camper. There was no warning — no phone alert, no sirens. They got lucky.
 
 After the incident, Jordan researched what existed and found that every existing weather alert system relied on push notifications — the same notifications that get silenced, buried, or missed while asleep. No app called your phone.
 
