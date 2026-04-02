@@ -4574,8 +4574,8 @@ async function loadAlertHistory() {
 
 async function fetchNWS() {
   const urls = [
-    'https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate,Expected&severity=Extreme,Severe',
-    'https://api.weather.gov/alerts/active?status=actual&message_type=alert&urgency=Immediate&severity=Extreme,Severe,Moderate'
+    'https://api.weather.gov/alerts/active?status=actual&message_type=alert,update&urgency=Immediate,Expected&severity=Extreme,Severe',
+    'https://api.weather.gov/alerts/active?status=actual&message_type=alert,update&urgency=Immediate&severity=Extreme,Severe,Moderate'
   ];
   let ok = false;
   for (const url of urls) {
