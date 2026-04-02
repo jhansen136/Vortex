@@ -11,9 +11,10 @@ const TWILIO_FROM          = Deno.env.get('TWILIO_FROM_NUMBER') || '';
 const TWILIO_AUDIO_URL     = Deno.env.get('TWILIO_ALERT_AUDIO_URL') || '';
 
 // NW Arkansas fallback (used for users who haven't set a home location yet)
-const FALLBACK_LAT  = 36.08;
-const FALLBACK_LON  = -94.20;
-const FALLBACK_SAME = ['005007', '005143', '005087', '005015', '005009'];
+const FALLBACK_LAT = 36.08;
+const FALLBACK_LON = -94.20;
+// UGC zone IDs for NW Arkansas counties (Benton, Washington, Madison, Carroll, Boone)
+const FALLBACK_UGC = ['ARC007', 'ARC143', 'ARC087', 'ARC015', 'ARC009'];
 
 // NWS event types to monitor
 const NWS_EVENTS = [
@@ -394,11 +395,14 @@ serve(async (req) => {
       const homeFips = user.home_fips ?? null;
       const phone    = (user.phone || '').trim();
 
-      const userSame: string[] = homeFips ? ['0' + homeFips] : FALLBACK_SAME;
+      // UGC zone IDs (e.g. "ARC143") — matched against geocode.UGC in NWS alerts.
+      // home_fips stores the zone ID from the NWS county URL path (set on home location save).
+      // Falls back to NW Arkansas counties for users who haven't set a home location.
+      const userUGC: string[] = homeFips ? [homeFips] : FALLBACK_UGC;
 
       const userAlerts = allAlerts.filter((f: any) => {
-        const same: string[] = f.properties?.geocode?.SAME || [];
-        return same.some((code: string) => userSame.includes(code));
+        const ugc: string[] = f.properties?.geocode?.UGC || [];
+        return ugc.some((code: string) => userUGC.includes(code));
       });
 
       const userSent     = (recentSent || []).filter((a: any) => a.user_id === user.id);
@@ -464,10 +468,15 @@ serve(async (req) => {
                        : (isWind)                    ? 'wind_face,warning'
                        : 'warning';
 
+        // Use areaDesc for the body — it lists only affected counties/areas and avoids
+        // confusing users with NWS headlines that mention dozens of unrelated counties.
+        const areaBody = alert.properties.areaDesc
+          ? `Active in: ${alert.properties.areaDesc.slice(0, 180)}`
+          : (alert.properties.headline || '').slice(0, 200);
         toSend.push({
           key,
           title:    `⚠️ ${event}`,
-          body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
+          body:     areaBody,
           priority,
           tags,
           event,
@@ -517,7 +526,7 @@ serve(async (req) => {
             const age = Date.now() - new Date(r.recorded_at).getTime();
             return age >= 25 * 60 * 1000 && age <= 35 * 60 * 1000;
           });
-          if (old30m && wx.pressure_mb > 0 && old30m.pressure_mb > 0) {
+          if (old30m && wx.pressure_mb > 0 && old30m.pressure_mb > 0 && (pref?.push_pressure_drop_enabled ?? true)) {
             const drop = old30m.pressure_mb - wx.pressure_mb;
             const pressKey = `pressure:drop:${Math.floor(Date.now() / THRESHOLD_COOLDOWN_MS)}`;
             if (drop >= PRESSURE_DROP_THRESHOLD && !sentRecently(pressKey)) {
@@ -582,12 +591,12 @@ serve(async (req) => {
       for (const city of userAlertCities) {
         const cityLat  = city.alert_lat ?? city.lat;
         const cityLon  = city.alert_lng ?? city.lng;
-        const citySame = city.alert_fips ? ['0' + city.alert_fips] : [];
+        const cityUGC = city.alert_fips ? [city.alert_fips] : [];
 
-        // NWS alerts matching this city's county
-        const cityNwsAlerts = citySame.length ? allAlerts.filter((f: any) => {
-          const same: string[] = f.properties?.geocode?.SAME || [];
-          return same.some((code: string) => citySame.includes(code));
+        // NWS alerts matching this city's county (by UGC zone ID e.g. "ARC143")
+        const cityNwsAlerts = cityUGC.length ? allAlerts.filter((f: any) => {
+          const ugc: string[] = f.properties?.geocode?.UGC || [];
+          return ugc.some((code: string) => cityUGC.includes(code));
         }) : [];
         if (cityNwsAlerts.length) {
           for (const alert of cityNwsAlerts) {
@@ -611,10 +620,13 @@ serve(async (req) => {
             const priority = (isTornado || isFlashFlood) ? 'max' : (isTorWatch || isTstorm) ? 'high' : 'default';
             const tags     = isTornado ? 'rotating_light,sos' : (isFlashFlood || isFlood) ? 'rain,warning' : isWinter ? 'snowflake,warning' : isWind ? 'wind_face,warning' : 'warning';
 
+            const cityAreaBody = alert.properties.areaDesc
+              ? `Active in: ${alert.properties.areaDesc.slice(0, 180)}`
+              : (alert.properties.headline || '').slice(0, 200);
             toSend.push({
               key,
               title:    `⚠️ ${event} — ${city.name}`,
-              body:     alert.properties.headline || alert.properties.description?.slice(0, 200) || '',
+              body:     cityAreaBody,
               priority, tags,
               event,
               area:     city.name,

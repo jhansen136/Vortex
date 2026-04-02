@@ -5146,8 +5146,8 @@ async function saveHomeLocation(lat, lng) {
     const r = await fetch(`https://api.weather.gov/points/${lat.toFixed(4)},${lng.toFixed(4)}`);
     const j = await r.json();
     const countyUrl = j.properties?.county || '';
-    const match = countyUrl.match(/(\d{5})$/);
-    if (match) homeFips = match[1];
+    const zoneId = countyUrl.split('/').pop() || null; // e.g. "ARC143"
+    if (zoneId && /^[A-Z]{2}[CZ]\d{3}$/.test(zoneId)) homeFips = zoneId;
     // Extract city name + state abbreviation from relativeLocation + forecastZone
     const city      = j.properties?.relativeLocation?.properties?.city;
     const zoneUrl   = j.properties?.forecastZone || '';
@@ -5423,7 +5423,8 @@ async function toggleCityAlert(id, baseLat, baseLng, currentlyOn) {
       const r = await fetch(`https://api.weather.gov/points/${baseLat},${baseLng}`,
         { headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' } });
       const j = await r.json();
-      fips = j.properties?.county?.split('/').pop()?.replace('USC', '') ?? null;
+      const cityZoneId = j.properties?.county?.split('/').pop() ?? null;
+      fips = (cityZoneId && /^[A-Z]{2}[CZ]\d{3}$/.test(cityZoneId)) ? cityZoneId : null;
     } catch (_) {}
   }
 
