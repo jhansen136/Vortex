@@ -412,40 +412,10 @@ let filters = { plan: 'all', type: 'all' };
 let sortDir = -1; // -1 = newest first
 
 // ── Auth ──────────────────────────────────────────────────────────
-let _authChecked = false;
-
-async function doLogin() {
-  const email  = document.getElementById('loginEmail').value.trim();
-  const pass   = document.getElementById('loginPass').value;
-  const btn    = document.getElementById('loginBtn');
-  const errEl  = document.getElementById('authError');
-  errEl.textContent = '';
-  if (!email || !pass) { errEl.textContent = 'Enter email and password.'; return; }
-  btn.textContent = 'SIGNING IN…'; btn.disabled = true;
-  _authChecked = false; // reset so checkAuth can run after this login
-  const { data: signInData, error } = await supa.auth.signInWithPassword({ email, password: pass });
-  if (error) {
-    errEl.textContent = error.message;
-    btn.textContent = 'SIGN IN'; btn.disabled = false;
-    return;
-  }
-  // Call checkAuth directly — don't rely on onAuthStateChange firing
-  if (signInData?.session?.user) {
-    await checkAuth(signInData.session);
-  } else {
-    errEl.textContent = 'Sign in succeeded but no session returned.';
-    btn.textContent = 'SIGN IN'; btn.disabled = false;
-  }
-}
-
-async function doLogout() {
-  await supa.auth.signOut();
-  location.reload();
-}
+// Simplified: two explicit paths only — page load check and login button.
+// No onAuthStateChange, no _authChecked flag, no race conditions.
 
 async function checkAuth(session) {
-  if (_authChecked) return;
-  _authChecked = true;
   const errEl = document.getElementById('authError');
   const btn   = document.getElementById('loginBtn');
 
@@ -455,35 +425,52 @@ async function checkAuth(session) {
     .maybeSingle();
 
   if (error) {
-    errEl.textContent = 'Profile lookup failed: ' + error.message;
-    _authChecked = false;
-    if (btn) { btn.textContent = 'SIGN IN'; btn.disabled = false; }
-    return;
-  }
-  if (profile?.role !== 'admin') {
-    errEl.textContent = `Access denied — role "${profile?.role || 'none'}" is not admin.`;
-    _authChecked = false;
+    if (errEl) errEl.textContent = 'Profile lookup failed: ' + error.message;
     if (btn) { btn.textContent = 'SIGN IN'; btn.disabled = false; }
     await supa.auth.signOut();
     return;
   }
+  if (profile?.role !== 'admin') {
+    if (errEl) errEl.textContent = `Access denied — role "${profile?.role || 'none'}" is not admin.`;
+    if (btn) { btn.textContent = 'SIGN IN'; btn.disabled = false; }
+    await supa.auth.signOut();
+    return;
+  }
+  // Authed — show dashboard
   document.getElementById('authOverlay').style.display = 'none';
   document.getElementById('dashboard').style.display = 'block';
   document.getElementById('headerUser').textContent = profile.display_name || session.user.email;
   loadData();
 }
 
-supa.auth.onAuthStateChange(async (event, session) => {
-  if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && session?.user) {
-    await checkAuth(session);
+async function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const pass  = document.getElementById('loginPass').value;
+  const btn   = document.getElementById('loginBtn');
+  const errEl = document.getElementById('authError');
+  errEl.textContent = '';
+  if (!email || !pass) { errEl.textContent = 'Enter email and password.'; return; }
+  btn.textContent = 'SIGNING IN…'; btn.disabled = true;
+  const { data, error } = await supa.auth.signInWithPassword({ email, password: pass });
+  if (error) {
+    errEl.textContent = error.message;
+    btn.textContent = 'SIGN IN'; btn.disabled = false;
+    return;
   }
-  if (event === 'SIGNED_OUT') {
-    _authChecked = false;
+  if (!data?.session?.user) {
+    errEl.textContent = 'Sign in succeeded but no session returned.';
+    btn.textContent = 'SIGN IN'; btn.disabled = false;
+    return;
   }
-});
+  await checkAuth(data.session);
+}
 
-// Also handle case where signInWithPassword succeeds but SIGNED_IN doesn't re-fire
-// (happens when user was already signed in with same account)
+async function doLogout() {
+  await supa.auth.signOut();
+  location.reload();
+}
+
+// On page load — restore existing session if present
 (async () => {
   const { data } = await supa.auth.getSession();
   if (data?.session?.user) await checkAuth(data.session);
