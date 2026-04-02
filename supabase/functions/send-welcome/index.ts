@@ -9,6 +9,104 @@ const CORS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+function buildWelcomeEmail(name?: string): string {
+  const greeting = name ? name.split(' ')[0] : '';
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Welcome to VORTEX</title>
+</head>
+<body style="margin:0;padding:0;background:#0a0b0d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;">
+  <div style="max-width:520px;margin:40px auto;background:#0f1114;border:1px solid #1e2229;border-radius:8px;overflow:hidden;">
+
+    <!-- Header -->
+    <div style="background:#0a0b0d;padding:28px 32px;border-bottom:1px solid #1e2229;text-align:center;">
+      <div style="font-size:26px;font-weight:900;letter-spacing:6px;color:#f5a623;">⟳ VORTEX</div>
+      <div style="font-size:10px;letter-spacing:3px;color:#5a6475;margin-top:5px;">STORM INTELLIGENCE PLATFORM</div>
+    </div>
+
+    <!-- Body -->
+    <div style="padding:32px 36px;">
+      <div style="font-size:20px;font-weight:700;color:#e8edf5;margin-bottom:12px;">
+        ${greeting ? `Welcome, ${greeting}.` : 'Welcome to VORTEX.'}
+      </div>
+      <div style="font-size:14px;color:#c8d0dc;line-height:1.7;margin-bottom:28px;">
+        Your 14-day free trial is active. VORTEX is watching for severe weather at your location around the clock — even when your phone is face down and Do Not Disturb is on.
+      </div>
+
+      <!-- Features -->
+      <div style="background:#13161b;border:1px solid #1e2229;border-radius:6px;padding:20px 24px;margin-bottom:28px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#5a6475;text-transform:uppercase;margin-bottom:16px;">What's included</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;width:28px;font-size:16px;">📞</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Phone Call Alerts</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado warnings call your phone directly. Also fires if a storm is within miles of you — even across county lines.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">🔔</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Push Notifications</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">NWS warnings, watches, and rapid pressure drop alerts — all togglable in Settings.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">📊</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Storm Risk Score</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">A 0–100 danger index from real atmospheric data — CAPE, helicity, wind shear, and more. Get alerted before the NWS issues anything.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;vertical-align:top;font-size:16px;">🗺</td>
+            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Live Weather Map</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Live radar, NWS warning polygons, risk overlay, wildfires, and earthquakes — all on one screen.</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- CTA -->
+      <div style="text-align:center;margin-bottom:28px;">
+        <a href="https://vortexintel.app" style="display:inline-block;background:#f5a623;color:#000;font-weight:700;font-size:14px;letter-spacing:2px;text-decoration:none;padding:14px 36px;border-radius:4px;">
+          OPEN VORTEX →
+        </a>
+      </div>
+
+      <!-- Setup tips -->
+      <div style="font-size:12px;color:#5a6475;line-height:1.8;border-top:1px solid #1e2229;padding-top:20px;">
+        <div style="color:#c8d0dc;font-weight:600;margin-bottom:8px;">Get set up in 2 minutes:</div>
+        <div>1. Set your <strong style="color:#c8d0dc;">home location</strong> in Settings</div>
+        <div>2. Add your <strong style="color:#c8d0dc;">phone number</strong> to enable call alerts</div>
+        <div>3. Install the <strong style="color:#c8d0dc;">ntfy app</strong> and paste your channel URL for push notifications</div>
+        <div style="margin-top:10px;">📱 <strong style="color:#c8d0dc;">Install on iPhone:</strong> open vortexintel.app in Safari → Share → "Add to Home Screen"</div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div style="background:#0a0b0d;padding:16px 32px;border-top:1px solid #1e2229;text-align:center;">
+      <div style="font-size:11px;color:#5a6475;line-height:1.8;">
+        Your trial runs for 14 days. No charge until it ends.<br>
+        Cancel anytime from Settings → Manage Subscription.<br>
+        <br>
+        <a href="mailto:support@vortexintel.app" style="color:#5a6475;text-decoration:none;">support@vortexintel.app</a>
+        &nbsp;·&nbsp;
+        <a href="https://vortexintel.app" style="color:#5a6475;text-decoration:none;">vortexintel.app</a>
+        <br><br>
+        <span style="font-size:10px;letter-spacing:1px;">VORTEX INTEL LLC</span>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>`;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST')    return new Response('Method not allowed', { status: 405 });
@@ -21,47 +119,6 @@ serve(async (req) => {
     return new Response('Bad request', { status: 400 });
   }
 
-  const firstName = (name || '').split(' ')[0] || 'there';
-
-  const html = `<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"></head>
-<body style="margin:0;padding:0;background:#0a0b0d;font-family:'Courier New',monospace;">
-  <div style="max-width:480px;margin:40px auto;background:#0f1114;border:1px solid #1e2229;border-radius:8px;overflow:hidden;">
-    <div style="background:#0a0b0d;padding:28px 32px;border-bottom:1px solid #1e2229;text-align:center;">
-      <div style="font-size:28px;font-weight:900;letter-spacing:6px;color:#f5a623;">⟳ VORTEX</div>
-      <div style="font-size:11px;letter-spacing:3px;color:#5a6475;margin-top:4px;">STORM INTELLIGENCE PLATFORM</div>
-    </div>
-    <div style="padding:32px;">
-      <div style="font-size:18px;font-weight:700;letter-spacing:2px;color:#e8edf5;margin-bottom:16px;">WELCOME, ${firstName.toUpperCase()}</div>
-      <div style="font-size:13px;color:#c8d0dc;line-height:1.8;margin-bottom:24px;">
-        Your 14-day free trial is now active. You have full access to everything VORTEX has to offer:
-      </div>
-      <div style="margin-bottom:24px;">
-        <div style="font-size:12px;color:#c8d0dc;line-height:2.2;">
-          <div>⚡ <span style="color:#f5a623;font-weight:700;">Real-time NWS alerts</span> — tornado warnings delivered in under 60 seconds</div>
-          <div>🌡 <span style="color:#f5a623;font-weight:700;">Live weather map</span> — temp, wind &amp; risk overlays across the US</div>
-          <div>📍 <span style="color:#f5a623;font-weight:700;">Push notifications</span> — alerted the moment a warning hits your area</div>
-          <div>📊 <span style="color:#f5a623;font-weight:700;">Risk scoring</span> — 0–100 storm risk index updated every minute</div>
-        </div>
-      </div>
-      <div style="text-align:center;margin:28px 0;">
-        <a href="https://vortexintel.app" style="display:inline-block;background:#f5a623;color:#000;font-weight:700;font-size:14px;letter-spacing:2px;text-decoration:none;padding:13px 32px;border-radius:4px;">
-          OPEN VORTEX →
-        </a>
-      </div>
-      <div style="font-size:11px;color:#5a6475;line-height:1.7;border-top:1px solid #1e2229;padding-top:16px;">
-        <strong style="color:#c8d0dc;">Pro tip:</strong> Add VORTEX to your iPhone home screen — open <span style="color:#00d4ff;">vortexintel.app</span> in Safari, tap Share → "Add to Home Screen."<br><br>
-        Your trial runs for 14 days. No charge until it ends — cancel anytime from Settings.
-      </div>
-    </div>
-    <div style="background:#0a0b0d;padding:16px 32px;border-top:1px solid #1e2229;text-align:center;">
-      <div style="font-size:9px;color:#5a6475;letter-spacing:1px;">VORTEX STORM INTELLIGENCE · VORTEXINTEL.APP</div>
-    </div>
-  </div>
-</body>
-</html>`;
-
   try {
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -73,7 +130,7 @@ serve(async (req) => {
         from:    FROM_EMAIL,
         to:      [email],
         subject: 'Welcome to VORTEX — your trial is active',
-        html,
+        html:    buildWelcomeEmail(name),
       }),
     });
 
