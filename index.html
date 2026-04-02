@@ -996,6 +996,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
             </div>
             <label class="toggle"><input type="checkbox" id="pushWind" data-sync-group="push-wind" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
           </div>
+          <div class="notif-row" style="padding:4px 0;">
+            <div>
+              <div class="notif-label">Rapid Pressure Drop Push</div>
+              <div class="notif-sub">Push when barometric pressure drops ≥ 2 mb in 30 minutes — a real-time sign a severe storm is approaching</div>
+            </div>
+            <label class="toggle"><input type="checkbox" id="pushPressureDrop" data-sync-group="push-pressure-drop" onchange="saveUserSettings({preferences:true})"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+          </div>
         </div>
       </div>
       <div class="modal-field" id="phoneField">
@@ -2080,10 +2087,11 @@ async function loadUserSettings(userId) {
       syncToggleGroup('push-winter',          p.push_winter_enabled           ?? true);
       syncToggleGroup('push-wind',            p.push_wind_enabled             ?? true);
       syncToggleGroup('call-threshold',       p.call_threshold_enabled        ?? false);
+      syncToggleGroup('push-pressure-drop',   p.push_pressure_drop_enabled    ?? true);
       // Free users: force all Pro-gated toggles off regardless of DB state
       if (!isProUser()) {
         ['push','hue','call-tornado','call-flood','call-threshold',
-         'push-flood','push-tornado-watch','push-tstorm','push-winter','push-wind'
+         'push-flood','push-tornado-watch','push-tstorm','push-winter','push-wind','push-pressure-drop'
         ].forEach(g => syncToggleGroup(g, false));
       }
       // Show/hide DEFAULT OFF badge based on current state
@@ -2152,6 +2160,7 @@ async function saveUserSettings(updates) {
       push_winter_enabled:           document.querySelector('[data-sync-group="push-winter"]')?.checked         ?? true,
       push_wind_enabled:             document.querySelector('[data-sync-group="push-wind"]')?.checked           ?? true,
       call_threshold_enabled:        document.querySelector('[data-sync-group="call-threshold"]')?.checked      ?? false,
+      push_pressure_drop_enabled:    document.querySelector('[data-sync-group="push-pressure-drop"]')?.checked  ?? true,
       updated_at: now
     }, { onConflict: 'user_id' });
   }
