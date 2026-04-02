@@ -205,7 +205,9 @@ function isStormApproaching(userLat: number, userLon: number, alert: any): boole
   const emd: string = (alert.properties?.parameters?.eventMotionDescription || [])[0] || '';
   const degMatch = emd.match(/(\d+)\s*DEG/i);
   if (!degMatch) return true; // no bearing — assume approaching
-  const stormBearing  = parseInt(degMatch[1]);       // direction storm is heading
+  // NWS MOT bearing is the direction FROM which the storm is moving (wind convention).
+  // Add 180° to convert to the direction the storm is heading (TO bearing).
+  const stormBearing  = (parseInt(degMatch[1]) + 180) % 360;
   const bearingToUser = bearingBetween(gps.lat, gps.lon, userLat, userLon);
   const diff = Math.abs(((stormBearing - bearingToUser) + 360) % 360);
   const angleDiff = diff > 180 ? 360 - diff : diff;
