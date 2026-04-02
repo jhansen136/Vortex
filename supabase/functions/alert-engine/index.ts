@@ -468,15 +468,11 @@ serve(async (req) => {
                        : (isWind)                    ? 'wind_face,warning'
                        : 'warning';
 
-        // Use areaDesc for the body — it lists only affected counties/areas and avoids
-        // confusing users with NWS headlines that mention dozens of unrelated counties.
-        const areaBody = alert.properties.areaDesc
-          ? `Active in: ${alert.properties.areaDesc.slice(0, 180)}`
-          : (alert.properties.headline || '').slice(0, 200);
+        const homeLabel = user.home_label || 'your home location';
         toSend.push({
           key,
           title:    `⚠️ ${event}`,
-          body:     areaBody,
+          body:     `${event} is active near ${homeLabel}. Open VORTEX for details.`,
           priority,
           tags,
           event,
@@ -620,13 +616,10 @@ serve(async (req) => {
             const priority = (isTornado || isFlashFlood) ? 'max' : (isTorWatch || isTstorm) ? 'high' : 'default';
             const tags     = isTornado ? 'rotating_light,sos' : (isFlashFlood || isFlood) ? 'rain,warning' : isWinter ? 'snowflake,warning' : isWind ? 'wind_face,warning' : 'warning';
 
-            const cityAreaBody = alert.properties.areaDesc
-              ? `Active in: ${alert.properties.areaDesc.slice(0, 180)}`
-              : (alert.properties.headline || '').slice(0, 200);
             toSend.push({
               key,
               title:    `⚠️ ${event} — ${city.name}`,
-              body:     cityAreaBody,
+              body:     `${event} is active near ${city.name}. Open VORTEX for details.`,
               priority, tags,
               event,
               area:     city.name,
