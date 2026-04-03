@@ -164,10 +164,21 @@ function distToPolygonRingMiles(lat: number, lon: number, ring: number[][]): num
     }
   }
   if (inside) return 0;
-  // Outside — return min haversine distance to any vertex
+  // Outside — return min distance to any edge (not just vertices).
+  // Projecting onto the segment catches cases where the user is near
+  // the middle of an edge but far from both endpoints.
   let minDist = Infinity;
-  for (const [vLon, vLat] of ring) {
-    minDist = Math.min(minDist, haversineMiles(lat, lon, vLat, vLon));
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [aLon, aLat] = ring[j];
+    const [bLon, bLat] = ring[i];
+    // Parameterise closest point on segment AB to P using dot product.
+    // Work in a flat local coordinate space (degrees); accurate enough at these scales.
+    const dx = bLon - aLon, dy = bLat - aLat;
+    const lenSq = dx * dx + dy * dy;
+    let t = lenSq > 0 ? ((lon - aLon) * dx + (lat - aLat) * dy) / lenSq : 0;
+    t = Math.max(0, Math.min(1, t));
+    const cLon = aLon + t * dx, cLat = aLat + t * dy;
+    minDist = Math.min(minDist, haversineMiles(lat, lon, cLat, cLon));
   }
   return minDist;
 }
@@ -285,8 +296,11 @@ serve(async (req) => {
     // ── 1. Fetch all active NWS tornado + flood warnings (CONUS) ─────────────
     const eventParam = NWS_EVENTS.map(e => encodeURIComponent(e)).join(',');
     const nwsRes = await fetch(
-      `https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=${eventParam}`,
-      { headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' } }
+      `https://api.weather.gov/alerts/active?status=actual&message_type=alert,update&event=${eventParam}`,
+      {
+        headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' },
+        signal: AbortSignal.timeout(12000),
+      }
     );
     const nwsJson   = await nwsRes.json();
     const allAlerts = nwsJson.features || [];
@@ -295,7 +309,7 @@ serve(async (req) => {
     const now = new Date().toISOString();
     const { data: allUsers, error: usersErr } = await supa
       .from('profiles')
-      .select('id, display_name, home_lat, home_lng, home_fips, phone, last_threshold_call_at, subscription_status, trial_ends_at')
+      .select('id, display_name, home_lat, home_lng, home_fips, home_label, phone, last_threshold_call_at, subscription_status, trial_ends_at')
       .eq('disabled', false)
       .in('subscription_status', ['pro', 'trial']);
     // Filter out expired trials server-side
@@ -412,6 +426,9 @@ serve(async (req) => {
       const sentRecently = (key: string) => userSent.some((a: any) =>
         a.alert_key === key && new Date(a.sent_at).getTime() > Date.now() - THRESHOLD_COOLDOWN_MS
       );
+      // True if a call for this NWS alert ID is already queued in this run.
+      // Prevents double-calling when a warning is both in the user's county and within proximity radius.
+      const callAlreadyQueued = (alertId: string) => toSend.some(a => a.call && a.key === `nws:${alertId}`);
 
       // 3-hour cooldown check for threshold calls
       const lastCallAt      = user.last_threshold_call_at ? new Date(user.last_threshold_call_at).getTime() : 0;
@@ -427,7 +444,7 @@ serve(async (req) => {
         key: string; title: string; body: string;
         priority: string; tags: string;
         event?: string; area?: string;
-        call?: boolean; callType?: 'warning' | 'threshold' | 'flood';
+        call?: boolean; callType?: 'warning' | 'threshold' | 'flood' | 'proximity';
         callLocation?: string;
       };
       const toSend: AlertItem[] = [];
@@ -558,8 +575,14 @@ serve(async (req) => {
           const isFlashFlood = event === 'Flash Flood Warning';
           if (!alert.geometry) continue;
 
+          // Respect per-type call preferences for proximity calls too
+          if (isFlashFlood && pref?.call_flood_enabled !== true) continue;
+
           const proxKey = `proximity:${alert.properties.id}`;
           if (hasSent(proxKey)) continue;
+
+          // Skip if a call for this alert is already queued via county match — prevent double-call
+          if (callAlreadyQueued(alert.properties.id)) continue;
 
           const { dist, method } = distToAlertMiles(homeLat, homeLon, alert);
           if (dist > proximityMiles) continue;
@@ -670,8 +693,14 @@ serve(async (req) => {
             const isFlashFlood = event === 'Flash Flood Warning';
             if (!alert.geometry) continue;
 
+            // Respect per-type call preferences for proximity calls too
+            if (isFlashFlood && pref?.call_flood_enabled !== true) continue;
+
             const proxKey = `proximity:${alert.properties.id}:city:${city.id}`;
             if (hasSent(proxKey)) continue;
+
+            // Skip if a call for this alert is already queued via county match — prevent double-call
+            if (toSend.some(a => a.call && a.key === `nws:${alert.properties.id}:city:${city.id}`)) continue;
 
             const { dist: cityDist, method: cityMethod } = distToAlertMiles(cityLat, cityLon, alert);
             if (cityDist > proximityMiles) continue;
