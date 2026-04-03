@@ -2395,6 +2395,7 @@ function initMap(us) {
         if (wildfireData.length) renderFirePerimeters();
       }
       _zoomMoved = false;
+      saveMapPosition();
     });
   svg.call(zoom);
 
@@ -2483,7 +2484,7 @@ function initMap(us) {
     .attr('fill', 'none').attr('stroke', '#2a3a52').attr('stroke-width', '1.2').attr('d', pathGen);
   document.getElementById('mapLoadMsg').style.display = 'none';
   resizeCanvases();
-  setTimeout(zoomHome, 600);
+  setTimeout(restoreMapPosition, 600);
   if (lyr.earthquakes && earthquakeData.length) renderEarthquakes();
   if (lyr.wildfires   && wildfireData.length)   { renderWildfires(); if(wildfireData.length) renderFirePerimeters(); }
   // Signal that map is ready — triggers data load if auth already resolved
@@ -3674,6 +3675,24 @@ function drawHomePin() {
     .attr('letter-spacing', '0.5')
     .style('pointer-events', 'none').style('display', 'none')
     .text('HOME');
+}
+
+function saveMapPosition() {
+  if (!currentTransform) return;
+  const { x, y, k } = currentTransform;
+  localStorage.setItem('vortex_map_position', JSON.stringify({ x, y, k, ts: Date.now() }));
+}
+
+function restoreMapPosition() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('vortex_map_position'));
+    const FOUR_HOURS = 4 * 60 * 60 * 1000;
+    if (saved && (Date.now() - saved.ts) < FOUR_HOURS) {
+      svg.call(zoom.transform, d3.zoomIdentity.translate(saved.x, saved.y).scale(saved.k));
+      return;
+    }
+  } catch (e) { /* malformed entry — fall through */ }
+  zoomHome();
 }
 
 function zoomHome() {
