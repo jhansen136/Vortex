@@ -2618,7 +2618,7 @@ function handleMapRightClick(event) {
 const OM_PARAMS =
   'current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m' +
   '&hourly=cape,lifted_index,wind_speed_80m' +
-  '&wind_speed_unit=mph&temperature_unit=fahrenheit&forecast_days=1&timezone=auto';
+  '&wind_speed_unit=mph&temperature_unit=fahrenheit&forecast_days=1&timezone=UTC';
 
 async function fetchPointData(lat, lon) {
   try {
@@ -4390,7 +4390,7 @@ function buildPlaybarDots() {
   radarFrames.forEach((f, i) => {
     const dot = document.createElement('div');
     dot.className = 'rdr-dot' + (i === radarFrames.length - 1 ? ' live' : '');
-    dot.title = new Date(f.time * 1000).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'}) + ' CDT';
+    dot.title = new Date(f.time * 1000).toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago', timeZoneName:'short'});
     dot.onclick = () => { stopRadarPlay(); goToFrame(i); };
     container.appendChild(dot);
   });
@@ -4413,9 +4413,9 @@ function updatePlaybarUI() {
   const ts = document.getElementById('radarTimestamp');
   if (ts && radarFrames[radarFrameIdx]) {
     const d = new Date(radarFrames[radarFrameIdx].time * 1000);
-    const timeStr = d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago'});
+    const timeStr = d.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', timeZone:'America/Chicago', timeZoneName:'short'});
     const dateStr = d.toLocaleDateString('en-US', {month:'short', day:'numeric', timeZone:'America/Chicago'});
-    ts.innerHTML = isLive ? `📡 <span style="color:var(--green)">LIVE</span> &nbsp;${dateStr} ${timeStr} CDT` : `📡 ${dateStr} ${timeStr} CDT`;
+    ts.innerHTML = isLive ? `📡 <span style="color:var(--green)">LIVE</span> &nbsp;${dateStr} ${timeStr}` : `📡 ${dateStr} ${timeStr}`;
   }
   const playBtn = document.getElementById('rdrPlayBtn');
   if (playBtn) { playBtn.textContent = radarPlaying ? '⏸' : '▶'; playBtn.classList.toggle('playing', radarPlaying); }
@@ -4659,7 +4659,7 @@ function renderNWS() {
 
   nwsAlerts.forEach(feat => {
     const p   = feat.properties, ev = p.event||'', area = p.areaDesc||'';
-    const exp = p.expires ? new Date(p.expires).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'})+' CDT' : '--';
+    const exp = p.expires ? new Date(p.expires).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'}) : '--';
     const id  = p.id || `${p.event||''}__${p.areaDesc||''}`.replace(/\s+/g,'_').slice(0,60);
     const headline = (p.headline||'').replace(/^.*?(issued|until)/i,'').trim().slice(0,80);
     let cls, col, ico, lbl;
@@ -4986,10 +4986,10 @@ async function fireAlert(ev, area, col, local=false) {
   showToast(ev.includes('Warning')?'tornado':'watch', title, area.split(';')[0]);
   const pushOn = document.querySelector('[data-sync-group="push"]')?.checked;
   if (pushOn && cfg.push) {
-    const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago'});
+    const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
     sendPush({
       title:    local ? `🚨 VORTEX: ${ev} — YOUR AREA` : `VORTEX: ${ev}`,
-      body:     `${local?'🚨 YOUR AREA — ':''}${ev}\n${area.split(';')[0]}\n${time} CDT`,
+      body:     `${local?'🚨 YOUR AREA — ':''}${ev}\n${area.split(';')[0]}\n${time}`,
       priority: local ? 'urgent' : (ev.includes('Warning') ? 'urgent' : 'high'),
       tags:     local ? 'rotating_light,sos' : 'rotating_light'
     }).catch(() => {});
