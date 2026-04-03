@@ -4790,7 +4790,8 @@ function parseTornadoMotion(feat) {
   const coords   = [...emd.matchAll(/(-?\d+\.\d+),\s*(-?\d+\.\d+)/g)];
   // Parse ISO timestamp from start of string e.g. "2025-03-30T22:00:00-05:00..."
   const tsMatch  = emd.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2})/);
-  const posTime  = tsMatch ? new Date(tsMatch[1]).toLocaleTimeString('en-US', {
+  const posDate  = tsMatch ? new Date(tsMatch[1]) : null;
+  const posTime  = posDate ? posDate.toLocaleTimeString('en-US', {
     hour: '2-digit', minute: '2-digit', timeZoneName: 'short'
   }) : null;
   if (degMatch && ktMatch && coords.length) {
@@ -4804,7 +4805,8 @@ function parseTornadoMotion(feat) {
       bearing:  (motFrom + 180) % 360,
       speedMph: Math.round(parseFloat(ktMatch[1]) * 1.15078),
       confirmed,
-      posTime
+      posTime,
+      posDate
     };
   }
 
@@ -4852,8 +4854,22 @@ function renderTornadoMarkers() {
     const motion = parseTornadoMotion(feat);
     if (!motion) return;
 
-    const { lat, lon, bearing, speedMph, confirmed } = motion;
-    const pt = projection([lon, lat]);
+    const { lat, lon, bearing, speedMph, confirmed, posDate } = motion;
+
+    // Extrapolate current position forward from the NWS-recorded timestamp.
+    // NWS positions can lag real-time by several minutes; this keeps the dot
+    // aligned with where the storm actually is now. Cap at 30 min to avoid
+    // large errors if the storm changes direction or the alert is stale.
+    let curLat = lat, curLon = lon;
+    if (posDate && speedMph > 0) {
+      const elapsedMin = Math.min((Date.now() - posDate.getTime()) / 60000, 30);
+      if (elapsedMin > 0) {
+        const extrapDist = speedMph * (elapsedMin / 60);
+        [curLon, curLat] = geoProjectPoint(lat, lon, bearing, extrapDist);
+      }
+    }
+
+    const pt = projection([curLon, curLat]);
     if (!pt) return;
 
     const col = confirmed ? '#e63946' : '#f5a623';
@@ -4888,9 +4904,9 @@ function renderTornadoMarkers() {
         .text(`pos ${motion.posTime}`);
     }
 
-    // Motion vector — dashed line to 45-min projected position
+    // Motion vector — dashed line to 45-min projected position from current extrapolated position
     const dist45 = speedMph * (45 / 60);
-    const p45geo = geoProjectPoint(lat, lon, bearing, dist45);
+    const p45geo = geoProjectPoint(curLat, curLon, bearing, dist45);
     const p45    = projection(p45geo);
     if (!p45) return;
 
@@ -4902,10 +4918,10 @@ function renderTornadoMarkers() {
       .attr('stroke-dasharray', '5,3').attr('stroke-opacity', 0.8)
       .attr('pointer-events', 'none');
 
-    // Projected position dots at 15, 30, 45 min
+    // Projected position dots at 15, 30, 45 min from current extrapolated position
     [15, 30, 45].forEach((mins, i) => {
       const dist = speedMph * (mins / 60);
-      const pgeo = geoProjectPoint(lat, lon, bearing, dist);
+      const pgeo = geoProjectPoint(curLat, curLon, bearing, dist);
       const pp   = projection(pgeo);
       if (!pp) return;
       const r = i === 2 ? 5 : 4; // 45-min dot slightly larger
