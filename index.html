@@ -2053,9 +2053,15 @@ async function loadUserSettings(userId) {
     cfg.phone = userProfile.phone || '';
     updateHomeTileLabel();
     // Zoom to user's actual home location now that profile is loaded.
-    // zoomHome() was called at map-init (t=600ms) before this resolved,
-    // so it fell back to NW Arkansas. Re-run it now with real coordinates.
-    if (userProfile.home_lat && userProfile.home_lng) zoomHome();
+    // restoreMapPosition() was called at map-init (t=600ms) before this resolved.
+    // Only fall back to zoomHome() if no recent saved position exists.
+    if (userProfile.home_lat && userProfile.home_lng) {
+      try {
+        const saved = JSON.parse(localStorage.getItem('vortex_map_position'));
+        const FOUR_HOURS = 4 * 60 * 60 * 1000;
+        if (!saved || (Date.now() - saved.ts) >= FOUR_HOURS) zoomHome();
+      } catch (e) { zoomHome(); }
+    }
     // Re-run pinned city deduplication now that home_lat is known.
     // loadCitiesForView() may have run before this resolved (race), meaning
     // any pinned city at the home location wasn't filtered out yet.
