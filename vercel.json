@@ -1,12 +1,4 @@
 {
-  "functions": {
-    "api/push.js": {
-      "maxDuration": 10
-    }
-  },
-  "rewrites": [
-    { "source": "/api/push", "destination": "/api/push.js" }
-  ],
   "headers": [
     {
       "source": "/",
