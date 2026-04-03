@@ -1,0 +1,19 @@
+{
+  "name": "vortex",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test":              "playwright test",
+    "test:unauth":       "playwright test tests/e2e/landing.spec.ts tests/e2e/auth.spec.ts",
+    "test:auth":         "playwright test tests/e2e/app.spec.ts tests/e2e/map-layers.spec.ts tests/e2e/settings.spec.ts",
+    "test:ui":           "playwright test --ui",
+    "test:headed":       "playwright test --headed",
+    "test:report":       "playwright show-report",
+    "test:prod":         "PLAYWRIGHT_BASE_URL=https://vortexintel.app playwright test",
+    "test:dev":          "PLAYWRIGHT_BASE_URL=https://dev.vortexintel.app playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.44.0",
+    "serve": "^14.2.6"
+  }
+}
