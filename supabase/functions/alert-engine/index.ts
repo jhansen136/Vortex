@@ -75,7 +75,7 @@ async function fetchWeather(lat: number, lon: number) {
     `?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure` +
     `&hourly=cape,lifted_index,wind_speed_80m` +
-    `&wind_speed_unit=mph&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`
+    `&wind_speed_unit=mph&temperature_unit=fahrenheit&timezone=UTC&forecast_days=1`
   );
   const json = await res.json();
   const cur  = json.current;
@@ -302,6 +302,7 @@ serve(async (req) => {
         signal: AbortSignal.timeout(12000),
       }
     );
+    if (!nwsRes.ok) throw new Error(`NWS API error: ${nwsRes.status}`);
     const nwsJson   = await nwsRes.json();
     const allAlerts = nwsJson.features || [];
 
@@ -533,8 +534,10 @@ serve(async (req) => {
             .filter((r: any) => r.user_id === user.id)
             .sort((a: any, b: any) => new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime());
 
-          // Store new reading for next run
-          pressureInserts.push({ user_id: user.id, pressure_mb: wx.pressure_mb, recorded_at: new Date().toISOString() });
+          // Store new reading for next run (only when valid — 0 means surface_pressure was absent)
+          if (wx.pressure_mb > 0) {
+            pressureInserts.push({ user_id: user.id, pressure_mb: wx.pressure_mb, recorded_at: new Date().toISOString() });
+          }
 
           // Compare current to reading ~25-35 min ago
           const old30m = userPressureReadings.find((r: any) => {
@@ -612,6 +615,7 @@ serve(async (req) => {
       for (const city of userAlertCities) {
         const cityLat  = city.alert_lat ?? city.lat;
         const cityLon  = city.alert_lng ?? city.lng;
+        if (!cityLat || !cityLon) continue; // skip cities with no coordinates
         const cityUGC = city.alert_fips ? [city.alert_fips] : [];
 
         // NWS alerts matching this city's county (by UGC zone ID e.g. "ARC143")
