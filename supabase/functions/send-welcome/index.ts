@@ -1,7 +1,10 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY') ?? '';
-const FROM_EMAIL     = 'VORTEX <noreply@vortexintel.app>';
+const RESEND_API_KEY       = Deno.env.get('RESEND_API_KEY') ?? '';
+const SUPABASE_URL         = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+const FROM_EMAIL           = 'VORTEX <noreply@vortexintel.app>';
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -110,6 +113,17 @@ function buildWelcomeEmail(name?: string): string {
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
   if (req.method !== 'POST')    return new Response('Method not allowed', { status: 405 });
+
+  // Verify caller is an authenticated user
+  const authHeader = req.headers.get('authorization') || '';
+  if (!authHeader.startsWith('Bearer ')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: CORS });
+  }
+  const supa = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  const { data: { user }, error: authErr } = await supa.auth.getUser(authHeader.replace('Bearer ', ''));
+  if (authErr || !user) {
+    return new Response(JSON.stringify({ error: 'Invalid session' }), { status: 401, headers: CORS });
+  }
 
   let email: string, name: string;
   try {

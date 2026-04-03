@@ -53,7 +53,8 @@ async function fetchWeather(lat: number, lon: number) {
     `?latitude=${lat}&longitude=${lon}` +
     `&current=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m,wind_gusts_10m,surface_pressure` +
     `&hourly=cape,lifted_index,wind_speed_80m` +
-    `&wind_speed_unit=mph&temperature_unit=fahrenheit&timezone=auto&forecast_days=1`
+    `&wind_speed_unit=mph&temperature_unit=fahrenheit&timezone=UTC&forecast_days=1`,
+    { signal: AbortSignal.timeout(15000) }
   );
   if (!res.ok) throw new Error(`Open-Meteo ${res.status}: ${await res.text()}`);
   const json = await res.json();
@@ -129,10 +130,11 @@ serve(async (req) => {
       const lon = u.home_lng ?? FALLBACK_LON;
       return `${lat.toFixed(2)},${lon.toFixed(2)}`;
     });
-    const cityLocKeys = (alertCities || []).map((c: any) => {
+    const cityLocKeys = (alertCities || []).flatMap((c: any) => {
       const lat = c.alert_lat ?? c.lat;
       const lon = c.alert_lng ?? c.lng;
-      return `${lat.toFixed(2)},${lon.toFixed(2)}`;
+      if (!lat || !lon) return [];
+      return [`${lat.toFixed(2)},${lon.toFixed(2)}`];
     });
     const uniqueLocations = [...new Set([...homeLocKeys, ...cityLocKeys])];
     results.locations = uniqueLocations.length;

@@ -8,9 +8,10 @@ const TWILIO_TOKEN         = Deno.env.get('TWILIO_AUTH_TOKEN')  || '';
 const TWILIO_FROM          = Deno.env.get('TWILIO_FROM_NUMBER') || '';
 const TWILIO_AUDIO_URL     = Deno.env.get('TWILIO_ALERT_AUDIO_URL') || '';
 
-// Rate limit: 1 test call per user per 5 minutes
+// Rate limit: 1 test call per user per 5 minutes, max 3 per day
 const TEST_CALL_COOLDOWN_MS = 5 * 60 * 1000;
 const TEST_CALL_KEY = 'test-call';
+const TEST_CALL_DAILY_CAP = 3;
 
 const CORS = {
   'Access-Control-Allow-Origin':  '*',
@@ -67,14 +68,24 @@ serve(async (req) => {
     });
   }
 
-  // Get phone from request body, fall back to profile
-  let phone = '';
-  try {
-    const body = await req.json();
-    phone = (body.phone || '').trim();
-  } catch { /* no body */ }
+  // Daily cap — max 3 test calls per day
+  const dayStart = new Date();
+  dayStart.setUTCHours(0, 0, 0, 0);
+  const { count: todayCount } = await supa
+    .from('sent_alerts')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+    .eq('alert_key', TEST_CALL_KEY)
+    .gte('sent_at', dayStart.toISOString());
 
-  if (!phone) phone = (profile?.phone || '').trim();
+  if ((todayCount ?? 0) >= TEST_CALL_DAILY_CAP) {
+    return new Response(JSON.stringify({ error: `Test call limit reached (${TEST_CALL_DAILY_CAP}/day). Resets at midnight UTC.` }), {
+      status: 429, headers: { ...CORS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Always use the phone number from the user's profile — never trust client-supplied numbers
+  const phone = (profile?.phone || '').trim();
 
   if (!phone) {
     return new Response(JSON.stringify({ error: 'No phone number on file. Add one in Settings first.' }), {

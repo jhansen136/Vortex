@@ -296,7 +296,7 @@ serve(async (req) => {
     // ── 1. Fetch all active NWS tornado + flood warnings (CONUS) ─────────────
     const eventParam = NWS_EVENTS.map(e => encodeURIComponent(e)).join(',');
     const nwsRes = await fetch(
-      `https://api.weather.gov/alerts/active?status=actual&message_type=alert,update&event=${eventParam}`,
+      `https://api.weather.gov/alerts/active?status=actual&message_type=alert&event=${eventParam}`,
       {
         headers: { 'User-Agent': 'VORTEX Storm Intelligence (support@vortexintel.app)' },
         signal: AbortSignal.timeout(12000),

@@ -43,11 +43,14 @@ serve(async (req) => {
     });
   }
 
-  // Return URL — where Stripe sends the user after they leave the portal
+  // Return URL — where Stripe sends the user after they leave the portal.
+  // Restrict to vortexintel.app to prevent open redirect via crafted request body.
   let returnUrl = 'https://vortexintel.app';
   try {
     const body = await req.json();
-    if (body.return_url) returnUrl = body.return_url;
+    if (body.return_url && String(body.return_url).startsWith('https://vortexintel.app')) {
+      returnUrl = body.return_url;
+    }
   } catch { /* no body */ }
 
   try {

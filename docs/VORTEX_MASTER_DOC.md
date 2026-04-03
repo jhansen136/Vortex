@@ -114,6 +114,7 @@ Once installed, VORTEX behaves like a native app — full screen, home screen ic
 - Pressure drop push alerts (default on, user-configurable)
 - Philips Hue integration (beta)
 - Multi-city alert monitoring
+- Alert history log (last 30 days)
 - Background alerting runs 24/7 regardless of app state
 
 **Billing is handled via Stripe.** Users can manage, upgrade, downgrade, or cancel directly from the app's Settings panel via the Stripe Customer Portal. Cancellation takes effect immediately — Pro reverts to Free in real time via Stripe webhook.
@@ -128,8 +129,9 @@ The VORTEX map is the primary interface. It displays:
 - **Temperature overlay** — surface temperature across the US
 - **Wind overlay** — current surface wind speed
 - **Risk Score overlay** — color-coded risk intensity by region
-- **Active NWS alerts** — warning polygons rendered on the map as they are issued
-- **Wildfire layer** — active fire perimeters from NASA FIRMS and USFS
+- **Active NWS alerts** — warning polygons rendered on the map as they are issued, updated in real time as NWS issues or modifies them
+- **Tornado position & trajectory** — when a Tornado Warning includes GPS storm coordinates, a pulsing dot marks the storm's current position with projected path dots at 15, 30, and 45 minutes ahead based on NWS-reported heading and speed
+- **Wildfire layer** — active fire locations and perimeters from NIFC (National Interagency Fire Center) via ArcGIS
 - **Earthquake layer** — recent seismic events from USGS
 
 ### Home Location & Pinned Cities
@@ -147,6 +149,9 @@ Tapping any location opens a weather detail panel showing:
 - Dewpoint
 - Surface pressure
 - Calculated Risk Score (0–100)
+
+### Alert History
+The Settings panel includes an **Alert History** section showing the last 30 days of alerts delivered to the user — event type, area, whether a push and/or call was sent, and timestamp.
 
 ### Philips Hue Integration (Beta)
 VORTEX can trigger Philips Hue smart lights on alert events. Integration is configured in Settings. Currently in beta — behavior and color patterns are being finalized.
@@ -167,7 +172,7 @@ Background alerting is a **Pro-only feature**. Free users are skipped entirely b
 Phone calls are made via Twilio. The call plays an alert tone (when configured) followed by a text-to-speech voice message read twice — the second repetition helps bypass iOS Do Not Disturb repeated-call logic.
 
 **Tornado Warning Call**
-Triggered when the NWS issues a Tornado Warning that includes the user's home location or an alert-enabled pinned city (matched by FIPS county code). Call fires once per active warning event. If the warning is updated or extended, no second call is placed.
+Triggered when the NWS issues a Tornado Warning that includes the user's home location or an alert-enabled pinned city (matched by NWS UGC zone ID — e.g., `ARC143`). Call fires once per NWS alert ID. Each NWS issuance and continuation carries a unique alert ID, so an updated or extended warning may generate a new call if NWS assigns it a new identifier.
 
 Voice message: *"This is an emergency alert from Vortex Storm Intelligence. A tornado warning is active near [location]. Open the Vortex app immediately."*
 
@@ -180,8 +185,12 @@ Voice message: *"This is an emergency alert from Vortex Storm Intelligence. A fl
 The proximity alert is VORTEX's most distinctive feature. It scans **all active tornado and flash flood warnings within the user's configured radius** — regardless of county lines. A tornado in a neighboring county, 3 miles away and heading toward you, triggers this call even if your county is not under a warning.
 
 Two conditions must both be true before the call fires:
-1. **Distance** — the storm (using NWS GPS coordinates when available, or warning polygon edge as fallback) is within the user's proximity radius (configurable: 1, 3, 5, or 10 miles — default 5)
+1. **Distance** — the storm (using NWS GPS coordinates when available, or warning polygon edge distance as fallback) is within the user's proximity radius (configurable: 1, 3, 5, or 10 miles — default 5)
 2. **Direction** — the storm's heading is within 90° of the bearing toward the user. Storms moving away or parallel are suppressed.
+
+**Note on Flash Flood proximity calls:** Flash flood proximity calls require the user to have explicitly enabled flood calls (`call_flood_enabled = true`). Tornado proximity calls fire by default when proximity alerts are enabled.
+
+**Note on double-call prevention:** If a warning is already in the user's county (triggering a county-match call), a proximity call for the same alert is suppressed in the same engine run to prevent two calls for the same event.
 
 When GPS data is available from NWS, the call states the actual distance: *"The tornado is 3 miles from your home and approaching."*
 
@@ -189,7 +198,7 @@ When only polygon data is available: *"A tornado warning is within 5 miles of yo
 
 Voice message: *"This is an urgent alert from Vortex Storm Intelligence. A severe weather system is now within your proximity alert radius near [location]. Take cover immediately and open the Vortex app."*
 
-**Daily Call Cap: 5 calls per day.** Once the cap is reached, VORTEX sends a push notification instead of calling for any additional events that day. The cap resets at midnight.
+**Daily Call Cap: 5 calls per day.** Once the cap is reached, VORTEX sends a push notification instead of calling for any additional events that day. The cap resets at UTC midnight.
 
 **Call cooldown:** 3 hours between proximity calls per user. NWS warning calls are deduplicated per warning event ID (not time-based).
 
@@ -279,7 +288,7 @@ The Risk Score (0–100) is VORTEX's composite atmospheric danger index. It is c
 - Wind shear is calculated as the difference between 80m wind speed and 10m wind speed, scaled by 1.5, plus a base shear contribution from surface wind.
 - The Risk Score is **identical** on the client (app) and the server (alert engine and pre-warm job). The same constants and formula are used in all three places, kept in sync intentionally.
 - The Risk Score reflects **forecast model conditions**, not instantaneous sensor readings. Open-Meteo updates hourly from the HRRR model. During fast-moving events, NWS warning alerts are the more reliable real-time signal.
-- Although the engine recalculates the Risk Score every minute, the underlying weather inputs (CAPE, wind shear, lifted index, etc.) only change when the model updates — approximately once per hour. From a user's perspective, the score is effectively **hourly**. The 30-second recalculation interval exists so the displayed value stays fresh if the cache is updated mid-session, not because the inputs change that frequently.
+- Although the engine recalculates the Risk Score every minute, the underlying weather inputs (CAPE, wind shear, lifted index, etc.) only change when the model updates — approximately once per hour. From a user's perspective, the score is effectively **hourly**. The app refreshes the displayed score every 30 seconds so it stays current if the cache is updated mid-session, but the inputs themselves only change at model cycle boundaries.
 - Push threshold is user-configurable from 65–100. Scores below 65 cannot be set as a trigger threshold to reduce false-alarm fatigue.
 
 ---
@@ -288,16 +297,18 @@ The Risk Score (0–100) is VORTEX's composite atmospheric danger index. It is c
 
 | Data | Source | Notes |
 |---|---|---|
-| NWS Warnings & Watches | api.weather.gov | Official National Weather Service API. Covers all warning types. Polygon geometry and storm motion data included. |
+| NWS Warnings & Watches | api.weather.gov | Official National Weather Service API. Covers all warning types. Polygon geometry and storm motion data included. Both original issuances and continuations/updates are fetched. |
 | Atmospheric Data (CAPE, wind, humidity, pressure, etc.) | Open-Meteo | Free tier: 10,000 API calls/day. HRRR model, updated ~hourly. |
 | Radar | NEXRAD via Iowa Environmental Mesonet (Iowa State) | Composite reflectivity tiles. Updated every ~2 minutes. |
 | Earthquakes | USGS Earthquake Hazards Program | Recent seismic events, updated every 5 minutes. |
-| Wildfires | NASA FIRMS / USFS | Active fire perimeters. Updated every 5 minutes in the app. |
+| Wildfires | NIFC (National Interagency Fire Center) via ArcGIS | Active fire locations and perimeters. Updated every 5 minutes in the app. |
 
 ### Notes on NWS Data Quality
 - NWS provides **GPS storm coordinates** via the `eventMotionDescription` parameter when a storm is being actively tracked. VORTEX uses these when available for precise proximity calculations.
-- When GPS is not available, VORTEX falls back to the **warning polygon geometry** for distance calculation using a ray-casting point-in-polygon algorithm.
-- Storm heading is parsed from the `eventMotionDescription` bearing field (e.g., "270 DEG"). If no bearing is available, VORTEX conservatively assumes the storm is approaching.
+- When GPS is not available, VORTEX falls back to the **warning polygon geometry** for distance calculation. Distance is measured to the nearest polygon edge (not just vertices) for accuracy.
+- Storm heading is parsed from the `eventMotionDescription` bearing field. **Important:** NWS reports bearing as the direction FROM which the storm is moving (meteorological wind convention — e.g., `251 DEG` means the storm came from WSW and is heading ENE). VORTEX reverses this to get the actual direction of travel before projecting position dots or checking approach direction.
+- If no bearing is available, VORTEX conservatively assumes the storm is approaching.
+- The **frontend** fetches both `message_type=alert` and `message_type=update` from the NWS API so warning polygons remain visible on the map when NWS issues a continuation or extension. The **alert engine** fetches only `message_type=alert` (original issuances) — this prevents duplicate calls when NWS internally extends an active warning under a new ID, since the user was already notified on the original issuance.
 
 ### Notes on Open-Meteo Data Quality
 - Open-Meteo provides **model forecast data**, not real-time sensor data. CAPE, lifted index, and 80m wind speed are hourly forecast values from the HRRR model.
@@ -318,7 +329,7 @@ The Risk Score (0–100) is VORTEX's composite atmospheric danger index. It is c
 | Open-Meteo surface conditions (temp, humidity, wind, pressure) | Every few minutes (current observations) |
 | NEXRAD radar | Every 2–6 minutes depending on radar site and tilt |
 | USGS earthquakes | Near real-time (seconds to minutes post-event) |
-| NASA wildfires | Varies — satellite passes every few hours |
+| NIFC wildfires | Varies — updated periodically throughout the day |
 
 ### App Refresh Rates (how often VORTEX fetches new data)
 
@@ -348,7 +359,7 @@ The alert engine is a Supabase Edge Function (`alert-engine`) triggered every mi
 ### What happens on each run:
 
 **Step 1 — Fetch all active NWS alerts (CONUS)**
-A single API call to `api.weather.gov/alerts/active` fetches all current tornado warnings, tornado watches, severe thunderstorm warnings, flash flood warnings, flood warnings, winter storm warnings, blizzard warnings, ice storm warnings, high wind warnings, and extreme wind warnings across the continental US.
+A single API call to `api.weather.gov/alerts/active` fetches all current tornado warnings, tornado watches, severe thunderstorm warnings, flash flood warnings, flood warnings, winter storm warnings, blizzard warnings, ice storm warnings, high wind warnings, and extreme wind warnings across the continental US. Both `message_type=alert` (original issuances) and `message_type=update` (NWS continuations and updates) are included so the engine sees the full current picture. A 12-second timeout is enforced; if NWS is unresponsive, the run aborts cleanly.
 
 **Step 2 — Load active Pro/trial users**
 The engine loads all non-disabled users with `subscription_status` of `pro` or `trial`. Expired trials are filtered out in real time (server compares `trial_ends_at` to current timestamp). Free users are never processed.
@@ -359,10 +370,10 @@ For all active users, the engine fetches in parallel:
 - Integrations (ntfy URL, Hue config, phone number)
 - Preferences (which alert types are enabled per user)
 - Alert-enabled pinned cities
-- Recent pressure readings (last 45 minutes, for pressure drop detection)
+- Recent pressure readings (last 60 minutes, for pressure drop detection)
 
 **Step 4 — Load sent_alerts (deduplication)**
-The engine fetches all alerts sent to all users in the last 48 hours. This is used to suppress duplicate notifications — the same NWS alert ID will never trigger twice per user.
+The engine fetches all alerts sent to all users in the last 48 hours. This is used to suppress duplicate notifications — the same NWS alert ID will never trigger twice per user within that window.
 
 **Step 5 — Weather cache lookup**
 For every unique user location (home + alert cities), the engine reads from the Supabase `weather_cache` table. If a cached entry is < 60 minutes old, it is used directly. If stale or missing (e.g., new user added after the last pre-warm run), the engine falls back to a live Open-Meteo fetch and writes the result back to cache.
@@ -370,11 +381,11 @@ For every unique user location (home + alert cities), the engine reads from the 
 **Step 6 — Process each user**
 For each user, the engine evaluates:
 
-- **NWS warning alerts**: Matches alerts to the user's county FIPS code. For each matching alert not already sent, checks user preferences and queues a push notification and/or call.
+- **NWS warning alerts**: Matches alerts to the user's NWS UGC zone ID (e.g., `ARC143` for Washington County, AR). For each matching alert not already sent, checks user preferences and queues a push notification and/or call.
 - **Risk Score threshold**: If no active tornado/flood warning, calculates the risk score from cached weather data. If it meets or exceeds the user's threshold and is not in cooldown, queues a push.
-- **Pressure drop**: Compares current pressure to the reading 25–35 minutes prior. If drop ≥ 2.0 mb and not in cooldown, queues a push.
-- **Proximity alert**: For all tornado/flood warnings within the user's radius, checks actual distance (using GPS or polygon) and storm heading. If within range and approaching, queues a call.
-- **Alert-enabled pinned cities**: Repeats the NWS alert check for each of the user's alert-enabled cities.
+- **Pressure drop**: Compares current pressure to the reading 25–35 minutes prior. If drop ≥ 2.0 mb and not in cooldown, queues a push. Only valid pressure readings (> 0 mb) are stored and compared.
+- **Proximity alert**: For all tornado/flood warnings within the user's radius, checks actual distance (using GPS or polygon edge distance) and storm heading. If within range and approaching, queues a call. A proximity call is suppressed if a county-match call for the same alert is already queued in the same run (prevents double-calling).
+- **Alert-enabled pinned cities**: Repeats the NWS alert check and proximity check for each of the user's alert-enabled cities.
 
 **Step 7 — Batch write**
 All new alerts, history entries, profile updates, and pressure readings are written to Supabase in a single batched operation at the end of the run. Notifications and calls are fired before the batch write.
@@ -383,7 +394,7 @@ All new alerts, history entries, profile updates, and pressure readings are writ
 The alert engine is protected by a `CRON_SECRET` environment variable stored in Supabase secrets. QStash passes this as a Bearer token on every request. The function validates the secret before doing any work.
 
 ### Fallback Location
-If a user has not set a home location, the engine uses a fallback in NW Arkansas (lat 36.08, lon -94.20) — the region where VORTEX was built and tested.
+If a user has not set a home location, the engine uses a fallback coordinate in NW Arkansas (lat 36.08, lon -94.20). For NWS alert matching, it also uses a UGC zone fallback covering five NW Arkansas counties: `['ARC007', 'ARC143', 'ARC087', 'ARC015', 'ARC009']` (Benton, Washington, Madison, Carroll, Boone). This ensures users without a home location still receive alerts for the region where VORTEX was built and is most actively tested.
 
 ---
 
@@ -418,14 +429,15 @@ The pre-warm job is a separate Supabase Edge Function (`weather-prewarm`) that r
 
 ### Database (Supabase PostgreSQL)
 Key tables:
-- `profiles` — user account data, home location, subscription status, Stripe customer ID
+- `profiles` — user account data, home location (lat/lng/label/UGC zone ID), subscription status, Stripe customer ID
 - `thresholds` — per-user alert settings (risk threshold, proximity radius)
 - `preferences` — per-user toggle states (which alert types are on/off)
 - `integrations` — per-user ntfy URL, phone number, Hue config
-- `user_cities` — pinned cities with alert-enabled flag
+- `user_cities` — pinned cities with alert-enabled flag and UGC zone ID
 - `sent_alerts` — deduplication log (user_id, alert_key, sent_at)
+- `alert_history` — user-facing alert history (last 30 days; event, area, push/call flags, timestamp)
 - `weather_cache` — cached Open-Meteo data keyed by `lat.toFixed(2),lon.toFixed(2)`
-- `pressure_readings` — per-user barometric pressure history (last 45 min retained)
+- `pressure_readings` — per-user barometric pressure history (last 60 minutes retained)
 
 ### Edge Functions
 | Function | Purpose | Auth |
@@ -523,7 +535,6 @@ This feature is gated on subscriber volume — the commercial API cost is only j
 
 **Additional Roadmap Items Under Consideration**
 - Hue light patterns finalized and out of beta
-- Watch/warning history log in the app
 - Household sharing (multiple phones on one subscription)
 - B2B / multi-location plans for businesses
 

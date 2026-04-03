@@ -4963,9 +4963,10 @@ function rescaleTornadoMarkers(k) {
   gWarn.selectAll('.tornado-motion-line').attr('stroke-width', 1.5 * s)
     .attr('stroke-dasharray', `${5*s},${3*s}`);
 }
-// The ntfy topic URL is stored in Supabase integrations table.
-// For higher security, restrict the ntfy topic to "publish-only"
-// in the ntfy.sh dashboard so only you can subscribe.
+// Push notifications are sent directly to the user's own ntfy channel URL.
+// Each user configures their own channel — the URL is their own credential.
+// For protection against unwanted publishers, users should set their ntfy
+// topic to "publish-only" access in the ntfy.sh dashboard.
 // ══════════════════════════════════════════════════════════
 async function sendPush({ title, body, priority = 'high', tags = 'rotating_light' }) {
   if (!cfg.push) return;
@@ -4984,16 +4985,9 @@ async function sendPush({ title, body, priority = 'high', tags = 'rotating_light
 async function fireAlert(ev, area, col, local=false) {
   const title = local ? `🚨 YOUR AREA: ${ev}` : ev;
   showToast(ev.includes('Warning')?'tornado':'watch', title, area.split(';')[0]);
-  const pushOn = document.querySelector('[data-sync-group="push"]')?.checked;
-  if (pushOn && cfg.push) {
-    const time = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',timeZone:'America/Chicago',timeZoneName:'short'});
-    sendPush({
-      title:    local ? `🚨 VORTEX: ${ev} — YOUR AREA` : `VORTEX: ${ev}`,
-      body:     `${local?'🚨 YOUR AREA — ':''}${ev}\n${area.split(';')[0]}\n${time}`,
-      priority: local ? 'urgent' : (ev.includes('Warning') ? 'urgent' : 'high'),
-      tags:     local ? 'rotating_light,sos' : 'rotating_light'
-    }).catch(() => {});
-  }
+  // ntfy push is intentionally NOT sent here — the alert engine handles all push
+  // notifications server-side every minute. Sending from the browser too would
+  // cause duplicate notifications whenever the app is open.
   const hueOn   = document.querySelector('[data-sync-group="hue"]')?.checked;
   if (hueOn && cfg.hueIP) hueFlash(col);
   const audioOn = document.querySelector('[data-sync-group="audio"]')?.checked;

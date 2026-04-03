@@ -58,6 +58,14 @@ serve(async (req) => {
           }
         }
 
+        // Check current status before updating — Stripe may retry this webhook,
+        // and we only want to send the welcome email on the first activation.
+        const { data: existing } = await supa.from('profiles')
+          .select('subscription_status')
+          .eq('id', userId)
+          .single();
+        const alreadyPro = existing?.subscription_status === 'pro';
+
         await supa.from('profiles').update({
           subscription_status: 'pro',
           stripe_customer_id:  customerId,
@@ -65,7 +73,7 @@ serve(async (req) => {
           plan_interval:       planInterval,
         }).eq('id', userId);
 
-        await sendWelcomeEmail(customerEmail);
+        if (!alreadyPro) await sendWelcomeEmail(customerEmail);
         console.log(`[stripe-webhook] Activated Pro for ${customerEmail} (customer: ${customerId})`);
         break;
       }
@@ -91,9 +99,11 @@ serve(async (req) => {
         const status     = sub.status;
 
         let newStatus: string | null = null;
-        if (status === 'active' || status === 'trialing') {
+        if (status === 'active' || status === 'trialing' || status === 'past_due') {
+          // past_due = payment failed but Stripe is still retrying — keep access during grace period
           newStatus = 'pro';
-        } else if (status === 'past_due' || status === 'canceled' || status === 'unpaid') {
+        } else if (status === 'canceled' || status === 'unpaid') {
+          // canceled = explicitly ended; unpaid = Stripe gave up retrying
           newStatus = 'free';
         }
 
@@ -109,16 +119,15 @@ serve(async (req) => {
         break;
       }
 
-      // ── Invoice payment failed → flag past_due ────────────────────────────
+      // ── Invoice payment failed → log only, do NOT downgrade yet ─────────
+      // Stripe retries failed payments multiple times before marking a subscription
+      // as 'canceled' or 'unpaid'. The subscription.updated handler covers the
+      // final downgrade when Stripe gives up. Downgrading here would strip access
+      // on the very first retry attempt.
       case 'invoice.payment_failed': {
         const invoice    = event.data.object as Stripe.Invoice;
         const customerId = invoice.customer as string;
-
-        await supa.from('profiles')
-          .update({ subscription_status: 'free' })
-          .eq('stripe_customer_id', customerId);
-
-        console.log(`[stripe-webhook] Payment failed — reverted to free for customer ${customerId}`);
+        console.log(`[stripe-webhook] Payment failed for customer ${customerId} — Stripe will retry, no status change`);
         break;
       }
 
