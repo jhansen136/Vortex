@@ -73,7 +73,10 @@ serve(async (req) => {
           plan_interval:       planInterval,
         }).eq('id', userId);
 
-        if (!alreadyPro) await sendWelcomeEmail(customerEmail);
+        if (!alreadyPro) {
+          const { data: profile } = await supa.from('profiles').select('display_name').eq('id', userId).single();
+          await sendWelcomeEmail(customerEmail, profile?.display_name ?? undefined);
+        }
         console.log(`[stripe-webhook] Activated Pro for ${customerEmail} (customer: ${customerId})`);
         break;
       }
@@ -180,7 +183,7 @@ function buildWelcomeEmail(name?: string): string {
             <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;width:28px;font-size:16px;">📞</td>
             <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
               <div style="font-size:13px;font-weight:600;color:#f5a623;">Phone Call Alerts</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado warnings call your phone directly. Also fires if a storm is within miles of you — even across county lines.</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado and flash flood warnings call your phone directly — even when it's face down and Do Not Disturb is on. Proximity alerts also call you when a tornado is tracking toward your location and you're outside the warning area.</div>
             </td>
           </tr>
           <tr>
@@ -198,10 +201,31 @@ function buildWelcomeEmail(name?: string): string {
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 0;vertical-align:top;font-size:16px;">🗺</td>
-            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">🗺</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
               <div style="font-size:13px;font-weight:600;color:#f5a623;">Live Weather Map</div>
               <div style="font-size:12px;color:#5a6475;margin-top:2px;">Live radar, NWS warning polygons, risk overlay, wildfires, and earthquakes — all on one screen.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">📍</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Multi-Location Monitoring</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Monitor home plus up to 3 additional cities, each with independent background alerting running 24/7.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">🕐</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Alert History</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">A full log of every alert sent to you — event type, area, push and call status — for the last 30 days. Find it in Settings.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;vertical-align:top;font-size:16px;">💡</td>
+            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Philips Hue Integration (Beta)</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Trigger your smart lights on severe weather alerts. Configure in Settings.</div>
             </td>
           </tr>
         </table>

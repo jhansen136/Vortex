@@ -51,10 +51,17 @@ function buildWelcomeEmail(name?: string): string {
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 0;vertical-align:top;font-size:16px;">📊</td>
-            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">📊</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
               <div style="font-size:13px;font-weight:600;color:#f5a623;">Storm Risk Score</div>
               <div style="font-size:12px;color:#5a6475;margin-top:2px;">A 0–100 atmospheric danger index calculated from real data — see how dangerous conditions are before the NWS issues anything.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;vertical-align:top;font-size:16px;">🌡</td>
+            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Weather Detail Panel</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tap anywhere on the map for a full atmospheric breakdown — temperature, humidity, wind, CAPE, helicity, wind shear, lifted index, dewpoint, and surface pressure.</div>
             </td>
           </tr>
         </table>
@@ -95,7 +102,7 @@ function buildWelcomeEmail(name?: string): string {
           <tr>
             <td style="padding:8px 0;vertical-align:top;font-size:16px;">💡</td>
             <td style="padding:8px 0 8px 10px;vertical-align:top;">
-              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Philips Hue Integration</div>
+              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Philips Hue Integration (Beta)</div>
               <div style="font-size:12px;color:#5a6475;margin-top:2px;">Trigger your smart lights on severe weather alerts. Configure in Settings.</div>
             </td>
           </tr>
