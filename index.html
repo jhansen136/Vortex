@@ -3478,6 +3478,7 @@ function isHomeCity(c) {
 
 // rAF-debounced rescale — batches all per-frame zoom events into one DOM pass
 let rescaleRafId = null, pendingK = 1, _prevTornadoK = null;
+let _tornadoAnimState = [], _tornadoAnimRafId = null;
 function scheduleRescale(k) {
   pendingK = k;
   if (rescaleRafId) return;
@@ -4882,7 +4883,9 @@ function geoProjectPoint(lat, lon, bearingDeg, distanceMiles) {
 
 function renderTornadoMarkers() {
   if (!gWarn || !projection) return;
-  // Clear previous markers
+  // Clear previous markers and stop any running position animation
+  if (_tornadoAnimRafId) { cancelAnimationFrame(_tornadoAnimRafId); _tornadoAnimRafId = null; }
+  _tornadoAnimState = [];
   gWarn.selectAll('.tornado-marker').remove();
 
   nwsAlerts.forEach(feat => {
@@ -4911,7 +4914,7 @@ function renderTornadoMarkers() {
     const col = confirmed ? '#e63946' : '#f5a623';
 
     // Glow
-    gWarn.append('circle')
+    const glowEl = gWarn.append('circle')
       .attr('class', 'tornado-marker tornado-loc-glow')
       .attr('cx', pt[0]).attr('cy', pt[1])
       .attr('data-base-r', 14)
@@ -4919,7 +4922,7 @@ function renderTornadoMarkers() {
       .attr('pointer-events', 'none');
 
     // Dot
-    gWarn.append('circle')
+    const dotEl = gWarn.append('circle')
       .attr('class', 'tornado-marker tornado-loc-dot')
       .attr('cx', pt[0]).attr('cy', pt[1])
       .attr('data-base-r', 7)
@@ -4945,6 +4948,9 @@ function renderTornadoMarkers() {
     const p45geo = geoProjectPoint(curLat, curLon, bearing, dist45);
     const p45    = projection(p45geo);
     if (!p45) return;
+
+    // Register dot + glow for real-time position animation along the track
+    _tornadoAnimState.push({ dotEl, glowEl, x0: pt[0], y0: pt[1], x1: p45[0], y1: p45[1], renderTime: Date.now() });
 
     gWarn.append('line')
       .attr('class', 'tornado-marker tornado-motion-line')
@@ -4982,6 +4988,23 @@ function renderTornadoMarkers() {
 
   // Apply current zoom scale immediately
   if (currentTransform) rescaleTornadoMarkers(currentTransform.k);
+
+  // Start real-time position animation for any active markers
+  if (_tornadoAnimState.length > 0) {
+    _tornadoAnimRafId = requestAnimationFrame(_tornadoAnimTick);
+  }
+}
+
+function _tornadoAnimTick() {
+  const now = Date.now();
+  _tornadoAnimState.forEach(({ dotEl, glowEl, x0, y0, x1, y1, renderTime }) => {
+    const t  = Math.min(1, Math.max(0, (now - renderTime) / (45 * 60 * 1000)));
+    const cx = x0 + (x1 - x0) * t;
+    const cy = y0 + (y1 - y0) * t;
+    dotEl.attr('cx', cx).attr('cy', cy);
+    glowEl.attr('cx', cx).attr('cy', cy);
+  });
+  _tornadoAnimRafId = requestAnimationFrame(_tornadoAnimTick);
 }
 
 function rescaleTornadoMarkers(k) {
