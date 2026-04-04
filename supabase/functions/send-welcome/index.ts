@@ -36,39 +36,53 @@ function buildWelcomeEmail(name?: string): string {
         ${greeting ? `Welcome, ${greeting}.` : 'Welcome to VORTEX.'}
       </div>
       <div style="font-size:14px;color:#c8d0dc;line-height:1.7;margin-bottom:28px;">
-        Your 14-day free trial is active. VORTEX is watching for severe weather at your location around the clock — even when your phone is face down and Do Not Disturb is on.
+        Your free account is ready. You have access to the live weather map, real-time radar, NWS warning overlays, wildfire tracking, and earthquake data — all in one place.
       </div>
 
-      <!-- Features -->
-      <div style="background:#13161b;border:1px solid #1e2229;border-radius:6px;padding:20px 24px;margin-bottom:28px;">
-        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#5a6475;text-transform:uppercase;margin-bottom:16px;">What's included</div>
+      <!-- What you have -->
+      <div style="background:#13161b;border:1px solid #1e2229;border-radius:6px;padding:20px 24px;margin-bottom:20px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#5a6475;text-transform:uppercase;margin-bottom:16px;">Your free account includes</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;width:28px;font-size:16px;">🗺</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Live Weather Map</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Live radar, NWS warning polygons, risk overlay, wildfires, and earthquakes — all on one screen.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;vertical-align:top;font-size:16px;">📊</td>
+            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#f5a623;">Storm Risk Score</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">A 0–100 atmospheric danger index calculated from real data — see how dangerous conditions are before the NWS issues anything.</div>
+            </td>
+          </tr>
+        </table>
+      </div>
+
+      <!-- Pro upsell -->
+      <div style="background:#13161b;border:1px solid #2a2f3a;border-radius:6px;padding:20px 24px;margin-bottom:28px;">
+        <div style="font-size:10px;font-weight:700;letter-spacing:2px;color:#f5a623;text-transform:uppercase;margin-bottom:16px;">Unlock with Pro — start a free trial in the app</div>
         <table style="width:100%;border-collapse:collapse;">
           <tr>
             <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;width:28px;font-size:16px;">📞</td>
             <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
-              <div style="font-size:13px;font-weight:600;color:#f5a623;">Phone Call Alerts</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado warnings call your phone directly. Also fires if a storm is within miles of you — even across county lines.</div>
+              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Phone Call Alerts</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado warnings call your phone directly — even when it's face down and Do Not Disturb is on. Also fires when a storm is within miles of you, even across county lines.</div>
             </td>
           </tr>
           <tr>
             <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">🔔</td>
             <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
-              <div style="font-size:13px;font-weight:600;color:#f5a623;">Push Notifications</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">NWS warnings, watches, and rapid pressure drop alerts — all togglable in Settings.</div>
+              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Background Push Notifications</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">NWS warnings, watches, and rapid pressure drop alerts — running 24/7 even when the app is closed.</div>
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">📊</td>
-            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
-              <div style="font-size:13px;font-weight:600;color:#f5a623;">Storm Risk Score</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">A 0–100 danger index from real atmospheric data — CAPE, helicity, wind shear, and more. Get alerted before the NWS issues anything.</div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0;vertical-align:top;font-size:16px;">🗺</td>
+            <td style="padding:8px 0;vertical-align:top;font-size:16px;">📍</td>
             <td style="padding:8px 0 8px 10px;vertical-align:top;">
-              <div style="font-size:13px;font-weight:600;color:#f5a623;">Live Weather Map</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Live radar, NWS warning polygons, risk overlay, wildfires, and earthquakes — all on one screen.</div>
+              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Multi-Location Monitoring</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Monitor home plus up to 3 additional cities, each with independent background alerting.</div>
             </td>
           </tr>
         </table>
@@ -83,10 +97,9 @@ function buildWelcomeEmail(name?: string): string {
 
       <!-- Setup tips -->
       <div style="font-size:12px;color:#5a6475;line-height:1.8;border-top:1px solid #1e2229;padding-top:20px;">
-        <div style="color:#c8d0dc;font-weight:600;margin-bottom:8px;">Get set up in 2 minutes:</div>
+        <div style="color:#c8d0dc;font-weight:600;margin-bottom:8px;">Get started:</div>
         <div>1. Set your <strong style="color:#c8d0dc;">home location</strong> in Settings</div>
-        <div>2. Add your <strong style="color:#c8d0dc;">phone number</strong> to enable call alerts</div>
-        <div>3. Install the <strong style="color:#c8d0dc;">ntfy app</strong> and paste your channel URL for push notifications</div>
+        <div>2. Explore the live map — tap anywhere for weather detail</div>
         <div style="margin-top:10px;">📱 <strong style="color:#c8d0dc;">Install on iPhone:</strong> open vortexintel.app in Safari → Share → "Add to Home Screen"</div>
       </div>
     </div>
@@ -94,9 +107,6 @@ function buildWelcomeEmail(name?: string): string {
     <!-- Footer -->
     <div style="background:#0a0b0d;padding:16px 32px;border-top:1px solid #1e2229;text-align:center;">
       <div style="font-size:11px;color:#5a6475;line-height:1.8;">
-        Your trial runs for 14 days. No charge until it ends.<br>
-        Cancel anytime from Settings → Manage Subscription.<br>
-        <br>
         <a href="mailto:support@vortexintel.app" style="color:#5a6475;text-decoration:none;">support@vortexintel.app</a>
         &nbsp;·&nbsp;
         <a href="https://vortexintel.app" style="color:#5a6475;text-decoration:none;">vortexintel.app</a>
@@ -143,7 +153,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from:    FROM_EMAIL,
         to:      [email],
-        subject: 'Welcome to VORTEX — your trial is active',
+        subject: 'Welcome to VORTEX',
         html:    buildWelcomeEmail(name),
       }),
     });
