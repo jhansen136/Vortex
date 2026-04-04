@@ -3684,9 +3684,14 @@ function drawHomePin() {
 }
 
 function saveMapPosition() {
-  if (!currentTransform) return;
+  if (!currentTransform || !projection) return;
   const { x, y, k } = currentTransform;
-  localStorage.setItem('vortex_map_position', JSON.stringify({ x, y, k, ts: Date.now() }));
+  const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+  // Convert viewport center to geographic coordinates so the saved position is
+  // viewport-size-independent (pixel transforms break if dimensions change on reopen).
+  const geo = projection.invert([(W / 2 - x) / k, (H / 2 - y) / k]);
+  if (!geo) return; // outside AlbersUSA bounds — skip
+  localStorage.setItem('vortex_map_position', JSON.stringify({ lon: geo[0], lat: geo[1], k, ts: Date.now() }));
 }
 
 function restoreMapPosition() {
@@ -3694,8 +3699,13 @@ function restoreMapPosition() {
     const saved = JSON.parse(localStorage.getItem('vortex_map_position'));
     const FOUR_HOURS = 4 * 60 * 60 * 1000;
     if (saved && (Date.now() - saved.ts) < FOUR_HOURS) {
-      svg.call(zoom.transform, d3.zoomIdentity.translate(saved.x, saved.y).scale(saved.k));
-      return;
+      const pt = projection([saved.lon, saved.lat]);
+      if (pt) {
+        const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
+        const tx = W / 2 - pt[0] * saved.k, ty = H / 2 - pt[1] * saved.k;
+        svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(saved.k));
+        return;
+      }
     }
   } catch (e) { /* malformed entry — fall through */ }
   zoomHome();
