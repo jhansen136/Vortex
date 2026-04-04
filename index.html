@@ -3703,7 +3703,7 @@ function restoreMapPosition() {
       if (pt) {
         const W = mapWrap.offsetWidth, H = mapWrap.offsetHeight;
         const tx = W / 2 - pt[0] * saved.k, ty = H / 2 - pt[1] * saved.k;
-        svg.call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(saved.k));
+        svg.transition().duration(700).call(zoom.transform, d3.zoomIdentity.translate(tx, ty).scale(saved.k));
         return;
       }
     }
