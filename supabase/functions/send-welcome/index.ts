@@ -36,7 +36,7 @@ function buildWelcomeEmail(name?: string): string {
         ${greeting ? `Welcome, ${greeting}.` : 'Welcome to VORTEX.'}
       </div>
       <div style="font-size:14px;color:#c8d0dc;line-height:1.7;margin-bottom:28px;">
-        Your free account is ready. You have access to the live weather map, real-time radar, NWS warning overlays, wildfire tracking, and earthquake data — all in one place.
+        Your free account is ready. You have access to the live weather map, real-time radar, and NWS warning overlays.
       </div>
 
       <!-- What you have -->
@@ -47,7 +47,7 @@ function buildWelcomeEmail(name?: string): string {
             <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;width:28px;font-size:16px;">🗺</td>
             <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
               <div style="font-size:13px;font-weight:600;color:#f5a623;">Live Weather Map</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Live radar, NWS warning polygons, risk overlay, wildfires, and earthquakes — all on one screen.</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Live radar, NWS warning polygons, risk score overlay, temperature, and wind — all on one screen.</div>
             </td>
           </tr>
           <tr>
@@ -68,7 +68,7 @@ function buildWelcomeEmail(name?: string): string {
             <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;width:28px;font-size:16px;">📞</td>
             <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
               <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Phone Call Alerts</div>
-              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado warnings call your phone directly — even when it's face down and Do Not Disturb is on. Also fires when a storm is within miles of you, even across county lines.</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Tornado and flash flood warnings call your phone directly — even when it's face down and Do Not Disturb is on. Proximity alerts also call you when a tornado is tracking toward your location and you're outside the warning area.</div>
             </td>
           </tr>
           <tr>
@@ -79,10 +79,24 @@ function buildWelcomeEmail(name?: string): string {
             </td>
           </tr>
           <tr>
-            <td style="padding:8px 0;vertical-align:top;font-size:16px;">📍</td>
-            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">📍</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
               <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Multi-Location Monitoring</div>
               <div style="font-size:12px;color:#5a6475;margin-top:2px;">Monitor home plus up to 3 additional cities, each with independent background alerting.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #1e2229;vertical-align:top;font-size:16px;">🔥</td>
+            <td style="padding:8px 0 8px 10px;border-bottom:1px solid #1e2229;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Wildfire & Earthquake Overlays</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Active fire perimeters from NIFC and recent seismic events from USGS — overlaid directly on the map.</div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;vertical-align:top;font-size:16px;">💡</td>
+            <td style="padding:8px 0 8px 10px;vertical-align:top;">
+              <div style="font-size:13px;font-weight:600;color:#c8d0dc;">Philips Hue Integration</div>
+              <div style="font-size:12px;color:#5a6475;margin-top:2px;">Trigger your smart lights on severe weather alerts. Configure in Settings.</div>
             </td>
           </tr>
         </table>
