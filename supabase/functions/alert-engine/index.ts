@@ -234,7 +234,7 @@ function alertsNearPoint(lat: number, lon: number, radiusMiles: number, alerts: 
   const lonDelta = (radiusMiles + buffer) / (69 * Math.cos(lat * Math.PI / 180));
   return alerts.filter((f: any) => {
     const event = f.properties?.event || '';
-    if (event !== 'Tornado Warning' && event !== 'Flash Flood Warning') return false;
+    if (event !== 'Tornado Warning') return false;
     if (!f.geometry) return false;
     const geo  = f.geometry;
     const ring: number[][] = geo.type === 'Polygon'
