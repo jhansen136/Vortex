@@ -963,7 +963,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="modal-field" id="ntfyField">
         <label>ntfy.sh Channel URL <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></label>
         <input type="text" id="pushToken" placeholder="https://ntfy.sh/your-channel-name">
-        <div class="hint">Free push to phone. Install ntfy app → create a topic → paste URL here.</div>
+        <div class="hint">Push notifications require Pro. Delivered via ntfy.sh (free to use) — install the ntfy app → create a topic → paste URL here.</div>
         <div style="display:flex;flex-direction:column;gap:6px;margin-top:8px;">
           <div class="notif-row" style="padding:4px 0;">
             <div>
@@ -1355,7 +1355,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
         <div>
-          <div class="notif-label">Phone Push <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-label">Push Notifications <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
           <div class="notif-sub" id="pushSub">Background alerts via ntfy.sh</div>
         </div>
         <!-- FIX(medium): data-sync-group replaces hardcoded peer ID mapping -->
@@ -1530,7 +1530,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div class="panel-label">Notifications</div>
       <div class="notif-row">
         <div>
-          <div class="notif-label">Phone Push <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
+          <div class="notif-label">Push Notifications <span style="background:var(--amber);color:#000;font-family:var(--font-cond);font-size:9px;font-weight:700;letter-spacing:1px;padding:1px 5px;border-radius:2px;margin-left:4px;">PRO</span></div>
           <div class="notif-sub" id="pushSubM">Background alerts via ntfy.sh</div>
         </div>
         <label class="toggle"><input type="checkbox" id="togglePushM" data-sync-group="push" onchange="toggleNotif('push',this)"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
@@ -1743,7 +1743,7 @@ function trialDaysLeft() {
 
 function showUpgradeModal(reason = '') {
   const el = document.getElementById('upgradeModalReason');
-  if (el) el.textContent = reason || 'Upgrade to VORTEX Pro to unlock background alerts, phone calls, and unlimited cities.';
+  if (el) el.textContent = reason || 'Upgrade to VORTEX Pro to unlock background alerts, phone calls, and multi-city monitoring.';
   document.getElementById('upgradeModal').style.display = 'flex';
 }
 
@@ -5235,7 +5235,7 @@ function saveSetup() {
   if (hueT)  cfg.hueT  = hueT;
   cfg.phone = phone; // allow clearing — always write
   saveUserSettings({ integrations: true, profile: true });
-  closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Integrations updated.');
+  closeSetup(); updateCfgUI(); showToast('watch','Settings Saved','Your settings have been saved.');
 }
 
 // ── HOME LOCATION ─────────────────────────────────────────
