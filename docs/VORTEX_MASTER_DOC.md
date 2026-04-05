@@ -108,12 +108,13 @@ Once installed, VORTEX behaves like a native app — full screen, home screen ic
 **Pro plan includes everything:**
 - Tornado warning phone calls
 - Flash flood warning phone calls (opt-in)
-- Proximity alert calls
+- Proximity alert calls (tornado by default; flood requires opt-in)
 - All NWS push notifications
 - Risk Score push alerts (pre-warning signal)
 - Pressure drop push alerts (default on, user-configurable)
 - Philips Hue integration (beta)
 - Multi-city alert monitoring
+- Wildfire & earthquake map overlays
 - Alert history log (last 30 days)
 - Background alerting runs 24/7 regardless of app state
 
@@ -131,8 +132,8 @@ The VORTEX map is the primary interface. It displays:
 - **Risk Score overlay** — color-coded risk intensity by region
 - **Active NWS alerts** — warning polygons rendered on the map as they are issued, updated in real time as NWS issues or modifies them
 - **Tornado position & trajectory** — when a Tornado Warning includes GPS storm coordinates, a pulsing dot marks the storm's current position with projected path dots at 15, 30, and 45 minutes ahead based on NWS-reported heading and speed
-- **Wildfire layer** — active fire locations and perimeters from NIFC (National Interagency Fire Center) via ArcGIS
-- **Earthquake layer** — recent seismic events from USGS
+- **Wildfire layer** *(Pro only)* — active fire locations and perimeters from NIFC (National Interagency Fire Center) via ArcGIS
+- **Earthquake layer** *(Pro only)* — recent seismic events from USGS
 
 ### Home Location & Pinned Cities
 Users set a **home location** — the primary location used for all background alerting. Users can also **pin additional cities** and enable per-city alerts. The alert engine checks all alert-enabled locations on every run.
@@ -182,13 +183,15 @@ Same trigger logic as the tornado warning call, but for Flash Flood Warnings. Di
 Voice message: *"This is an emergency alert from Vortex Storm Intelligence. A flash flood warning is active near [location]. Move to higher ground immediately."*
 
 **Proximity Alert Call**
-The proximity alert is VORTEX's most distinctive feature. It scans **all active tornado and flash flood warnings within the user's configured radius** — regardless of county lines. A tornado in a neighboring county, 3 miles away and heading toward you, triggers this call even if your county is not under a warning.
+The proximity alert is VORTEX's most distinctive feature. It scans **all active tornado warnings within the user's configured radius** — regardless of county lines. A tornado in a neighboring county, 3 miles away and heading toward you, triggers this call even if your county is not under a warning.
 
 Two conditions must both be true before the call fires:
 1. **Distance** — the storm (using NWS GPS coordinates when available, or warning polygon edge distance as fallback) is within the user's proximity radius (configurable: 1, 3, 5, or 10 miles — default 5)
 2. **Direction** — the storm's heading is within 90° of the bearing toward the user. Storms moving away or parallel are suppressed.
 
-**Note on Flash Flood proximity calls:** Flash flood proximity calls require the user to have explicitly enabled flood calls (`call_flood_enabled = true`). Tornado proximity calls fire by default when proximity alerts are enabled.
+**Tornado proximity calls** fire by default when proximity alerts are enabled.
+
+**Note on Flash Flood proximity calls:** Flash flood proximity alerts are **off by default**. If the user has explicitly enabled flood calls (`call_flood_enabled = true`), the proximity check will also scan active Flash Flood Warnings within the radius using the same distance and direction logic.
 
 **Note on double-call prevention:** If a warning is already in the user's county (triggering a county-match call), a proximity call for the same alert is suppressed in the same engine run to prevent two calls for the same event.
 
@@ -446,8 +449,8 @@ Key tables:
 | `weather-prewarm` | Hourly Open-Meteo cache refresh | CRON_SECRET |
 | `stripe-webhook` | Handles Stripe subscription events | Stripe webhook signature |
 | `stripe-portal` | Creates Stripe billing portal session | User JWT |
-| `send-welcome` | Sends welcome email via Resend on trial start | Internal |
-| `send-invite` | Sends invite emails | Internal |
+| `send-welcome` | Sends welcome email via Resend on first Pro activation | User JWT |
+| `send-invite` | Sends invite emails | User JWT |
 | `test-call` | Triggers a test Twilio call for a user | User JWT |
 
 ### Code Repository
