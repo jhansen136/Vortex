@@ -289,12 +289,85 @@
   <div class="toc">
     <div class="toc-label">Jump to</div>
     <div class="toc-links">
+      <a class="toc-link" href="#getting-started">Getting Started</a>
+      <a class="toc-link" href="#plans">Free vs Pro</a>
       <a class="toc-link" href="#phone-calls">Phone Calls</a>
       <a class="toc-link" href="#push">Push Notifications</a>
+      <a class="toc-link" href="#ntfy">ntfy Setup</a>
       <a class="toc-link" href="#risk-score">Risk Score</a>
       <a class="toc-link" href="#data-sources">Data Sources</a>
       <a class="toc-link" href="#cooldowns">Cooldowns & Limits</a>
       <a class="toc-link" href="#locations">Alert Locations</a>
+    </div>
+  </div>
+
+  <!-- ── Getting Started ── -->
+  <div class="section" id="getting-started">
+    <div class="section-header">
+      <span class="section-icon">📱</span>
+      <span class="section-title">Getting Started</span>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Install on iPhone</div>
+      <div class="card-body">
+        <p>VORTEX is a Progressive Web App — no App Store required. To install it on your iPhone home screen:</p>
+        <p>1. Open <strong style="color:var(--text-bright);">vortexintel.app</strong> in Safari<br>
+        2. Tap the <strong style="color:var(--text-bright);">Share</strong> button (box with arrow)<br>
+        3. Tap <strong style="color:var(--text-bright);">"Add to Home Screen"</strong></p>
+        <p>Once installed, VORTEX runs full screen like a native app.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Install on Android</div>
+      <div class="card-body">
+        <p>1. Open <strong style="color:var(--text-bright);">vortexintel.app</strong> in Chrome<br>
+        2. Tap the <strong style="color:var(--text-bright);">three-dot menu</strong><br>
+        3. Tap <strong style="color:var(--text-bright);">"Add to Home Screen"</strong> or <strong style="color:var(--text-bright);">"Install App"</strong></p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Set Your Home Location</div>
+      <div class="card-body">
+        <p>Go to <strong style="color:var(--text-bright);">Settings → Home Location</strong> and tap the map or search for your address. Your home location is used for all background alerting — this is the most important setup step.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Free vs Pro ── -->
+  <div class="section" id="plans">
+    <div class="section-header">
+      <span class="section-icon">⚡</span>
+      <span class="section-title">Free vs Pro</span>
+    </div>
+
+    <div class="card">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Feature</th>
+            <th>Free</th>
+            <th>Pro</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td>Live weather map</td><td style="color:var(--green);">✓</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Storm Risk Score</td><td style="color:var(--green);">✓</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Weather detail panel</td><td style="color:var(--green);">✓</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Wildfire & earthquake overlays</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Phone call alerts</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Push notifications</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Background alerting 24/7</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Multi-location monitoring</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Alert history (30 days)</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓</td></tr>
+          <tr><td>Philips Hue integration</td><td style="color:var(--text-dim);">—</td><td style="color:var(--green);">✓ Beta</td></tr>
+        </tbody>
+      </table>
+      <div class="callout" style="margin-top:14px;">
+        Pro is <strong>$4.99/month</strong> or <strong>$39.99/year</strong> (~33% savings). Start a free trial anytime from <strong>Settings → Upgrade to Pro</strong>. No credit card required until the trial ends.
+      </div>
     </div>
   </div>
 
@@ -329,8 +402,8 @@
     <div class="card">
       <div class="card-title">📍 Proximity Alert Call <span class="tag tag-call">CALL</span><span class="tag tag-pro">PRO</span></div>
       <div class="card-body">
-        <p>Triggered when a tornado or flood warning's storm is within your configured proximity radius (default 5 miles) and moving toward you.</p>
-        <p>Unlike the warning call — which is based on your county — the proximity check scans all active tornado and flood warnings within range regardless of county lines. A tornado in the next county 3 miles away and heading your direction will trigger this call.</p>
+        <p>Triggered when a tornado warning's storm is within your configured proximity radius (default 5 miles) and moving toward you.</p>
+        <p>Unlike the warning call — which is based on your county — the proximity check scans all active tornado warnings within range regardless of county lines. A tornado in the next county 3 miles away and heading your direction will trigger this call.</p>
         <div class="card-highlight">
           This may be the first and only call you receive. If the storm is in a neighboring county and your county hasn't been included in the warning, you won't get a warning call — but if the storm is within range and approaching, the proximity alert call will still fire.
         </div>
@@ -347,6 +420,37 @@
 
     <div class="callout">
       <strong>Daily call cap: 5 calls per day.</strong> If the cap is reached, VORTEX will send a push notification in place of any additional calls for the rest of that calendar day. The cap resets at midnight.
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="card-title">📲 What Number Will Call Me?</div>
+      <div class="card-body">
+        <p>All VORTEX alert calls come from <strong style="color:var(--amber);">(479) 552-5858</strong>.</p>
+        <p>Save this number in your contacts as <strong style="color:var(--text-bright);">VORTEX Alert</strong> so you recognize it immediately — and so Emergency Bypass works correctly (see below).</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="card-title">📵 Making Sure Calls Ring Through Do Not Disturb</div>
+      <div class="card-body">
+        <p>VORTEX places one call and reads the alert message twice within that call — so if you pick up partway through, you hear the full message. For the most reliable alerting, set up Emergency Bypass on the VORTEX contact directly.</p>
+
+        <p style="margin-top:12px;"><strong style="color:var(--text-bright);">iPhone — Emergency Bypass (Recommended)</strong></p>
+        <p>Emergency Bypass allows a specific contact to ring and vibrate even when Do Not Disturb or Silent mode is on:</p>
+        <p>1. Save the VORTEX alert number as a contact (e.g. <strong style="color:var(--text-bright);">VORTEX Alert</strong>)<br>
+        2. Open the contact → tap <strong style="color:var(--text-bright);">Edit</strong><br>
+        3. Tap <strong style="color:var(--text-bright);">Ringtone</strong> → enable <strong style="color:var(--text-bright);">Emergency Bypass</strong><br>
+        4. Tap <strong style="color:var(--text-bright);">Vibration</strong> → enable <strong style="color:var(--text-bright);">Emergency Bypass</strong> there too</p>
+        <p>With both enabled, the call will ring and vibrate regardless of Do Not Disturb, Silent mode, or Focus settings.</p>
+
+        <p style="margin-top:12px;"><strong style="color:var(--text-bright);">Lock Your Ring Volume (Optional)</strong></p>
+        <p>iOS allows apps and buttons to change your ringer volume independently of your media volume. To prevent your ring volume from being turned down accidentally:</p>
+        <p>Go to <strong style="color:var(--text-bright);">Settings → Sounds & Haptics</strong> → disable <strong style="color:var(--text-bright);">"Change with Buttons"</strong>. This locks your ringer volume at its current level — note that this affects all incoming calls, not just VORTEX.</p>
+
+        <div class="card-highlight">
+          Emergency Bypass is per-contact and does not affect your ringer volume or other calls. Locking ringer volume is phone-wide. We recommend Emergency Bypass as the primary setup step.
+        </div>
+      </div>
     </div>
   </div>
 
@@ -390,6 +494,53 @@
       <div class="card-title">📉 Pressure Drop Alert <span class="tag tag-push">PUSH</span><span class="tag tag-pro">PRO</span></div>
       <div class="card-body">
         <p>Sent when barometric pressure drops rapidly at your location — a real-time signal that a severe storm is actively approaching. Triggers when pressure falls ≥ 2 mb in a 30-minute window. 30-minute cooldown.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ntfy Setup ── -->
+  <div class="section" id="ntfy">
+    <div class="section-header">
+      <span class="section-icon">🔔</span>
+      <span class="section-title">ntfy Setup</span>
+    </div>
+
+    <div class="card">
+      <div class="card-body">
+        <p>VORTEX delivers push notifications via <strong style="color:var(--text-bright);">ntfy.sh</strong> — a free, open-source notification service. You control your own private channel. No account required.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Step 1 — Install the ntfy App</div>
+      <div class="card-body">
+        <p>Download the ntfy app from the App Store (iPhone) or Google Play (Android). Search for <strong style="color:var(--text-bright);">ntfy</strong>.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Step 2 — Create a Private Channel</div>
+      <div class="card-body">
+        <p>In the ntfy app, tap <strong style="color:var(--text-bright);">+ Subscribe to topic</strong> and enter a unique name — something only you would know, like <span style="font-family:var(--font-mono);color:var(--cyan);font-size:12px;">vortex-yourname-8472</span>. This becomes your private channel.</p>
+        <div class="card-highlight">
+          Anyone who knows your channel name can send you notifications — keep it private and unpredictable.
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Step 3 — Add Your Channel URL to VORTEX</div>
+      <div class="card-body">
+        <p>In VORTEX, go to <strong style="color:var(--text-bright);">Settings → Integrations → ntfy Channel URL</strong> and enter:</p>
+        <div class="card-highlight">https://ntfy.sh/your-channel-name</div>
+        <p>That's it. VORTEX will send all push alerts to that channel from now on.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Allow Notifications on iPhone</div>
+      <div class="card-body">
+        <p>On iPhone, go to <strong style="color:var(--text-bright);">Settings → ntfy → Notifications</strong> and make sure notifications are allowed. For critical alerts to break through Do Not Disturb, enable <strong style="color:var(--text-bright);">Critical Alerts</strong> if prompted.</p>
       </div>
     </div>
   </div>
@@ -486,7 +637,7 @@
           <tr><td>Risk Score</td><td>Calculated</td><td>30 sec</td><td>Hourly</td></tr>
           <tr><td>Radar</td><td>NEXRAD / Iowa State</td><td>2 min</td><td>—</td></tr>
           <tr><td>Earthquakes</td><td>USGS</td><td>5 min</td><td>—</td></tr>
-          <tr><td>Wildfires</td><td>NASA / USFS</td><td>5 min</td><td>—</td></tr>
+          <tr><td>Wildfires</td><td>NIFC via ArcGIS</td><td>5 min</td><td>—</td></tr>
         </tbody>
       </table>
       <div class="callout" style="margin-top:14px;">
