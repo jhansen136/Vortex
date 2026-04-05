@@ -674,13 +674,13 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div id="obPane1">
       <div class="ob-icon">⟳</div>
       <div class="ob-title" id="obWelcomeName">Welcome to VORTEX</div>
-      <div class="ob-sub">Your storm intelligence platform is active. Here's what you now have access to:</div>
+      <div class="ob-sub">Your free account is ready. Here's what you have access to:</div>
       <div class="ob-features">
-        <div class="ob-feature"><span class="ob-feature-icon">⚡</span><span><strong>Instant NWS alerts</strong> — tornado warnings pushed to your phone in under 60 seconds</span></div>
+        <div class="ob-feature"><span class="ob-feature-icon">🗺</span><span><strong>Interactive weather map</strong> — live radar, NWS warning overlays, temperature, and wind</span></div>
         <div class="ob-feature"><span class="ob-feature-icon">📊</span><span><strong>Live risk scoring</strong> — 0–100 storm risk index updated every minute for your area</span></div>
-        <div class="ob-feature"><span class="ob-feature-icon">🗺</span><span><strong>Interactive weather map</strong> — real-time temperature, wind, and severe weather overlays</span></div>
+        <div class="ob-feature"><span class="ob-feature-icon">⚡</span><span><strong>Upgrade to Pro</strong> — unlock phone call alerts, background notifications, and more</span></div>
       </div>
-      <button class="ob-btn" onclick="obGoTo(2)">Set Up Notifications →</button>
+      <button class="ob-btn" onclick="obGoTo(2)">Set Up Your Location →</button>
       <div class="ob-skip"><a onclick="obComplete()">Skip setup, take me to the map</a></div>
     </div>
 
@@ -688,10 +688,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div id="obPane2" style="display:none;">
       <div class="ob-icon">📱</div>
       <div class="ob-title">Stay Ahead of the Storm</div>
-      <div class="ob-sub">Get alerted the moment a tornado warning is issued for your area — before the sirens sound.</div>
+      <div class="ob-sub">Set up push notifications now, or start a Pro trial later from Settings to unlock phone call alerts and background monitoring.</div>
       <input class="ob-input" id="obNtfyUrl" type="url" placeholder="https://ntfy.sh/your-topic-name">
       <div class="ob-hint">
-        Free push notifications via <a href="https://ntfy.sh" target="_blank">ntfy.sh</a>.<br>
+        Push notifications require Pro. Delivered via <a href="https://ntfy.sh" target="_blank">ntfy.sh</a> — free to use.<br>
         1. Install the <strong style="color:var(--text);">ntfy app</strong> on your phone<br>
         2. Create a topic (any name) → copy the URL<br>
         3. Paste it above
@@ -704,10 +704,10 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
     <div id="obPane3" style="display:none;">
       <div class="ob-check">✅</div>
       <div class="ob-title">You're All Set</div>
-      <div class="ob-sub">VORTEX is now monitoring your area 24/7. Here's what's active:</div>
+      <div class="ob-sub">Your free account is active. Here's what's ready:</div>
       <div class="ob-ready-list">
-        <div class="ob-ready-item"><span class="ok">✓</span> Real-time NWS alert monitoring</div>
         <div class="ob-ready-item"><span class="ok">✓</span> Live weather map + risk scoring</div>
+        <div class="ob-ready-item"><span class="ok">✓</span> NWS warning overlays</div>
         <div class="ob-ready-item" id="obReadyPush"><span class="ok">✓</span> Push notifications configured</div>
       </div>
       <button class="ob-btn" onclick="obComplete()">Open VORTEX →</button>
@@ -1159,7 +1159,7 @@ header{display:flex;align-items:center;justify-content:space-between;padding:0 1
       <div style="font-family:var(--font-mono);font-size:11px;color:var(--text);line-height:2;">
         ✅ Background push notifications<br>
         ✅ Tornado warning phone calls<br>
-        ✅ Unlimited pinned cities<br>
+        ✅ Multi-city alert monitoring (home + 3 cities)<br>
         ✅ 14-day free trial — cancel anytime
       </div>
     </div>
