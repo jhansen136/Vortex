@@ -569,7 +569,7 @@ serve(async (req) => {
       // Checks ALL active tornado/flood warnings within the user's proximity
       // radius, not just those in their county. May be the first and only call
       // a user receives (e.g. cross-county tornado). Also gates on approaching.
-      if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
+      if (!!phone && (pref?.call_threshold_enabled === true) && thresholdCallOk && th) {
         const proximityMiles  = th.proximity_miles ?? 5;
         const nearbyAlerts    = alertsNearPoint(homeLat, homeLon, proximityMiles, allAlerts);
         for (const alert of nearbyAlerts) {
@@ -688,7 +688,7 @@ serve(async (req) => {
         }
 
         // Proximity check for this city — all nearby warnings, approaching only
-        if (!!phone && (pref?.call_threshold_enabled !== false) && thresholdCallOk && th) {
+        if (!!phone && (pref?.call_threshold_enabled === true) && thresholdCallOk && th) {
           const proximityMiles   = th.proximity_miles ?? 5;
           const cityNearbyAlerts = alertsNearPoint(cityLat, cityLon, proximityMiles, allAlerts);
           for (const alert of cityNearbyAlerts) {
@@ -760,23 +760,35 @@ serve(async (req) => {
         if (alert.call && phone) {
           const todayKey = `call:cap:${new Date().toISOString().slice(0, 10)}`;
           if (dailyCallCount >= DAILY_CALL_CAP) {
-            // Cap hit — send one ntfy notification per day to let user know
-            if (!hasSent(todayKey) && pref?.push_enabled && intg?.ntfy_url?.startsWith('https://ntfy.sh/')) {
-              try {
-                await fetch(intg.ntfy_url, {
-                  method: 'POST',
-                  headers: {
-                    'Title':        'VORTEX: Daily Call Limit Reached',
-                    'Priority':     'default',
-                    'Tags':         'phone,warning',
-                    'Content-Type': 'text/plain',
-                  },
-                  body: `You've reached the 5-call daily limit. Push notifications will continue for the rest of the day. Calls reset at midnight.`,
-                });
-                newAlerts.push({ user_id: user.id, alert_key: todayKey });
-              } catch (e: any) {
-                results.errors.push(`cap-notify:${user.id}: ${e.message}`);
+            // Cap hit — always log to alert history; also push via ntfy if configured (once per day)
+            if (!hasSent(todayKey)) {
+              let capPushSent = false;
+              if (pref?.push_enabled && intg?.ntfy_url?.startsWith('https://ntfy.sh/')) {
+                try {
+                  await fetch(intg.ntfy_url, {
+                    method: 'POST',
+                    headers: {
+                      'Title':        'VORTEX: Daily Call Limit Reached',
+                      'Priority':     'default',
+                      'Tags':         'phone,warning',
+                      'Content-Type': 'text/plain',
+                    },
+                    body: `You've reached the 5-call daily limit. Push notifications will continue for the rest of the day. Calls reset at midnight.`,
+                  });
+                  capPushSent = true;
+                } catch (e: any) {
+                  results.errors.push(`cap-notify:${user.id}: ${e.message}`);
+                }
               }
+              historyAlerts.push({
+                user_id:       user.id,
+                event:         'Daily Call Limit Reached',
+                area:          'Your Account',
+                alert_key:     todayKey,
+                notified_push: capPushSent,
+                notified_call: false,
+              });
+              newAlerts.push({ user_id: user.id, alert_key: todayKey });
             }
           } else {
             try {
