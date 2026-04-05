@@ -33,11 +33,8 @@ const NWS_EVENTS = [
 // Push cooldown — suppress repeated threshold / pressure pushes within 30 min
 const THRESHOLD_COOLDOWN_MS = 30 * 60 * 1000;
 
-// Call cooldown — suppress repeated proximity calls within 3 hours
-const CALL_COOLDOWN_MS = 3 * 60 * 60 * 1000;
-
 // Daily call cap per user
-const DAILY_CALL_CAP = 5;
+const DAILY_CALL_CAP = 10;
 
 // Minimum pressure drop (mb in 30 min) to trigger a pressure push
 const PRESSURE_DROP_THRESHOLD = 2.0;
@@ -310,7 +307,7 @@ serve(async (req) => {
     const now = new Date().toISOString();
     const { data: allUsers, error: usersErr } = await supa
       .from('profiles')
-      .select('id, display_name, home_lat, home_lng, home_fips, home_label, phone, last_threshold_call_at, subscription_status, trial_ends_at')
+      .select('id, display_name, home_lat, home_lng, home_fips, home_label, phone, subscription_status, trial_ends_at')
       .eq('disabled', false)
       .in('subscription_status', ['pro', 'trial']);
     // Filter out expired trials server-side
@@ -399,7 +396,6 @@ serve(async (req) => {
     // ── 5. Process each user ──────────────────────────────────────────────────
     const newAlerts: { user_id: string; alert_key: string }[] = [];
     const historyAlerts: { user_id: string; event: string; area: string; alert_key: string; notified_push: boolean; notified_call: boolean; }[] = [];
-    const profileUpdates: { id: string; last_threshold_call_at: string }[] = [];
     const pressureInserts: { user_id: string; pressure_mb: number; recorded_at: string }[] = [];
 
     for (const user of users) {
@@ -430,10 +426,6 @@ serve(async (req) => {
       // True if a call for this NWS alert ID is already queued in this run.
       // Prevents double-calling when a warning is both in the user's county and within proximity radius.
       const callAlreadyQueued = (alertId: string) => toSend.some(a => a.call && a.key === `nws:${alertId}`);
-
-      // 3-hour cooldown check for threshold calls
-      const lastCallAt      = user.last_threshold_call_at ? new Date(user.last_threshold_call_at).getTime() : 0;
-      const thresholdCallOk = (Date.now() - lastCallAt) > CALL_COOLDOWN_MS;
 
       // Daily call cap — count call: prefixed keys sent in the last 24 hours
       const cutoff24h = Date.now() - 24 * 60 * 60 * 1000;
@@ -569,7 +561,7 @@ serve(async (req) => {
       // Checks ALL active tornado/flood warnings within the user's proximity
       // radius, not just those in their county. May be the first and only call
       // a user receives (e.g. cross-county tornado). Also gates on approaching.
-      if (!!phone && (pref?.call_threshold_enabled === true) && thresholdCallOk && th) {
+      if (!!phone && (pref?.call_threshold_enabled === true) && th) {
         const proximityMiles  = th.proximity_miles ?? 5;
         const nearbyAlerts    = alertsNearPoint(homeLat, homeLon, proximityMiles, allAlerts);
         for (const alert of nearbyAlerts) {
@@ -688,7 +680,7 @@ serve(async (req) => {
         }
 
         // Proximity check for this city — all nearby warnings, approaching only
-        if (!!phone && (pref?.call_threshold_enabled === true) && thresholdCallOk && th) {
+        if (!!phone && (pref?.call_threshold_enabled === true) && th) {
           const proximityMiles   = th.proximity_miles ?? 5;
           const cityNearbyAlerts = alertsNearPoint(cityLat, cityLon, proximityMiles, allAlerts);
           for (const alert of cityNearbyAlerts) {
@@ -732,7 +724,6 @@ serve(async (req) => {
       }
 
       // ── Send notifications ────────────────────────────────────────────────────
-      let calledForThreshold = false;
       for (const alert of toSend) {
         let pushSent = false;
         let callSent = false;
@@ -773,7 +764,7 @@ serve(async (req) => {
                       'Tags':         'phone,warning',
                       'Content-Type': 'text/plain',
                     },
-                    body: `You've reached the 5-call daily limit. Push notifications will continue for the rest of the day. Calls reset at midnight.`,
+                    body: `You've reached the 10-call daily limit. Push notifications will continue for the rest of the day. Calls reset at midnight.`,
                   });
                   capPushSent = true;
                 } catch (e: any) {
@@ -797,7 +788,6 @@ serve(async (req) => {
               dailyCallCount++;
               callSent = true;
               newAlerts.push({ user_id: user.id, alert_key: `call:${alert.key}` });
-              if (alert.callType === 'proximity') calledForThreshold = true;
             } catch (e: any) {
               results.errors.push(`call:${user.id}: ${e.message}`);
             }
@@ -816,10 +806,6 @@ serve(async (req) => {
         results.notified++;
       }
 
-      // Stamp last_threshold_call_at to enforce 3-hour cooldown
-      if (calledForThreshold) {
-        profileUpdates.push({ id: user.id, last_threshold_call_at: new Date().toISOString() });
-      }
     }
 
     // ── 7. Persist new sent_alerts ────────────────────────────────────────────
@@ -835,15 +821,7 @@ serve(async (req) => {
     const cutoff30d = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     await supa.from('alert_history').delete().lt('sent_at', cutoff30d);
 
-    // ── 8. Update last_threshold_call_at for users who were called ────────────
-    // Run in parallel — no reason to serialize these independent updates
-    await Promise.all(profileUpdates.map(u =>
-      supa.from('profiles')
-        .update({ last_threshold_call_at: u.last_threshold_call_at })
-        .eq('id', u.id)
-    ));
-
-    // ── 9. Write pressure readings + clean up old ones ────────────────────────
+    // ── 8. Write pressure readings + clean up old ones ────────────────────────
     if (pressureInserts.length) {
       await supa.from('pressure_readings').insert(pressureInserts);
     }

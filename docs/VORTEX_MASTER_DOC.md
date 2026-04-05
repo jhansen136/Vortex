@@ -199,9 +199,7 @@ When only polygon data is available: *"A tornado warning is within 5 miles of yo
 
 Voice message: *"This is an urgent alert from Vortex Storm Intelligence. A severe weather system is now within your proximity alert radius near [location]. Take cover immediately and open the Vortex app."*
 
-**Daily Call Cap: 5 calls per day.** Once the cap is reached, VORTEX sends a push notification instead of calling for any additional events that day. The cap resets at UTC midnight.
-
-**Call cooldown:** 3 hours between proximity calls per user, enforced via a single `last_threshold_call_at` timestamp on the user profile. This cooldown is **global across all monitored locations** — if a proximity call fires for any location (home or a pinned city), proximity calls for all of the user's locations are suppressed for the next 3 hours. NWS county-match warning calls are deduplicated per warning event ID (not time-based) and are not affected by this cooldown.
+**Daily Call Cap: 10 calls per day.** Once the cap is reached, VORTEX sends a push notification (if ntfy is configured) and logs a "Daily Call Limit Reached" entry to alert history so the user always knows the cap was hit. The cap resets at UTC midnight.
 
 ---
 
@@ -247,9 +245,9 @@ Default: **ON**. Can be toggled off in Settings under Push Notifications.
 
 | Alert Type | Cooldown | Daily Cap |
 |---|---|---|
-| Tornado Warning call | Once per NWS alert ID | 5 calls/day total |
-| Flash Flood Warning call | Once per NWS alert ID | Counts toward 5/day |
-| Proximity alert call | Once per NWS alert ID + 3-hour cooldown | Counts toward 5/day |
+| Tornado Warning call | Once per NWS alert ID | 10 calls/day total |
+| Flash Flood Warning call | Once per NWS alert ID | Counts toward 10/day |
+| Proximity alert call | Once per NWS alert ID | Counts toward 10/day |
 | NWS warning push | Once per NWS alert ID (48h window) | None |
 | Risk Score push | 30 minutes | None |
 | Pressure drop push | 30 minutes | None |
