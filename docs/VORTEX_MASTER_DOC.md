@@ -189,9 +189,7 @@ Two conditions must both be true before the call fires:
 1. **Distance** — the storm (using NWS GPS coordinates when available, or warning polygon edge distance as fallback) is within the user's proximity radius (configurable: 1, 3, 5, or 10 miles — default 5)
 2. **Direction** — the storm's heading is within 90° of the bearing toward the user. Storms moving away or parallel are suppressed.
 
-**Tornado proximity calls** fire by default when proximity alerts are enabled.
-
-**Note on Flash Flood proximity calls:** Flash flood proximity alerts are **off by default**. If the user has explicitly enabled flood calls (`call_flood_enabled = true`), the proximity check will also scan active Flash Flood Warnings within the radius using the same distance and direction logic.
+**Proximity alerts are currently tornado-only.** The `alertsNearPoint()` function filters exclusively for Tornado Warning events. Flash flood proximity calls have been intentionally removed from the active feature set. The supporting code (`isFlashFlood` checks and `call_flood_enabled` gate) exists in the proximity section but is unreachable — `alertsNearPoint` never returns flood events, so that code path is dormant. It is preserved for a potential future re-enable, not a bug.
 
 **Note on double-call prevention:** If a warning is already in the user's county (triggering a county-match call), a proximity call for the same alert is suppressed in the same engine run to prevent two calls for the same event.
 
@@ -203,7 +201,7 @@ Voice message: *"This is an urgent alert from Vortex Storm Intelligence. A sever
 
 **Daily Call Cap: 5 calls per day.** Once the cap is reached, VORTEX sends a push notification instead of calling for any additional events that day. The cap resets at UTC midnight.
 
-**Call cooldown:** 3 hours between proximity calls per user. NWS warning calls are deduplicated per warning event ID (not time-based).
+**Call cooldown:** 3 hours between proximity calls per user, enforced via a single `last_threshold_call_at` timestamp on the user profile. This cooldown is **global across all monitored locations** — if a proximity call fires for any location (home or a pinned city), proximity calls for all of the user's locations are suppressed for the next 3 hours. NWS county-match warning calls are deduplicated per warning event ID (not time-based) and are not affected by this cooldown.
 
 ---
 
